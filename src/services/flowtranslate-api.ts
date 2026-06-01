@@ -1,30 +1,47 @@
+import type {
+  LanguageCode,
+  PracticeSet,
+  PracticeType,
+  TranslationRecord,
+  UsageSnapshot,
+} from '@eb-packages/flowtranslate-core';
 import { getFlowtranslateFunctionUrl } from '../lib/supabase';
 
-export type FlowtranslateUsage = {
-  estimatedTokens: number;
-  monthlyQuota: number;
-  usedThisMonth: number;
-  remainingThisMonth: number;
+export type FlowtranslateUsage = UsageSnapshot;
+
+export type TranslateResponse = {
+  kind: 'translate';
+  text: string;
+  translationRecord: Pick<
+    TranslationRecord,
+    'id' | 'sourceLanguage' | 'targetLanguage' | 'createdAt'
+  >;
+  usage: FlowtranslateUsage;
+};
+
+export type PracticeResponse = {
+  kind: 'practice';
+  practice: PracticeSet;
+  insufficientHistory?: boolean;
+  usage: FlowtranslateUsage;
 };
 
 type FlowtranslateRequest =
   | {
       kind: 'translate';
-      targetLanguage: string;
+      sourceLanguage: LanguageCode;
+      targetLanguage: LanguageCode;
       text: string;
+      clientRequestId?: string;
     }
   | {
-      kind: 'article';
-      targetLanguage: string;
-      sourceText: string;
-      translatedText: string;
+      kind: 'practice';
+      practiceTypes?: PracticeType[];
     };
 
 type FlowtranslateResponse =
-  | {
-      text: string;
-      usage?: FlowtranslateUsage;
-    }
+  | TranslateResponse
+  | PracticeResponse
   | {
       error: string;
       usage?: FlowtranslateUsage;
@@ -42,7 +59,7 @@ export class FlowtranslateApiError extends Error {
   }
 }
 
-const requestFlowtranslate = async (
+const requestFlowtranslate = async <TResponse extends FlowtranslateResponse>(
   payload: FlowtranslateRequest,
   accessToken: string,
 ) => {
@@ -63,9 +80,7 @@ const requestFlowtranslate = async (
     body: JSON.stringify(payload),
   });
 
-  const data = (await response.json().catch(() => null)) as
-    | FlowtranslateResponse
-    | null;
+  const data = (await response.json().catch(() => null)) as TResponse | null;
 
   if (!response.ok) {
     const message =
@@ -73,7 +88,7 @@ const requestFlowtranslate = async (
     throw new FlowtranslateApiError(message, response.status, data?.usage);
   }
 
-  if (!data || !('text' in data)) {
+  if (!data || 'error' in data) {
     throw new FlowtranslateApiError(
       'Flowtranslate returned an empty response.',
       response.status,
@@ -84,32 +99,33 @@ const requestFlowtranslate = async (
 };
 
 export const generateTranslation = (
-  params: { text: string; targetLanguage: string },
+  params: {
+    sourceLanguage: LanguageCode;
+    targetLanguage: LanguageCode;
+    text: string;
+    clientRequestId?: string;
+  },
   accessToken: string,
 ) =>
-  requestFlowtranslate(
+  requestFlowtranslate<TranslateResponse>(
     {
       kind: 'translate',
-      text: params.text,
+      sourceLanguage: params.sourceLanguage,
       targetLanguage: params.targetLanguage,
+      text: params.text,
+      clientRequestId: params.clientRequestId,
     },
     accessToken,
   );
 
-export const generateLearningArticle = (
-  params: {
-    sourceText: string;
-    translatedText: string;
-    targetLanguage: string;
-  },
+export const generatePractice = (
+  params: { practiceTypes?: PracticeType[] },
   accessToken: string,
 ) =>
-  requestFlowtranslate(
+  requestFlowtranslate<PracticeResponse>(
     {
-      kind: 'article',
-      sourceText: params.sourceText,
-      translatedText: params.translatedText,
-      targetLanguage: params.targetLanguage,
+      kind: 'practice',
+      practiceTypes: params.practiceTypes,
     },
     accessToken,
   );

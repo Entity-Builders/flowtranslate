@@ -7,6 +7,9 @@ export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
 
 export const supabase = isSupabaseConfigured
   ? createClient(supabaseUrl, supabaseAnonKey, {
+      db: {
+        schema: 'flowtranslate',
+      },
       auth: {
         autoRefreshToken: true,
         persistSession: true,

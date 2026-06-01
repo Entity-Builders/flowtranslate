@@ -1,6 +1,6 @@
 # Privacy Policy - flowtranslate
 
-**Last updated:** May 28, 2026
+**Last updated:** June 1, 2026
 
 ## Overview
 
@@ -12,7 +12,7 @@ flowtranslate is an application that helps you translate first, then optionally 
 
 We collect **anonymous usage analytics** to improve the app. This includes:
 
-- Feature usage (which learning modes you use)
+- Feature usage (translator, Learning, quota, copy, and history actions)
 - App version and session info
 - Error events (without personal data)
 - Usage metadata for quota enforcement, such as request type, character counts, estimated tokens, target language, model, and timestamp
@@ -20,35 +20,37 @@ We collect **anonymous usage analytics** to improve the app. This includes:
 **We do NOT collect:**
 
 - Your own Gemini API keys
-- Translation history stored locally in the app
-- Learning article content stored locally in the app
+- A local personal API key setting
+- Deleted translation records for future Learning generation
 
 ### AI Requests
 
-flowtranslate sends translation and learning requests to the flowtranslate backend, which forwards them to Google's Gemini API using a server-side API key. Users do not enter or store their own Gemini API keys in the app.
+flowtranslate sends translation and Learning requests to the flowtranslate backend, which forwards them to Google's Gemini API using a server-side API key. Users do not enter or store their own Gemini API keys in the app.
 
 ### Translation History & Settings
 
-Your saved translations and generated learning articles are stored **locally on your device**. The backend stores usage records for account limits and billing, not your full translation history.
+Successful distinct translations are saved to your Supabase-backed flowtranslate account so Learning can generate contextual practice. You can delete one saved translation or clear all saved translation history. Deleted translation records are excluded from future Learning generation while usage events remain for quota accounting without storing full deleted translation text.
 
 ## Third-Party Services
 
 | Service           | Purpose                             | Privacy Policy                                                                   |
 | ----------------- | ----------------------------------- | -------------------------------------------------------------------------------- |
-| Supabase          | Auth and usage limits               | [Supabase Privacy Policy](https://supabase.com/privacy)                          |
+| Supabase          | Auth, saved translation history, and usage limits | [Supabase Privacy Policy](https://supabase.com/privacy)                          |
 | Google Gemini API | AI generation                       | [Google Privacy Policy](https://policies.google.com/privacy)                     |
 | PostHog           | Anonymous analytics                 | [PostHog Privacy Policy](https://posthog.com/privacy)                            |
-| GitHub            | Auto-updates                        | [GitHub Privacy Policy](https://docs.github.com/en/site-policy/privacy-policies) |
 
 ## Data Retention
 
-Analytics data is retained for 12 months. You can opt out of analytics by contacting us.
+Analytics data is retained for 12 months. Saved translation history remains in
+your account until you delete individual records or clear history. Usage events
+remain for quota accounting.
 
 ## Your Rights
 
 You can:
 
-- Delete all local data by uninstalling the app
+- Delete individual saved translations
+- Clear saved translation history
 - Request deletion of analytics data by contacting us
 
 ## Contact

@@ -1,35 +1,37 @@
 import { defineConfig } from 'vite';
-import path from 'node:path';
-import electron from 'vite-plugin-electron/simple';
 import react from '@vitejs/plugin-react';
+import { VitePWA } from 'vite-plugin-pwa';
 
-// https://vitejs.dev/config/
 export default defineConfig({
   plugins: [
     react(),
-    electron({
-      main: {
-        // Shortcut of `build.lib.entry`.
-        entry: 'electron/main.ts',
-        vite: {
-          define: {
-            __GH_TOKEN__: JSON.stringify(process.env.GH_TOKEN || ''),
+    VitePWA({
+      registerType: 'autoUpdate',
+      includeAssets: ['icon.png'],
+      manifestFilename: 'manifest.webmanifest',
+      manifest: {
+        name: 'flowtranslate',
+        short_name: 'flowtranslate',
+        description:
+          'Bidirectional Spanish and English translation with account-backed learning practice.',
+        start_url: '/',
+        scope: '/',
+        display: 'standalone',
+        background_color: '#f8fafc',
+        theme_color: '#0f172a',
+        orientation: 'any',
+        icons: [
+          {
+            src: '/icon.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'any maskable',
           },
-        },
+        ],
       },
-      preload: {
-        // Shortcut of `build.rollupOptions.input`.
-        // Preload scripts may contain Web assets, so use the `build.rollupOptions.input` instead `build.lib.entry`.
-        input: path.join(__dirname, 'electron/preload.ts'),
+      workbox: {
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,webmanifest}'],
       },
-      // Ployfill the Electron and Node.js API for Renderer process.
-      // If you want use Node.js in Renderer process, the `nodeIntegration` needs to be enabled in the Main process.
-      // See 👉 https://github.com/electron-vite/vite-plugin-electron-renderer
-      renderer:
-        process.env.NODE_ENV === 'test'
-          ? // https://github.com/electron-vite/vite-plugin-electron-renderer/issues/78#issuecomment-2053600808
-            undefined
-          : {},
     }),
   ],
 });

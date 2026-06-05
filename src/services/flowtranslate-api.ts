@@ -2,7 +2,10 @@ import type {
   LanguageCode,
   PracticeSet,
   PracticeType,
+  StudyArticle,
+  StudyArticleResponseMetadata,
   TranslationRecord,
+  TranslationPresetId,
   UsageSnapshot,
 } from '@eb-packages/flowtranslate-core';
 import { getFlowtranslateFunctionUrl } from '../lib/supabase';
@@ -26,6 +29,12 @@ export type PracticeResponse = {
   usage: FlowtranslateUsage;
 };
 
+export type StudyArticleResponse = {
+  kind: 'study_article';
+  article: StudyArticle;
+  usage: FlowtranslateUsage;
+} & StudyArticleResponseMetadata;
+
 type FlowtranslateRequest =
   | {
       kind: 'translate';
@@ -33,15 +42,21 @@ type FlowtranslateRequest =
       targetLanguage: LanguageCode;
       text: string;
       clientRequestId?: string;
+      presetId?: TranslationPresetId;
     }
   | {
       kind: 'practice';
       practiceTypes?: PracticeType[];
+    }
+  | {
+      kind: 'study_article';
+      translationRecordId: string;
     };
 
 type FlowtranslateResponse =
   | TranslateResponse
   | PracticeResponse
+  | StudyArticleResponse
   | {
       error: string;
       usage?: FlowtranslateUsage;
@@ -104,6 +119,7 @@ export const generateTranslation = (
     targetLanguage: LanguageCode;
     text: string;
     clientRequestId?: string;
+    presetId?: TranslationPresetId;
   },
   accessToken: string,
 ) =>
@@ -114,6 +130,7 @@ export const generateTranslation = (
       targetLanguage: params.targetLanguage,
       text: params.text,
       clientRequestId: params.clientRequestId,
+      presetId: params.presetId,
     },
     accessToken,
   );
@@ -126,6 +143,18 @@ export const generatePractice = (
     {
       kind: 'practice',
       practiceTypes: params.practiceTypes,
+    },
+    accessToken,
+  );
+
+export const generateStudyArticle = (
+  params: { translationRecordId: string },
+  accessToken: string,
+) =>
+  requestFlowtranslate<StudyArticleResponse>(
+    {
+      kind: 'study_article',
+      translationRecordId: params.translationRecordId,
     },
     accessToken,
   );

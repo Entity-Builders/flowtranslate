@@ -1,7 +1,9 @@
 import {
+  DEFAULT_TRANSLATION_PRESET_ID,
   canApplyTranslationResponse,
   createDirection,
   type LanguageCode,
+  type TranslationPresetId,
   type TranslationRecord,
   type UsageSnapshot,
 } from '@eb-packages/flowtranslate-core';
@@ -28,6 +30,19 @@ type UseBidirectionalTranslatorParams = {
   onSavedTranslation: (record: TranslationRecord) => void;
 };
 
+const createRequestKey = (
+  sourceLanguage: LanguageCode,
+  targetLanguage: LanguageCode,
+  sourceText: string,
+  presetId: TranslationPresetId,
+) =>
+  [
+    sourceLanguage,
+    targetLanguage,
+    presetId,
+    sourceText.trim().replace(/\s+/g, ' ').toLocaleLowerCase(),
+  ].join(':');
+
 export const useBidirectionalTranslator = ({
   accessToken,
   online,
@@ -36,28 +51,41 @@ export const useBidirectionalTranslator = ({
 }: UseBidirectionalTranslatorParams) => {
   const [texts, setTexts] = useState<PanelTexts>({ es: '', en: '' });
   const [sourceLanguage, setSourceLanguage] = useState<LanguageCode>('es');
+  const [presetId, setPresetId] = useState<TranslationPresetId>(
+    DEFAULT_TRANSLATION_PRESET_ID,
+  );
   const [status, setStatus] = useState<TranslatorStatus>('idle');
   const [message, setMessage] = useState('');
+  const [hasPendingChanges, setHasPendingChanges] = useState(false);
   const sequenceRef = useRef(0);
-  const timeoutRef = useRef<number | null>(null);
   const lastCompletedKeyRef = useRef('');
+  const inFlightKeyRef = useRef('');
   const sourceLanguageRef = useRef<LanguageCode>('es');
+  const presetIdRef = useRef<TranslationPresetId>(
+    DEFAULT_TRANSLATION_PRESET_ID,
+  );
   const textsRef = useRef<PanelTexts>({ es: '', en: '' });
+  const timerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
 
-  const clearPending = useCallback(() => {
-    if (timeoutRef.current) {
-      window.clearTimeout(timeoutRef.current);
-      timeoutRef.current = null;
-    }
+  const clearScheduledTranslation = useCallback(() => {
+    if (!timerRef.current) return;
+    window.clearTimeout(timerRef.current);
+    timerRef.current = null;
   }, []);
 
+  useEffect(() => clearScheduledTranslation, [clearScheduledTranslation]);
+
   const runTranslation = useCallback(
-    async (nextSourceLanguage: LanguageCode, nextSourceText: string) => {
-      clearPending();
+    async (
+      nextSourceLanguage: LanguageCode,
+      nextSourceText: string,
+      nextPresetId: TranslationPresetId = presetIdRef.current,
+    ) => {
       const trimmedSource = nextSourceText.trim();
       if (!trimmedSource) {
         setStatus('idle');
         setMessage('');
+        setHasPendingChanges(false);
         return;
       }
 
@@ -74,11 +102,25 @@ export const useBidirectionalTranslator = ({
       }
 
       const direction = createDirection(nextSourceLanguage);
-      const requestKey = `${direction.sourceLanguage}:${direction.targetLanguage}:${trimmedSource}`;
-      if (requestKey === lastCompletedKeyRef.current) return;
+      const requestKey = createRequestKey(
+        direction.sourceLanguage,
+        direction.targetLanguage,
+        trimmedSource,
+        nextPresetId,
+      );
+
+      if (requestKey === lastCompletedKeyRef.current) {
+        setStatus('idle');
+        setMessage('Already translated.');
+        setHasPendingChanges(false);
+        return;
+      }
+
+      if (requestKey === inFlightKeyRef.current) return;
 
       const requestSequence = sequenceRef.current + 1;
       sequenceRef.current = requestSequence;
+      inFlightKeyRef.current = requestKey;
       setStatus('translating');
       setMessage('Translating...');
 
@@ -88,6 +130,7 @@ export const useBidirectionalTranslator = ({
             sourceLanguage: direction.sourceLanguage,
             targetLanguage: direction.targetLanguage,
             text: trimmedSource,
+            presetId: nextPresetId,
             clientRequestId: `${requestSequence}`,
           },
           accessToken,
@@ -101,6 +144,8 @@ export const useBidirectionalTranslator = ({
             latestSourceLanguage: sourceLanguageRef.current,
             requestSourceText: trimmedSource,
             latestSourceText: textsRef.current[nextSourceLanguage].trim(),
+            requestPresetId: nextPresetId,
+            latestPresetId: presetIdRef.current,
           })
         ) {
           return;
@@ -115,8 +160,9 @@ export const useBidirectionalTranslator = ({
           [direction.targetLanguage]: result.text,
         };
         lastCompletedKeyRef.current = requestKey;
-        setStatus(result.usage.charged ? 'idle' : 'idle');
+        setStatus('idle');
         setMessage(result.usage.charged ? 'Saved to history.' : 'Reused saved translation.');
+        setHasPendingChanges(false);
         onUsage(result.usage);
         onSavedTranslation({
           id: result.translationRecord.id,
@@ -136,40 +182,75 @@ export const useBidirectionalTranslator = ({
 
         setStatus('error');
         setMessage(error instanceof Error ? error.message : 'Translation failed.');
+      } finally {
+        if (inFlightKeyRef.current === requestKey) inFlightKeyRef.current = '';
       }
     },
-    [
-      accessToken,
-      clearPending,
-      online,
-      onSavedTranslation,
-      onUsage,
-    ],
+    [accessToken, online, onSavedTranslation, onUsage],
   );
 
   const scheduleTranslation = useCallback(
-    (nextSourceLanguage: LanguageCode, nextSourceText: string, immediate = false) => {
-      clearPending();
+    (
+      nextSourceLanguage: LanguageCode,
+      nextSourceText: string,
+      nextPresetId: TranslationPresetId,
+    ) => {
+      clearScheduledTranslation();
+      const trimmedSource = nextSourceText.trim();
 
-      if (!nextSourceText.trim()) {
+      if (!trimmedSource) {
         setStatus('idle');
         setMessage('');
+        setHasPendingChanges(false);
+        return;
+      }
+
+      setHasPendingChanges(true);
+
+      if (!online) {
+        setStatus('offline');
+        setMessage('Offline. Existing text stays readable; new AI work needs a connection.');
+        return;
+      }
+
+      if (!accessToken) {
+        setStatus('auth');
+        setMessage('Sign in to translate and save history.');
+        return;
+      }
+
+      const direction = createDirection(nextSourceLanguage);
+      const requestKey = createRequestKey(
+        direction.sourceLanguage,
+        direction.targetLanguage,
+        trimmedSource,
+        nextPresetId,
+      );
+
+      if (requestKey === lastCompletedKeyRef.current) {
+        setStatus('idle');
+        setMessage('Already translated.');
+        setHasPendingChanges(false);
         return;
       }
 
       setStatus('typing');
-      setMessage(immediate ? 'Preparing translation...' : 'Waiting for pause...');
-
-      const delay = immediate ? 0 : TRANSLATION_IDLE_DELAY_MS;
-      timeoutRef.current = window.setTimeout(() => {
-        void runTranslation(nextSourceLanguage, nextSourceText);
-      }, delay);
+      setMessage('Auto-translating after a short pause...');
+      timerRef.current = window.setTimeout(() => {
+        timerRef.current = null;
+        void runTranslation(nextSourceLanguage, trimmedSource, nextPresetId);
+      }, TRANSLATION_IDLE_DELAY_MS);
     },
-    [clearPending, runTranslation],
+    [
+      accessToken,
+      clearScheduledTranslation,
+      online,
+      runTranslation,
+    ],
   );
 
   const editPanel = useCallback(
-    (language: LanguageCode, value: string, immediate = false) => {
+    (language: LanguageCode, value: string) => {
       sequenceRef.current += 1;
       sourceLanguageRef.current = language;
       textsRef.current = {
@@ -181,24 +262,68 @@ export const useBidirectionalTranslator = ({
         ...current,
         [language]: value,
       }));
-      scheduleTranslation(language, value, immediate);
+      scheduleTranslation(language, value, presetIdRef.current);
     },
     [scheduleTranslation],
   );
 
-  useEffect(() => clearPending, [clearPending]);
+  const selectPreset = useCallback(
+    (nextPresetId: TranslationPresetId) => {
+      if (nextPresetId === presetIdRef.current) return;
+
+      sequenceRef.current += 1;
+      presetIdRef.current = nextPresetId;
+      setPresetId(nextPresetId);
+      scheduleTranslation(
+        sourceLanguageRef.current,
+        textsRef.current[sourceLanguageRef.current],
+        nextPresetId,
+      );
+    },
+    [scheduleTranslation],
+  );
+
+  const translate = useCallback(() => {
+    clearScheduledTranslation();
+    return runTranslation(
+      sourceLanguageRef.current,
+      textsRef.current[sourceLanguageRef.current],
+      presetIdRef.current,
+    );
+  }, [clearScheduledTranslation, runTranslation]);
+
+  const activeSourceText = texts[sourceLanguage].trim();
+  const canTranslate =
+    Boolean(activeSourceText) &&
+    online &&
+    Boolean(accessToken) &&
+    status !== 'translating';
+
+  const translateDisabledReason = !activeSourceText
+    ? 'Add text to translate.'
+    : !online
+      ? 'Offline. New AI work needs a connection.'
+      : !accessToken
+        ? 'Sign in to translate and save history.'
+        : status === 'translating'
+          ? 'Translation in progress.'
+          : '';
 
   return {
     spanishText: texts.es,
     englishText: texts.en,
     sourceLanguage,
     targetLanguage: createDirection(sourceLanguage).targetLanguage,
+    presetId,
     status,
     message,
-    editSpanish: (value: string, immediate = false) =>
-      editPanel('es', value, immediate),
-    editEnglish: (value: string, immediate = false) =>
-      editPanel('en', value, immediate),
+    hasPendingChanges,
+    canTranslate,
+    translateDisabledReason,
+    translate,
+    selectPreset,
+    editSpanish: (value: string) => editPanel('es', value),
+    editEnglish: (value: string) => editPanel('en', value),
     setStatus,
     setMessage,
   };

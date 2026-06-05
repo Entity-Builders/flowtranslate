@@ -9,9 +9,18 @@ type TranslatorPanelProps = {
   placeholder: string;
   copied: boolean;
   statusText?: string;
+  canListen: boolean;
+  isSpeaking: boolean;
+  canDictate: boolean;
+  isDictating: boolean;
+  dictationUnavailableReason: string;
   onChange: (value: string) => void;
   onPaste: (value: string) => void;
   onCopy: () => void;
+  onListen: () => void;
+  onDictate: () => void;
+  onSubmit: () => void;
+  submitDisabled: boolean;
 };
 
 export const TranslatorPanel = ({
@@ -21,24 +30,50 @@ export const TranslatorPanel = ({
   placeholder,
   copied,
   statusText,
+  canListen,
+  isSpeaking,
+  canDictate,
+  isDictating,
+  dictationUnavailableReason,
   onChange,
   onPaste,
   onCopy,
+  onListen,
+  onDictate,
+  onSubmit,
+  submitDisabled,
 }: TranslatorPanelProps) => (
-  <section className='flex min-h-[420px] flex-col border border-slate-200 bg-white'>
-    <div className='flex min-h-16 items-center justify-between gap-3 border-b border-slate-100 px-4 py-3'>
+  <section className='flex min-h-[420px] w-full min-w-0 max-w-full flex-col border border-slate-200 bg-white'>
+    <div className='flex min-h-16 min-w-0 flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3'>
       <div className='min-w-0'>
         <h2 className='text-base font-bold text-slate-950'>{label}</h2>
         <p className='mt-1 text-xs font-semibold uppercase tracking-normal text-slate-500'>
           {isSource ? 'Source' : 'Target'}
         </p>
       </div>
-      <TranslationActions text={text} copied={copied} onCopy={onCopy} />
+      <TranslationActions
+        text={text}
+        copied={copied}
+        canListen={canListen}
+        isSpeaking={isSpeaking}
+        canDictate={canDictate}
+        isDictating={isDictating}
+        dictationUnavailableReason={dictationUnavailableReason}
+        onCopy={onCopy}
+        onListen={onListen}
+        onDictate={onDictate}
+      />
     </div>
 
     <textarea
       value={text}
       onChange={(event) => onChange(event.target.value)}
+      onKeyDown={(event) => {
+        if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+          event.preventDefault();
+          if (!submitDisabled && isSource) onSubmit();
+        }
+      }}
       onPaste={(event) => {
         const pastedText = event.clipboardData.getData('text');
         if (pastedText) {
@@ -47,7 +82,7 @@ export const TranslatorPanel = ({
         }
       }}
       placeholder={placeholder}
-      className='min-h-0 flex-1 resize-none bg-transparent p-5 text-xl leading-relaxed text-slate-900 outline-none placeholder:text-slate-300'
+      className='min-h-0 w-full min-w-0 flex-1 resize-none bg-transparent p-5 text-xl leading-relaxed text-slate-900 outline-none placeholder:text-slate-300'
       spellCheck
     />
 

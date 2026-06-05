@@ -10,6 +10,9 @@ describe('translator UI', () => {
     expect(screen.getByRole('heading', { name: 'English' })).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Escribe o pega texto en español...')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Type or paste English text...')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /translate spanish to english/i }),
+    ).toBeInTheDocument();
   });
 
   it('marks the edited panel as source and exposes copy actions', () => {
@@ -21,5 +24,8 @@ describe('translator UI', () => {
 
     expect(screen.getAllByText('Source').length).toBeGreaterThan(0);
     expect(screen.getAllByRole('button', { name: /copy/i }).length).toBe(2);
+    expect(
+      screen.getByRole('button', { name: /translate english to spanish/i }),
+    ).toBeInTheDocument();
   });
 });

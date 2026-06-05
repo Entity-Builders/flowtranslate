@@ -52,7 +52,10 @@ Function environment lives in `eb-infra/supabase/functions/.env`:
 ```bash
 GEMINI_API_KEY=<server-side-key>
 FLOWTRANSLATE_FREE_MONTHLY_TOKENS=20000
-FLOWTRANSLATE_GEMINI_MODEL=gemini-2.5-flash
+FLOWTRANSLATE_TRANSLATE_MODEL=gemini-2.5-flash-lite
+FLOWTRANSLATE_PRACTICE_MODEL=gemini-2.5-flash
+# Optional legacy fallback for practice when FLOWTRANSLATE_PRACTICE_MODEL is not set.
+FLOWTRANSLATE_GEMINI_MODEL=
 ```
 
 ## Data And Runtime
@@ -67,6 +70,11 @@ Flowtranslate vNext stores durable app data in the dedicated
 The browser app is a thin PWA interface. Gemini calls, quota preflight,
 translation history writes, and practice generation all run through
 `flowtranslate-generate`.
+
+Direct translation and Learning practice can use separate Gemini models. Keep
+`FLOWTRANSLATE_TRANSLATE_MODEL` on the fastest acceptable model for short text,
+and tune `FLOWTRANSLATE_PRACTICE_MODEL` independently for richer exercise
+generation.
 
 ## Validation
 
@@ -86,3 +94,16 @@ yarn workspace flowtranslate preview
 Then verify the browser reports PWA installability and that the app shell still
 loads after first visit when the network is disabled. New AI actions should be
 disabled while offline.
+
+## Production Deploy
+
+Flowtranslate deploys as static Vite assets through Cloudflare Wrangler:
+
+```bash
+yarn deploy:flowtranslate
+```
+
+The Wrangler config lives at `apps/flowtranslate/wrangler.jsonc` and deploys
+`dist/` to `flowtranslate.app`. Before deploying, provide production values via
+the shell or `apps/flowtranslate/.env.production`; use `.env.production.template`
+as the committable checklist.

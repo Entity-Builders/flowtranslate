@@ -1,7 +1,9 @@
 import type {
   LanguageCode,
   PracticeSet as PracticeSetType,
+  StudyArticle,
   TranslationRecord,
+  TranslationPresetId,
   UsageSnapshot,
 } from '@eb-packages/flowtranslate-core';
 import {
@@ -13,18 +15,32 @@ import {
   WifiOff,
   X,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
 import { STORAGE_KEYS } from './constants';
 import { LearningView } from './components/LearningView';
 import { QuotaStatus } from './components/QuotaStatus';
+import { TranslateCommand } from './components/TranslateCommand';
+import { TranslationPresetControl } from './components/TranslationPresetControl';
 import { TranslatorPanel } from './components/TranslatorPanel';
 import { useBidirectionalTranslator } from './hooks/useBidirectionalTranslator';
 import { useFlowtranslateAccount } from './hooks/useFlowtranslateAccount';
 import { analytics } from './services/analytics';
 import { copyText } from './services/clipboard';
-import { FlowtranslateApiError, generatePractice } from './services/flowtranslate-api';
+import {
+  FlowtranslateApiError,
+  generatePractice,
+  generateStudyArticle,
+} from './services/flowtranslate-api';
 import { isOnline, subscribeToOnlineState } from './services/pwa';
+import {
+  canUseSpeechRecognition,
+  canUseSpeechSynthesis,
+  type DictationSession,
+  speakText,
+  startDictation,
+  stopSpeaking,
+} from './services/speech';
 import {
   clearTranslationHistory,
   deleteTranslationRecord,
@@ -39,6 +55,13 @@ const readInitialView = (): AppView => {
   return saved === 'learning' ? 'learning' : 'translate';
 };
 
+const appendRecognizedText = (currentText: string, transcript: string) => {
+  const trimmedTranscript = transcript.trim();
+  if (!trimmedTranscript) return currentText;
+  if (!currentText.trim()) return trimmedTranscript;
+  return `${currentText}${/\s$/.test(currentText) ? '' : ' '}${trimmedTranscript}`;
+};
+
 function App() {
   const account = useFlowtranslateAccount();
   const [view, setView] = useState<AppView>(readInitialView);
@@ -51,13 +74,55 @@ function App() {
   const [practiceLoading, setPracticeLoading] = useState(false);
   const [practiceError, setPracticeError] = useState('');
   const [insufficientHistory, setInsufficientHistory] = useState(false);
+  const [studyArticle, setStudyArticle] = useState<StudyArticle | null>(null);
+  const [studyLoading, setStudyLoading] = useState(false);
+  const [studyError, setStudyError] = useState('');
+  const [selectedStudyRecordId, setSelectedStudyRecordId] =
+    useState<string | null>(null);
   const [copiedPanel, setCopiedPanel] = useState<CopiedPanel>(null);
+  const [speechAvailable, setSpeechAvailable] = useState(false);
+  const [dictationAvailable, setDictationAvailable] = useState(false);
+  const [speakingLanguage, setSpeakingLanguage] = useState<LanguageCode | null>(
+    null,
+  );
+  const [dictatingLanguage, setDictatingLanguage] =
+    useState<LanguageCode | null>(null);
+  const [voiceMessage, setVoiceMessage] = useState('');
+  const dictationRef = useRef<DictationSession | null>(null);
+  const renderedStudyArticleRef = useRef<string | null>(null);
 
   useEffect(() => subscribeToOnlineState(setOnline), []);
 
   useEffect(() => {
+    setSpeechAvailable(canUseSpeechSynthesis());
+    setDictationAvailable(canUseSpeechRecognition());
+
+    return () => {
+      stopSpeaking();
+      dictationRef.current?.abort();
+    };
+  }, []);
+
+  useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.activeView, view);
   }, [view]);
+
+  useEffect(() => {
+    if (!studyArticle) {
+      renderedStudyArticleRef.current = null;
+      return;
+    }
+
+    const renderKey = `${studyArticle.translationRecordId}:${studyArticle.articleVersion}`;
+    if (renderedStudyArticleRef.current === renderKey) return;
+
+    renderedStudyArticleRef.current = renderKey;
+    analytics.track('learning_study_article_rendered', {
+      article_version: studyArticle.articleVersion,
+      lesson_focus_count: studyArticle.lessonFocus?.length || 0,
+      estimated_reading_minutes: studyArticle.estimatedReadingMinutes || null,
+    });
+  }, [studyArticle]);
 
   const loadHistory = useCallback(async () => {
     if (!account.accessToken) {
@@ -97,6 +162,16 @@ function App() {
     onSavedTranslation: handleSavedTranslation,
   });
 
+  const selectPreset = useCallback(
+    (nextPresetId: TranslationPresetId) => {
+      translator.selectPreset(nextPresetId);
+      analytics.track('translation_preset_selected', {
+        preset_id: nextPresetId,
+      });
+    },
+    [translator],
+  );
+
   useEffect(() => {
     if (translator.status === 'auth') setShowAccount(true);
   }, [translator.status]);
@@ -111,6 +186,94 @@ function App() {
       text_length: text.length,
     });
     window.setTimeout(() => setCopiedPanel(null), 1600);
+  };
+
+  const listenPanel = (language: LanguageCode, text: string) => {
+    if (speakingLanguage === language) {
+      stopSpeaking();
+      setSpeakingLanguage(null);
+      return;
+    }
+
+    const started = speakText({
+      text,
+      language,
+      onEnd: () => {
+        setSpeakingLanguage((current) => (current === language ? null : current));
+      },
+      onError: (nextMessage) => {
+        setVoiceMessage(nextMessage);
+        setSpeakingLanguage((current) => (current === language ? null : current));
+      },
+    });
+
+    if (!started) {
+      setVoiceMessage('Audio playback is unavailable in this browser.');
+      return;
+    }
+
+    setVoiceMessage('');
+    setSpeakingLanguage(language);
+    analytics.track('translation_audio_started', {
+      language,
+      text_length: text.trim().length,
+    });
+  };
+
+  const stopCurrentDictation = () => {
+    dictationRef.current?.stop();
+    dictationRef.current = null;
+    setDictatingLanguage(null);
+  };
+
+  const dictatePanel = (language: LanguageCode) => {
+    if (dictatingLanguage === language) {
+      stopCurrentDictation();
+      return;
+    }
+
+    if (!dictationAvailable) {
+      setVoiceMessage('Microphone dictation is unavailable in this browser.');
+      return;
+    }
+
+    dictationRef.current?.abort();
+    const baseText =
+      language === 'es' ? translator.spanishText : translator.englishText;
+
+    const session = startDictation({
+      language,
+      onResult: (transcript) => {
+        const nextText = appendRecognizedText(baseText, transcript);
+        if (language === 'es') translator.editSpanish(nextText);
+        else translator.editEnglish(nextText);
+
+        setVoiceMessage('Dictation added to the active panel.');
+        analytics.track('translation_dictation_completed', {
+          language,
+          text_length: transcript.trim().length,
+        });
+      },
+      onEnd: () => {
+        dictationRef.current = null;
+        setDictatingLanguage((current) => (current === language ? null : current));
+      },
+      onError: (nextMessage) => {
+        setVoiceMessage(nextMessage);
+        setDictatingLanguage((current) => (current === language ? null : current));
+        analytics.track('translation_dictation_failed', { language });
+      },
+    });
+
+    if (!session) {
+      setVoiceMessage('Microphone dictation is unavailable in this browser.');
+      return;
+    }
+
+    dictationRef.current = session;
+    setDictatingLanguage(language);
+    setVoiceMessage('Listening through the browser microphone service...');
+    analytics.track('translation_dictation_started', { language });
   };
 
   const generateLearningPractice = async () => {
@@ -156,11 +319,69 @@ function App() {
     }
   };
 
+  const openStudyArticle = async (record: TranslationRecord) => {
+    setStudyError('');
+    setSelectedStudyRecordId(record.id);
+    setStudyArticle(null);
+
+    if (!online) {
+      setStudyError('Offline. Study articles need a connection.');
+      return;
+    }
+
+    if (!account.accessToken) {
+      setShowAccount(true);
+      setStudyError('Sign in to study saved translations.');
+      return;
+    }
+
+    setStudyLoading(true);
+    analytics.track('learning_study_article_submitted', {
+      direction: `${record.sourceLanguage}_${record.targetLanguage}`,
+    });
+
+    try {
+      const result = await generateStudyArticle(
+        { translationRecordId: record.id },
+        account.accessToken,
+      );
+      setStudyArticle(result.article);
+      setUsage(result.usage);
+      analytics.track('learning_study_article_succeeded', {
+        article_version: result.article.articleVersion,
+        cached: result.cached,
+        generated_at: result.generatedAt || null,
+        lesson_focus_count: result.article.lessonFocus?.length || 0,
+        estimated_reading_minutes:
+          result.article.estimatedReadingMinutes || null,
+      });
+    } catch (error) {
+      if (error instanceof FlowtranslateApiError) {
+        if (error.usage) setUsage(error.usage);
+        setStudyError(error.message);
+      } else {
+        setStudyError(
+          error instanceof Error ? error.message : 'Study article failed.',
+        );
+      }
+      analytics.track('learning_study_article_failed', { error_type: 'exception' });
+    } finally {
+      setStudyLoading(false);
+    }
+  };
+
+  const closeStudyArticle = () => {
+    setSelectedStudyRecordId(null);
+    setStudyArticle(null);
+    setStudyError('');
+  };
+
   const deleteHistoryItem = async (id: string) => {
     try {
       await deleteTranslationRecord(id);
       setHistory((current) => current.filter((item) => item.id !== id));
       setPractice(null);
+      if (selectedStudyRecordId === id) closeStudyArticle();
       analytics.track('translation_history_deleted', { count: 1 });
     } catch (error) {
       setHistoryError(error instanceof Error ? error.message : 'Delete failed.');
@@ -172,6 +393,7 @@ function App() {
       await clearTranslationHistory();
       setHistory([]);
       setPractice(null);
+      closeStudyArticle();
       setInsufficientHistory(false);
       analytics.track('translation_history_cleared');
     } catch (error) {
@@ -189,16 +411,25 @@ function App() {
   }, [translator.status]);
 
   const accountButtonLabel = account.userEmail || 'Account';
+  const sourceStatusText = translator.status === 'translating'
+    ? 'Translating...'
+    : translator.status === 'typing'
+      ? 'Auto-translating soon'
+    : translator.hasPendingChanges
+      ? 'Ready to translate'
+      : translator.message || undefined;
+  const dictationUnavailableReason =
+    'Microphone dictation is unavailable in this browser.';
 
   return (
-    <div className='flex h-screen flex-col bg-slate-50 text-slate-950'>
-      <header className='flex min-h-16 shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-white px-4'>
+    <div className='flex h-screen flex-col overflow-x-hidden bg-slate-50 text-slate-950'>
+      <header className='flex min-h-16 shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-white px-3 sm:px-4'>
         <div className='flex min-w-0 items-center gap-3'>
           <div className='flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-slate-950 text-white'>
             <Languages size={19} />
           </div>
           <div className='min-w-0'>
-            <h1 className='truncate text-lg font-bold leading-none'>flowtranslate</h1>
+            <h1 className='hidden truncate text-lg font-bold leading-none sm:block'>flowtranslate</h1>
             <p className='mt-1 hidden text-xs text-slate-500 sm:block'>
               Translate first. Learn separately.
             </p>
@@ -239,11 +470,11 @@ function App() {
           <button
             type='button'
             onClick={() => setShowAccount(true)}
-            className='inline-flex h-10 max-w-44 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-600 hover:text-slate-950'
+            className='inline-flex h-10 w-10 shrink-0 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white text-sm font-semibold text-slate-600 hover:text-slate-950 sm:w-auto sm:max-w-44 sm:px-3'
             title='Account'
           >
             {account.session ? <ShieldCheck size={17} /> : <Settings size={17} />}
-            <span className='truncate'>{accountButtonLabel}</span>
+            <span className='hidden truncate sm:inline'>{accountButtonLabel}</span>
           </button>
         </div>
       </header>
@@ -256,14 +487,34 @@ function App() {
       ) : null}
 
       {view === 'translate' ? (
-        <main className='flex min-h-0 flex-1 flex-col gap-3 p-4'>
+        <main className='flex min-h-0 w-full max-w-full flex-1 flex-col gap-3 overflow-x-hidden overflow-y-auto p-4 lg:overflow-hidden'>
           {translator.message ? (
             <div className={`border px-3 py-2 text-sm ${statusTone}`}>
               {translator.message}
             </div>
           ) : null}
 
-          <div className='grid min-h-0 flex-1 grid-cols-2 gap-4 max-lg:grid-cols-1'>
+          {voiceMessage ? (
+            <div className='border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-800'>
+              {voiceMessage}
+            </div>
+          ) : null}
+
+          <div className='flex flex-wrap items-center justify-between gap-3'>
+            <TranslationPresetControl
+              value={translator.presetId}
+              onChange={selectPreset}
+            />
+            <div className='text-xs font-semibold text-slate-500'>
+              {translator.status === 'typing'
+                ? 'Auto-translate is waiting for pause'
+                : translator.hasPendingChanges
+                  ? 'Manual translate is still available'
+                  : ' '}
+            </div>
+          </div>
+
+          <div className='grid w-full min-w-0 max-w-full flex-1 grid-cols-1 gap-4 overflow-x-hidden lg:min-h-0 lg:grid-cols-[minmax(0,1fr)_8rem_minmax(0,1fr)]'>
             <TranslatorPanel
               language='es'
               label='Spanish'
@@ -273,13 +524,33 @@ function App() {
               copied={copiedPanel === 'es'}
               statusText={
                 translator.sourceLanguage === 'es'
-                  ? translator.message
+                  ? sourceStatusText
                   : undefined
               }
               onChange={(value) => translator.editSpanish(value)}
-              onPaste={(value) => translator.editSpanish(value, true)}
+              onPaste={(value) => translator.editSpanish(value)}
               onCopy={() => void copyPanel('es', translator.spanishText)}
+              canListen={speechAvailable}
+              isSpeaking={speakingLanguage === 'es'}
+              onListen={() => listenPanel('es', translator.spanishText)}
+              canDictate={dictationAvailable}
+              isDictating={dictatingLanguage === 'es'}
+              dictationUnavailableReason={dictationUnavailableReason}
+              onDictate={() => dictatePanel('es')}
+              onSubmit={() => void translator.translate()}
+              submitDisabled={!translator.canTranslate}
             />
+
+            <TranslateCommand
+              sourceLanguage={translator.sourceLanguage}
+              targetLanguage={translator.targetLanguage}
+              status={translator.status}
+              canTranslate={translator.canTranslate}
+              disabledReason={translator.translateDisabledReason}
+              hasPendingChanges={translator.hasPendingChanges}
+              onTranslate={() => void translator.translate()}
+            />
+
             <TranslatorPanel
               language='en'
               label='English'
@@ -289,14 +560,27 @@ function App() {
               copied={copiedPanel === 'en'}
               statusText={
                 translator.sourceLanguage === 'en'
-                  ? translator.message
+                  ? sourceStatusText
                   : undefined
               }
               onChange={(value) => translator.editEnglish(value)}
-              onPaste={(value) => translator.editEnglish(value, true)}
+              onPaste={(value) => translator.editEnglish(value)}
               onCopy={() => void copyPanel('en', translator.englishText)}
+              canListen={speechAvailable}
+              isSpeaking={speakingLanguage === 'en'}
+              onListen={() => listenPanel('en', translator.englishText)}
+              canDictate={dictationAvailable}
+              isDictating={dictatingLanguage === 'en'}
+              dictationUnavailableReason={dictationUnavailableReason}
+              onDictate={() => dictatePanel('en')}
+              onSubmit={() => void translator.translate()}
+              submitDisabled={!translator.canTranslate}
             />
           </div>
+          <p className='max-w-[calc(100vw-2rem)] break-words text-xs text-slate-500 sm:max-w-full'>
+            Browser voice services may process audio during dictation; Flowtranslate
+            saves only submitted translation text and history.
+          </p>
         </main>
       ) : (
         <>
@@ -311,7 +595,14 @@ function App() {
             loading={practiceLoading}
             insufficientHistory={insufficientHistory}
             error={practiceError}
+            studyArticle={studyArticle}
+            studyLoading={studyLoading}
+            studyError={studyError}
+            selectedStudyRecordId={selectedStudyRecordId}
             onGenerate={() => void generateLearningPractice()}
+            onOpenStudy={(record) => void openStudyArticle(record)}
+            onCloseStudy={closeStudyArticle}
+            onListenPhrase={(language, text) => listenPanel(language, text)}
             onDelete={(id) => void deleteHistoryItem(id)}
             onClear={() => void clearHistory()}
           />

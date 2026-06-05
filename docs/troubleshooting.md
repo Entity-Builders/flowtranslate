@@ -50,7 +50,10 @@ The Edge Function environment requires:
 ```bash
 GEMINI_API_KEY=<server-side-key>
 FLOWTRANSLATE_FREE_MONTHLY_TOKENS=20000
-FLOWTRANSLATE_GEMINI_MODEL=gemini-2.5-flash
+FLOWTRANSLATE_TRANSLATE_MODEL=gemini-2.5-flash-lite
+FLOWTRANSLATE_PRACTICE_MODEL=gemini-2.5-flash
+# Optional legacy fallback for practice when FLOWTRANSLATE_PRACTICE_MODEL is not set.
+FLOWTRANSLATE_GEMINI_MODEL=
 ```
 
 Users should never enter a Gemini key in the app.

@@ -13,7 +13,7 @@ const record = (params: Partial<TranslationRecord>): TranslationRecord => ({
 });
 
 describe('buildLearningDashboard', () => {
-  it('derives reused words, repeated phrases, direction mix, and exercises', () => {
+  it('derives reused words, repeated phrases, direction mix, and recent context', () => {
     const metrics = buildLearningDashboard([
       record({
         id: '3',
@@ -45,7 +45,8 @@ describe('buildLearningDashboard', () => {
       count: 2,
       percentage: 67,
     });
-    expect(metrics.practiceReadiness.status).toBe('warming');
-    expect(metrics.recommendedExercises).toHaveLength(3);
+    expect(metrics.recentContexts).toHaveLength(3);
+    expect('practiceReadiness' in metrics).toBe(false);
+    expect('recommendedExercises' in metrics).toBe(false);
   });
 });

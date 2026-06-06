@@ -1,4 +1,5 @@
 import type {
+  BreakdownChatMessage,
   LanguageCode,
   StudyArticle,
   TranslationRecord,
@@ -13,6 +14,7 @@ import {
   Volume2,
 } from 'lucide-react';
 import { GrammarSandbox } from './GrammarSandbox';
+import { ExpressionBreakdownDetails } from './ExpressionBreakdownDetails';
 import { MarkdownStudyArticle } from './MarkdownStudyArticle';
 import { VibeCheckCard } from './VibeCheckCard';
 
@@ -23,6 +25,11 @@ type StudyArticleViewProps = {
   error: string;
   onClose: () => void;
   onListenPhrase?: (language: LanguageCode, text: string) => void;
+  onAskBreakdownQuestion?: (
+    record: TranslationRecord,
+    question: string,
+    history: BreakdownChatMessage[],
+  ) => Promise<string>;
 };
 
 const languageLabel: Record<LanguageCode, string> = {
@@ -50,6 +57,7 @@ export const StudyArticleView = ({
   error,
   onClose,
   onListenPhrase,
+  onAskBreakdownQuestion,
 }: StudyArticleViewProps) => {
   if (!article && !selectedRecord && !loading && !error) {
     return <EmptyStudyArticle />;
@@ -59,6 +67,7 @@ export const StudyArticleView = ({
   const targetLanguage = article?.targetLanguage || selectedRecord?.targetLanguage;
   const sourceText = article?.sourceText || selectedRecord?.sourceText;
   const translatedText = article?.translatedText || selectedRecord?.translatedText;
+  const savedBreakdown = selectedRecord?.breakdown || null;
   const readingMinutes = article?.estimatedReadingMinutes;
   const lessonLabel = article?.title || selectedRecord?.sourceText || 'Selected translation';
   const canListen = Boolean(sourceLanguage && sourceText && onListenPhrase);
@@ -105,13 +114,6 @@ export const StudyArticleView = ({
           <div className='flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700'>
             <AlertTriangle size={17} className='mt-0.5 shrink-0' />
             {error}
-          </div>
-        ) : null}
-
-        {loading ? (
-          <div className='flex min-h-28 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white text-sm font-semibold text-slate-500 shadow-sm'>
-            <Loader2 size={18} className='animate-spin' />
-            Generating study article
           </div>
         ) : null}
 
@@ -170,6 +172,29 @@ export const StudyArticleView = ({
               </div>
             ) : null}
           </section>
+        ) : null}
+
+        {savedBreakdown ? (
+          <section className='rounded-lg border border-slate-200 bg-white shadow-sm'>
+            <ExpressionBreakdownDetails
+              breakdown={savedBreakdown}
+              defaultOpen
+              withTopBorder={false}
+              onAskQuestion={
+                selectedRecord && onAskBreakdownQuestion
+                  ? (question, history) =>
+                      onAskBreakdownQuestion(selectedRecord, question, history)
+                  : undefined
+              }
+            />
+          </section>
+        ) : null}
+
+        {loading ? (
+          <div className='flex min-h-28 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white text-sm font-semibold text-slate-500 shadow-sm'>
+            <Loader2 size={18} className='animate-spin' />
+            Generating study article
+          </div>
         ) : null}
 
         {article ? (

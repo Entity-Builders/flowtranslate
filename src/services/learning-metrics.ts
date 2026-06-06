@@ -1,7 +1,6 @@
 import {
   selectRecentUniqueActiveTranslations,
   type LanguageCode,
-  type PracticeType,
   type TranslationRecord,
 } from '@eb-packages/flowtranslate-core';
 import { MAX_LEARNING_HISTORY } from '../constants';
@@ -18,20 +17,6 @@ type DirectionSignal = {
   percentage: number;
 };
 
-type PracticeReadiness = {
-  status: 'empty' | 'warming' | 'ready';
-  score: number;
-  label: string;
-};
-
-export type RecommendedExerciseCard = {
-  id: PracticeType;
-  title: string;
-  detail: string;
-  count: number;
-  enabled: boolean;
-};
-
 export type LearningDashboardMetrics = {
   totalRecords: number;
   uniqueContextCount: number;
@@ -40,9 +25,7 @@ export type LearningDashboardMetrics = {
   reusedWords: CountedValue[];
   repeatedPhrases: CountedValue[];
   directionMix: DirectionSignal[];
-  practiceReadiness: PracticeReadiness;
   recentContexts: TranslationRecord[];
-  recommendedExercises: RecommendedExerciseCard[];
 };
 
 const STOP_WORDS = new Set([
@@ -128,71 +111,6 @@ const buildDirectionMix = (records: TranslationRecord[]): DirectionSignal[] => {
     .sort((a, b) => b.count - a.count);
 };
 
-const buildReadiness = (uniqueContextCount: number): PracticeReadiness => {
-  const score = Math.min(
-    100,
-    Math.round((uniqueContextCount / MAX_LEARNING_HISTORY) * 100),
-  );
-
-  if (uniqueContextCount === 0) {
-    return {
-      status: 'empty',
-      score,
-      label: 'No context yet',
-    };
-  }
-
-  if (uniqueContextCount < 5) {
-    return {
-      status: 'warming',
-      score,
-      label: 'Warming up',
-    };
-  }
-
-  return {
-    status: 'ready',
-    score,
-    label: 'Ready for practice',
-  };
-};
-
-const buildRecommendedExercises = ({
-  uniqueContextCount,
-  reusedWords,
-  repeatedPhrases,
-}: {
-  uniqueContextCount: number;
-  reusedWords: CountedValue[];
-  repeatedPhrases: CountedValue[];
-}): RecommendedExerciseCard[] => [
-  {
-    id: 'vocabulary_recall',
-    title: 'Vocabulary recall',
-    detail: reusedWords[0]
-      ? `Repeat "${reusedWords[0].value}" in fresh sentences`
-      : 'Turn recent translated words into quick recall prompts',
-    count: reusedWords.length,
-    enabled: uniqueContextCount > 0,
-  },
-  {
-    id: 'fill_in',
-    title: 'Fill-in practice',
-    detail: repeatedPhrases[0]
-      ? `Complete phrases like "${repeatedPhrases[0].value}"`
-      : 'Hide key words from your recent English context',
-    count: repeatedPhrases.length,
-    enabled: uniqueContextCount > 1,
-  },
-  {
-    id: 're_translate',
-    title: 'Re-translate',
-    detail: 'Translate back from memory using your latest saved examples',
-    count: uniqueContextCount,
-    enabled: uniqueContextCount > 0,
-  },
-];
-
 export const buildLearningDashboard = (
   history: TranslationRecord[],
 ): LearningDashboardMetrics => {
@@ -220,12 +138,6 @@ export const buildLearningDashboard = (
     reusedWords,
     repeatedPhrases,
     directionMix: buildDirectionMix(recentContexts),
-    practiceReadiness: buildReadiness(recentContexts.length),
     recentContexts: recentContexts.slice(0, 4),
-    recommendedExercises: buildRecommendedExercises({
-      uniqueContextCount: recentContexts.length,
-      reusedWords,
-      repeatedPhrases,
-    }),
   };
 };

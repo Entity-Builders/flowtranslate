@@ -1,40 +1,49 @@
 import type {
+  BreakdownChatMessage,
+  ExpressionMode,
   LanguageCode,
-  PracticeSet as PracticeSetType,
+  LearningInsight,
+  LearningInsightItem,
   StudyArticle,
   TranslationRecord,
 } from '@eb-packages/flowtranslate-core';
 import {
+  AlertCircle,
   BookOpen,
   Clock,
-  Dumbbell,
   Languages,
+  Lightbulb,
+  Loader2,
+  MessageSquareText,
+  PenLine,
+  RefreshCw,
   Repeat2,
-  Sparkles,
-  Target,
   Trash2,
   TrendingUp,
 } from 'lucide-react';
 import { useMemo } from 'react';
 import { MAX_LEARNING_HISTORY } from '../constants';
 import { buildLearningDashboard } from '../services/learning-metrics';
-import { PracticeSet } from './PracticeSet';
 import { StudyArticleView } from './StudyArticleView';
 
 type LearningViewProps = {
   history: TranslationRecord[];
-  practice: PracticeSetType | null;
-  loading: boolean;
-  insufficientHistory: boolean;
-  error: string;
+  learningInsight: LearningInsight | null;
+  insightLoading: boolean;
+  insightError: string;
   studyArticle: StudyArticle | null;
   studyLoading: boolean;
   studyError: string;
   selectedStudyRecordId: string | null;
-  onGenerate: () => void;
+  onRefreshInsight: () => void;
   onOpenStudy: (record: TranslationRecord) => void;
   onCloseStudy: () => void;
   onListenPhrase?: (language: LanguageCode, text: string) => void;
+  onAskBreakdownQuestion?: (
+    record: TranslationRecord,
+    question: string,
+    history: BreakdownChatMessage[],
+  ) => Promise<string>;
   onDelete: (id: string) => void;
   onClear: () => void;
 };
@@ -47,28 +56,88 @@ const formatDate = (value: string) =>
     minute: '2-digit',
   }).format(new Date(value));
 
-const formatDirection = (record: Pick<TranslationRecord, 'sourceLanguage' | 'targetLanguage'>) =>
-  `${record.sourceLanguage.toUpperCase()} to ${record.targetLanguage.toUpperCase()}`;
+const formatDirection = (
+  record: Pick<TranslationRecord, 'sourceLanguage' | 'targetLanguage'>,
+) => `${record.sourceLanguage.toUpperCase()} to ${record.targetLanguage.toUpperCase()}`;
+
+const modeLabel: Record<ExpressionMode, string> = {
+  translate_to_english: 'Spanish to English',
+  improve_english: 'Improved English',
+  translate_to_spanish: 'English to Spanish',
+};
+
+const formatRecordLabel = (record: TranslationRecord) =>
+  record.mode ? modeLabel[record.mode] : formatDirection(record);
+
+const InsightItems = ({
+  title,
+  icon,
+  items,
+  emptyText,
+}: {
+  title: string;
+  icon: 'writing' | 'conversation';
+  items: LearningInsightItem[];
+  emptyText: string;
+}) => {
+  const Icon = icon === 'writing' ? PenLine : MessageSquareText;
+
+  return (
+    <section className='border border-slate-200 bg-white p-4'>
+      <div className='mb-3 flex items-center gap-2 text-sm font-black text-slate-950'>
+        <Icon size={17} />
+        {title}
+      </div>
+
+      {items.length === 0 ? (
+        <p className='text-sm leading-6 text-slate-500'>{emptyText}</p>
+      ) : (
+        <div className='space-y-3'>
+          {items.map((item) => (
+            <article
+              key={`${item.title}-${item.expression}`}
+              className='border border-slate-100 bg-slate-50 p-3'
+            >
+              <div className='text-xs font-black uppercase tracking-normal text-slate-400'>
+                {item.title}
+              </div>
+              <p className='mt-2 break-words text-lg font-black leading-snug text-slate-950'>
+                {item.expression}
+              </p>
+              <p className='mt-2 text-sm leading-6 text-slate-600'>
+                {item.explanation}
+              </p>
+              {item.example ? (
+                <p className='mt-2 rounded-md bg-white px-3 py-2 text-sm font-semibold leading-6 text-slate-700'>
+                  {item.example}
+                </p>
+              ) : null}
+            </article>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+};
 
 export const LearningView = ({
   history,
-  practice,
-  loading,
-  insufficientHistory,
-  error,
+  learningInsight,
+  insightLoading,
+  insightError,
   studyArticle,
   studyLoading,
   studyError,
   selectedStudyRecordId,
-  onGenerate,
+  onRefreshInsight,
   onOpenStudy,
   onCloseStudy,
   onListenPhrase,
+  onAskBreakdownQuestion,
   onDelete,
   onClear,
 }: LearningViewProps) => {
   const metrics = useMemo(() => buildLearningDashboard(history), [history]);
-  const canGenerate = metrics.uniqueContextCount > 0 && !loading;
   const primaryDirection = metrics.directionMix[0];
   const selectedStudyRecord = history.find(
     (record) => record.id === selectedStudyRecordId,
@@ -76,6 +145,7 @@ export const LearningView = ({
   const studyIsOpen = Boolean(
     selectedStudyRecordId || studyArticle || studyLoading || studyError,
   );
+  const canRefreshInsight = history.length > 0 && !insightLoading;
 
   if (studyIsOpen) {
     return (
@@ -87,6 +157,7 @@ export const LearningView = ({
           error={studyError}
           onClose={onCloseStudy}
           onListenPhrase={onListenPhrase}
+          onAskBreakdownQuestion={onAskBreakdownQuestion}
         />
       </main>
     );
@@ -104,8 +175,8 @@ export const LearningView = ({
               </h2>
               <p className='mt-1 text-sm text-slate-500'>
                 {history.length
-                  ? `${Math.min(history.length, MAX_LEARNING_HISTORY)} recent unique records feed practice`
-                  : 'Saved translations will appear here'}
+                  ? `${Math.min(history.length, MAX_LEARNING_HISTORY)} recent records feed Learning`
+                  : 'Saved expressions will appear here'}
               </p>
             </div>
             <button
@@ -123,7 +194,7 @@ export const LearningView = ({
         <div className='min-h-0 flex-1 overflow-y-auto p-2'>
           {history.length === 0 ? (
             <div className='p-4 text-sm text-slate-500'>
-              Translate a few real phrases, then come back for contextual practice.
+              Save a few real expressions, then come back for contextual learning.
             </div>
           ) : (
             history.map((record) => (
@@ -141,7 +212,7 @@ export const LearningView = ({
                   className='block w-full text-left'
                 >
                   <div className='text-xs font-bold uppercase tracking-normal text-slate-400'>
-                    {formatDirection(record)} - {formatDate(record.createdAt)}
+                    {formatRecordLabel(record)} - {formatDate(record.createdAt)}
                   </div>
                   <p className='mt-2 line-clamp-2 text-sm font-semibold text-slate-900'>
                     {record.sourceText}
@@ -176,16 +247,29 @@ export const LearningView = ({
             <div className='min-w-0'>
               <h2 className='text-base font-bold text-slate-950'>Learning dashboard</h2>
               <p className='mt-1 text-sm text-slate-500'>
-                Personal signals from your saved Spanish and English context.
+                Personal signals from your saved writing and daily conversations.
               </p>
             </div>
             <div className='inline-flex items-center gap-2 rounded-md bg-slate-100 px-3 py-2 text-sm font-bold text-slate-700'>
-              <Target size={16} />
-              {metrics.practiceReadiness.label}
+              <Lightbulb size={16} />
+              {metrics.uniqueContextCount} learning signals
             </div>
           </div>
 
           <div className='grid gap-3 md:grid-cols-2 xl:grid-cols-4'>
+            <article className='border border-slate-100 p-3'>
+              <div className='flex items-center gap-2 text-xs font-bold uppercase tracking-normal text-slate-400'>
+                <BookOpen size={15} />
+                Saved expressions
+              </div>
+              <div className='mt-3 text-3xl font-black text-slate-950'>
+                {metrics.totalRecords}
+              </div>
+              <p className='mt-1 text-sm text-slate-500'>
+                {metrics.uniqueContextCount}/{MAX_LEARNING_HISTORY} recent context slots
+              </p>
+            </article>
+
             <article className='border border-slate-100 p-3'>
               <div className='flex items-center gap-2 text-xs font-bold uppercase tracking-normal text-slate-400'>
                 <Repeat2 size={15} />
@@ -223,142 +307,116 @@ export const LearningView = ({
               <p className='mt-1 text-sm text-slate-500'>
                 {primaryDirection
                   ? formatDirection(primaryDirection)
-                  : 'No translations yet'}
-              </p>
-            </article>
-
-            <article className='border border-slate-100 p-3'>
-              <div className='flex items-center gap-2 text-xs font-bold uppercase tracking-normal text-slate-400'>
-                <Clock size={15} />
-                Practice readiness
-              </div>
-              <div className='mt-3 text-3xl font-black text-slate-950'>
-                {metrics.practiceReadiness.score}%
-              </div>
-              <p className='mt-1 text-sm text-slate-500'>
-                {metrics.uniqueContextCount}/{MAX_LEARNING_HISTORY} context slots
+                  : 'No expressions yet'}
               </p>
             </article>
           </div>
 
           {metrics.uniqueContextCount === 0 ? (
             <div className='mt-4 border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600'>
-              Translate a few real phrases to unlock personal vocabulary signals.
-            </div>
-          ) : null}
-
-          {metrics.uniqueContextCount > 0 && metrics.uniqueContextCount < 5 ? (
-            <div className='mt-4 border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800'>
-              More saved translations will improve Learning variety and reuse signals.
+              Save a few real phrases to unlock personal vocabulary signals.
             </div>
           ) : null}
         </div>
 
-        <StudyArticleView
-          article={studyArticle}
-          selectedRecord={selectedStudyRecord}
-          loading={studyLoading}
-          error={studyError}
-          onClose={onCloseStudy}
-        />
-
-        <div className='grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]'>
-          <section className='border border-slate-200 bg-white p-4'>
-            <div className='mb-4 flex items-center justify-between gap-3'>
-              <div>
-                <h2 className='text-base font-bold text-slate-950'>Recommended exercises</h2>
-                <p className='mt-1 text-sm text-slate-500'>
-                  Quick paths from your latest saved context.
-                </p>
-              </div>
-              <Dumbbell size={20} className='text-slate-400' />
-            </div>
-
-            <div className='grid gap-3 md:grid-cols-3'>
-              {metrics.recommendedExercises.map((exercise) => (
-                <button
-                  key={exercise.id}
-                  type='button'
-                  onClick={onGenerate}
-                  disabled={!canGenerate || !exercise.enabled}
-                  className={`min-h-36 rounded-md border p-3 text-left transition-colors ${
-                    canGenerate && exercise.enabled
-                      ? 'border-slate-200 hover:border-slate-400 hover:bg-slate-50'
-                      : 'border-slate-100 bg-slate-50 text-slate-400'
-                  }`}
-                >
-                  <div className='text-sm font-black text-slate-950'>
-                    {exercise.title}
-                  </div>
-                  <p className='mt-2 line-clamp-3 text-sm text-slate-500'>
-                    {exercise.detail}
-                  </p>
-                  <div className='mt-4 text-xs font-bold uppercase tracking-normal text-slate-400'>
-                    {exercise.count} signals
-                  </div>
-                </button>
-              ))}
-            </div>
-          </section>
-
-          <section className='border border-slate-200 bg-white p-4'>
-            <h2 className='text-base font-bold text-slate-950'>Recent context</h2>
-            <div className='mt-3 space-y-3'>
-              {metrics.recentContexts.length === 0 ? (
-                <p className='text-sm text-slate-500'>
-                  Recent saved translations will appear here.
-                </p>
-              ) : (
-                metrics.recentContexts.map((record) => (
-                  <article key={record.id} className='border border-slate-100 p-3'>
-                    <div className='text-xs font-bold uppercase tracking-normal text-slate-400'>
-                      {formatDirection(record)}
-                    </div>
-                    <p className='mt-2 line-clamp-2 text-sm font-semibold text-slate-900'>
-                      {record.translatedText}
-                    </p>
-                  </article>
-                ))
-              )}
-            </div>
-          </section>
-        </div>
-
-        <section className='flex min-h-[360px] flex-col border border-slate-200 bg-white'>
-          <div className='flex items-center justify-between gap-4 border-b border-slate-100 p-4'>
+        <section className='border border-slate-200 bg-white p-4'>
+          <div className='mb-4 flex flex-wrap items-center justify-between gap-3'>
             <div className='min-w-0'>
-              <h2 className='text-base font-bold text-slate-950'>Practice</h2>
+              <h2 className='text-base font-bold text-slate-950'>
+                Useful English from your history
+              </h2>
               <p className='mt-1 text-sm text-slate-500'>
-                Vocabulary recall, fill-in, and re-translate from your saved context.
+                Reusable expressions, tone notes, and next-time phrasing from real context.
               </p>
             </div>
             <button
               type='button'
-              onClick={onGenerate}
-              disabled={!canGenerate}
-              className={`inline-flex h-10 shrink-0 items-center gap-2 rounded-md px-3 text-sm font-bold transition-colors ${
-                canGenerate
+              onClick={onRefreshInsight}
+              disabled={!canRefreshInsight}
+              className={`inline-flex h-10 items-center gap-2 rounded-md px-3 text-sm font-bold transition-colors ${
+                canRefreshInsight
                   ? 'bg-slate-950 text-white hover:bg-slate-800'
                   : 'bg-slate-100 text-slate-400'
               }`}
             >
-              <Sparkles size={16} />
-              {loading ? 'Generating' : 'Generate'}
+              {insightLoading ? (
+                <Loader2 size={16} className='animate-spin' />
+              ) : (
+                <RefreshCw size={16} />
+              )}
+              {insightLoading ? 'Refreshing' : 'Refresh'}
             </button>
           </div>
 
-          <div className='min-h-0 flex-1 overflow-y-auto p-4'>
-            {error ? (
-              <div className='mb-4 border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700'>
-                {error}
+          {insightError ? (
+            <div className='mb-4 flex items-start gap-2 border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800'>
+              <AlertCircle size={16} className='mt-0.5 shrink-0' />
+              {insightError}
+            </div>
+          ) : null}
+
+          {insightLoading && !learningInsight ? (
+            <div className='flex min-h-24 items-center justify-center gap-2 border border-slate-100 bg-slate-50 text-sm font-semibold text-slate-500'>
+              <Loader2 size={17} className='animate-spin' />
+              Loading learning insights
+            </div>
+          ) : null}
+
+          {!insightLoading && !learningInsight ? (
+            <div className='border border-slate-100 bg-slate-50 p-4 text-sm leading-6 text-slate-500'>
+              Saved history unlocks practical English insights. Keep translating real
+              messages and refresh when you want a new snapshot.
+            </div>
+          ) : null}
+
+          {learningInsight ? (
+            <div className='space-y-4'>
+              {learningInsight.summary ? (
+                <p className='border border-slate-100 bg-slate-50 p-3 text-sm leading-6 text-slate-600'>
+                  {learningInsight.summary}
+                </p>
+              ) : null}
+
+              <div className='grid gap-4 xl:grid-cols-2'>
+                <InsightItems
+                  title='From your writing'
+                  icon='writing'
+                  items={learningInsight.writingItems}
+                  emptyText='Spanish-to-English and improved-English records will shape this group.'
+                />
+                <InsightItems
+                  title='From conversations'
+                  icon='conversation'
+                  items={learningInsight.conversationItems}
+                  emptyText='Incoming English that you explain in Spanish will shape this group.'
+                />
               </div>
-            ) : null}
-            {insufficientHistory && history.length > 0 ? (
-              <div className='mb-4 border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800'>
-                More saved translations will improve practice variety.
-              </div>
-            ) : null}
-            <PracticeSet items={practice?.items || []} />
+            </div>
+          ) : null}
+        </section>
+
+        <section className='border border-slate-200 bg-white p-4'>
+          <div className='mb-3 flex items-center gap-2'>
+            <Clock size={17} className='text-slate-400' />
+            <h2 className='text-base font-bold text-slate-950'>Recent context</h2>
+          </div>
+          <div className='grid gap-3 md:grid-cols-2'>
+            {metrics.recentContexts.length === 0 ? (
+              <p className='text-sm text-slate-500'>
+                Recent saved expressions will appear here.
+              </p>
+            ) : (
+              metrics.recentContexts.map((record) => (
+                <article key={record.id} className='border border-slate-100 p-3'>
+                  <div className='text-xs font-bold uppercase tracking-normal text-slate-400'>
+                    {formatRecordLabel(record)}
+                  </div>
+                  <p className='mt-2 line-clamp-2 text-sm font-semibold text-slate-900'>
+                    {record.translatedText}
+                  </p>
+                </article>
+              ))
+            )}
           </div>
         </section>
       </section>

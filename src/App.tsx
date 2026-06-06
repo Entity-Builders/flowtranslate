@@ -1,6 +1,7 @@
 import type {
+  BreakdownChatMessage,
+  LearningInsight,
   LanguageCode,
-  PracticeSet as PracticeSetType,
   StudyArticle,
   TranslationRecord,
   TranslationPresetId,
@@ -17,19 +18,19 @@ import {
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
+import { ExpressionWorkspace } from './components/ExpressionWorkspace';
 import { STORAGE_KEYS } from './constants';
 import { LearningView } from './components/LearningView';
 import { QuotaStatus } from './components/QuotaStatus';
-import { TranslateCommand } from './components/TranslateCommand';
 import { TranslationPresetControl } from './components/TranslationPresetControl';
-import { TranslatorPanel } from './components/TranslatorPanel';
 import { useBidirectionalTranslator } from './hooks/useBidirectionalTranslator';
 import { useFlowtranslateAccount } from './hooks/useFlowtranslateAccount';
 import { analytics } from './services/analytics';
 import { copyText } from './services/clipboard';
 import {
   FlowtranslateApiError,
-  generatePractice,
+  askBreakdownQuestion,
+  generateLearningInsight,
   generateStudyArticle,
 } from './services/flowtranslate-api';
 import { isOnline, subscribeToOnlineState } from './services/pwa';
@@ -48,7 +49,7 @@ import {
 } from './services/translation-history';
 
 type AppView = 'translate' | 'learning';
-type CopiedPanel = LanguageCode | null;
+type CopiedTarget = 'input' | 'result' | null;
 
 const readInitialView = (): AppView => {
   const saved = localStorage.getItem(STORAGE_KEYS.activeView);
@@ -70,16 +71,16 @@ function App() {
   const [usage, setUsage] = useState<UsageSnapshot | null>(null);
   const [history, setHistory] = useState<TranslationRecord[]>([]);
   const [historyError, setHistoryError] = useState('');
-  const [practice, setPractice] = useState<PracticeSetType | null>(null);
-  const [practiceLoading, setPracticeLoading] = useState(false);
-  const [practiceError, setPracticeError] = useState('');
-  const [insufficientHistory, setInsufficientHistory] = useState(false);
+  const [learningInsight, setLearningInsight] =
+    useState<LearningInsight | null>(null);
+  const [insightLoading, setInsightLoading] = useState(false);
+  const [insightError, setInsightError] = useState('');
   const [studyArticle, setStudyArticle] = useState<StudyArticle | null>(null);
   const [studyLoading, setStudyLoading] = useState(false);
   const [studyError, setStudyError] = useState('');
   const [selectedStudyRecordId, setSelectedStudyRecordId] =
     useState<string | null>(null);
-  const [copiedPanel, setCopiedPanel] = useState<CopiedPanel>(null);
+  const [copiedTarget, setCopiedTarget] = useState<CopiedTarget>(null);
   const [speechAvailable, setSpeechAvailable] = useState(false);
   const [dictationAvailable, setDictationAvailable] = useState(false);
   const [speakingLanguage, setSpeakingLanguage] = useState<LanguageCode | null>(
@@ -176,16 +177,21 @@ function App() {
     if (translator.status === 'auth') setShowAccount(true);
   }, [translator.status]);
 
-  const copyPanel = async (language: LanguageCode, text: string) => {
+  const copyExpression = async (
+    target: Exclude<CopiedTarget, null>,
+    language: LanguageCode,
+    text: string,
+  ) => {
     const copied = await copyText(text);
     if (!copied) return;
 
-    setCopiedPanel(language);
+    setCopiedTarget(target);
     analytics.track('translation_copied', {
+      target,
       language,
       text_length: text.length,
     });
-    window.setTimeout(() => setCopiedPanel(null), 1600);
+    window.setTimeout(() => setCopiedTarget(null), 1600);
   };
 
   const listenPanel = (language: LanguageCode, text: string) => {
@@ -226,7 +232,8 @@ function App() {
     setDictatingLanguage(null);
   };
 
-  const dictatePanel = (language: LanguageCode) => {
+  const dictateInput = () => {
+    const language = translator.sourceLanguage;
     if (dictatingLanguage === language) {
       stopCurrentDictation();
       return;
@@ -238,17 +245,15 @@ function App() {
     }
 
     dictationRef.current?.abort();
-    const baseText =
-      language === 'es' ? translator.spanishText : translator.englishText;
+    const baseText = translator.inputText;
 
     const session = startDictation({
       language,
       onResult: (transcript) => {
         const nextText = appendRecognizedText(baseText, transcript);
-        if (language === 'es') translator.editSpanish(nextText);
-        else translator.editEnglish(nextText);
+        translator.editInput(nextText);
 
-        setVoiceMessage('Dictation added to the active panel.');
+        setVoiceMessage('Dictation added to the expression input.');
         analytics.track('translation_dictation_completed', {
           language,
           text_length: transcript.trim().length,
@@ -276,48 +281,62 @@ function App() {
     analytics.track('translation_dictation_started', { language });
   };
 
-  const generateLearningPractice = async () => {
-    setPracticeError('');
+  const loadLearningInsight = useCallback(
+    async (forceRefresh = false, silent = false) => {
+      setInsightError('');
 
-    if (!online) {
-      setPracticeError('Offline. Practice generation needs a connection.');
-      return;
-    }
-
-    if (!account.accessToken) {
-      setShowAccount(true);
-      setPracticeError('Sign in to generate practice from saved translations.');
-      return;
-    }
-
-    setPracticeLoading(true);
-    analytics.track('learning_practice_submitted', {
-      history_count: history.length,
-    });
-
-    try {
-      const result = await generatePractice({}, account.accessToken);
-      setPractice(result.practice);
-      setInsufficientHistory(Boolean(result.insufficientHistory));
-      setUsage(result.usage);
-      analytics.track('learning_practice_succeeded', {
-        item_count: result.practice.items.length,
-        source_count: result.practice.sourceTranslationIds.length,
-      });
-    } catch (error) {
-      if (error instanceof FlowtranslateApiError) {
-        if (error.usage) setUsage(error.usage);
-        setPracticeError(error.message);
-      } else {
-        setPracticeError(
-          error instanceof Error ? error.message : 'Practice generation failed.',
-        );
+      if (!online) {
+        if (!silent) setInsightError('Offline. Learning insights need a connection.');
+        return;
       }
-      analytics.track('learning_practice_failed', { error_type: 'exception' });
-    } finally {
-      setPracticeLoading(false);
-    }
-  };
+
+      if (!account.accessToken) {
+        if (!silent) {
+          setShowAccount(true);
+          setInsightError('Sign in to generate learning insights from history.');
+        }
+        return;
+      }
+
+      setInsightLoading(true);
+      analytics.track('learning_insight_submitted', {
+        history_count: history.length,
+        force_refresh: forceRefresh,
+      });
+
+      try {
+        const result = await generateLearningInsight(
+          { forceRefresh },
+          account.accessToken,
+        );
+        setLearningInsight(result.insight);
+        setUsage(result.usage);
+        analytics.track('learning_insight_succeeded', {
+          cached: result.cached,
+          writing_count: result.insight.writingItems.length,
+          conversation_count: result.insight.conversationItems.length,
+        });
+      } catch (error) {
+        if (error instanceof FlowtranslateApiError) {
+          if (error.usage) setUsage(error.usage);
+          setInsightError(error.message);
+        } else {
+          setInsightError(
+            error instanceof Error ? error.message : 'Learning insight failed.',
+          );
+        }
+        analytics.track('learning_insight_failed', { error_type: 'exception' });
+      } finally {
+        setInsightLoading(false);
+      }
+    },
+    [account.accessToken, history.length, online],
+  );
+
+  useEffect(() => {
+    if (view !== 'learning' || !account.accessToken || !online) return;
+    void loadLearningInsight(false, true);
+  }, [account.accessToken, loadLearningInsight, online, view]);
 
   const openStudyArticle = async (record: TranslationRecord) => {
     setStudyError('');
@@ -376,11 +395,62 @@ function App() {
     setStudyError('');
   };
 
+  const askAboutBreakdown = useCallback(
+    async (
+      record: TranslationRecord,
+      question: string,
+      chatHistory: BreakdownChatMessage[],
+    ) => {
+      const trimmedQuestion = question.trim();
+
+      if (!online) {
+        throw new Error('Offline. Breakdown questions need a connection.');
+      }
+
+      if (!account.accessToken) {
+        setShowAccount(true);
+        throw new Error('Sign in to ask AI about this breakdown.');
+      }
+
+      analytics.track('learning_breakdown_chat_submitted', {
+        mode: record.mode || null,
+        question_length: trimmedQuestion.length,
+        history_turns: chatHistory.length,
+      });
+
+      try {
+        const result = await askBreakdownQuestion(
+          {
+            translationRecordId: record.id,
+            question: trimmedQuestion,
+            history: chatHistory,
+          },
+          account.accessToken,
+        );
+        setUsage(result.usage);
+        analytics.track('learning_breakdown_chat_succeeded', {
+          mode: record.mode || null,
+          answer_length: result.answer.length,
+        });
+        return result.answer;
+      } catch (error) {
+        if (error instanceof FlowtranslateApiError && error.usage) {
+          setUsage(error.usage);
+        }
+        analytics.track('learning_breakdown_chat_failed', {
+          error_type: 'exception',
+        });
+        throw error;
+      }
+    },
+    [account.accessToken, online],
+  );
+
   const deleteHistoryItem = async (id: string) => {
     try {
       await deleteTranslationRecord(id);
       setHistory((current) => current.filter((item) => item.id !== id));
-      setPractice(null);
+      setLearningInsight(null);
       if (selectedStudyRecordId === id) closeStudyArticle();
       analytics.track('translation_history_deleted', { count: 1 });
     } catch (error) {
@@ -392,9 +462,8 @@ function App() {
     try {
       await clearTranslationHistory();
       setHistory([]);
-      setPractice(null);
+      setLearningInsight(null);
       closeStudyArticle();
-      setInsufficientHistory(false);
       analytics.track('translation_history_cleared');
     } catch (error) {
       setHistoryError(error instanceof Error ? error.message : 'Clear failed.');
@@ -411,12 +480,12 @@ function App() {
   }, [translator.status]);
 
   const accountButtonLabel = account.userEmail || 'Account';
-  const sourceStatusText = translator.status === 'translating'
-    ? 'Translating...'
+  const expressionStatusText = translator.status === 'translating'
+    ? 'Generating...'
     : translator.status === 'typing'
-      ? 'Auto-translating soon'
+      ? 'Auto-generating soon'
     : translator.hasPendingChanges
-      ? 'Ready to translate'
+      ? 'Ready to generate'
       : translator.message || undefined;
   const dictationUnavailableReason =
     'Microphone dictation is unavailable in this browser.';
@@ -514,69 +583,51 @@ function App() {
             </div>
           </div>
 
-          <div className='grid w-full min-w-0 max-w-full flex-1 grid-cols-1 gap-4 overflow-x-hidden lg:min-h-0 lg:grid-cols-[minmax(0,1fr)_8rem_minmax(0,1fr)]'>
-            <TranslatorPanel
-              language='es'
-              label='Spanish'
-              text={translator.spanishText}
-              isSource={translator.sourceLanguage === 'es'}
-              placeholder='Escribe o pega texto en español...'
-              copied={copiedPanel === 'es'}
-              statusText={
-                translator.sourceLanguage === 'es'
-                  ? sourceStatusText
-                  : undefined
-              }
-              onChange={(value) => translator.editSpanish(value)}
-              onPaste={(value) => translator.editSpanish(value)}
-              onCopy={() => void copyPanel('es', translator.spanishText)}
-              canListen={speechAvailable}
-              isSpeaking={speakingLanguage === 'es'}
-              onListen={() => listenPanel('es', translator.spanishText)}
-              canDictate={dictationAvailable}
-              isDictating={dictatingLanguage === 'es'}
-              dictationUnavailableReason={dictationUnavailableReason}
-              onDictate={() => dictatePanel('es')}
-              onSubmit={() => void translator.translate()}
-              submitDisabled={!translator.canTranslate}
-            />
-
-            <TranslateCommand
-              sourceLanguage={translator.sourceLanguage}
-              targetLanguage={translator.targetLanguage}
-              status={translator.status}
-              canTranslate={translator.canTranslate}
-              disabledReason={translator.translateDisabledReason}
-              hasPendingChanges={translator.hasPendingChanges}
-              onTranslate={() => void translator.translate()}
-            />
-
-            <TranslatorPanel
-              language='en'
-              label='English'
-              text={translator.englishText}
-              isSource={translator.sourceLanguage === 'en'}
-              placeholder='Type or paste English text...'
-              copied={copiedPanel === 'en'}
-              statusText={
-                translator.sourceLanguage === 'en'
-                  ? sourceStatusText
-                  : undefined
-              }
-              onChange={(value) => translator.editEnglish(value)}
-              onPaste={(value) => translator.editEnglish(value)}
-              onCopy={() => void copyPanel('en', translator.englishText)}
-              canListen={speechAvailable}
-              isSpeaking={speakingLanguage === 'en'}
-              onListen={() => listenPanel('en', translator.englishText)}
-              canDictate={dictationAvailable}
-              isDictating={dictatingLanguage === 'en'}
-              dictationUnavailableReason={dictationUnavailableReason}
-              onDictate={() => dictatePanel('en')}
-              onSubmit={() => void translator.translate()}
-              submitDisabled={!translator.canTranslate}
-            />
-          </div>
+          <ExpressionWorkspace
+            inputText={translator.inputText}
+            resultText={translator.resultText}
+            mode={translator.mode}
+            modeDetection={translator.modeDetection}
+            sourceLanguage={translator.sourceLanguage}
+            targetLanguage={translator.targetLanguage}
+            breakdown={translator.breakdown}
+            status={translator.status}
+            canTranslate={translator.canTranslate}
+            translateDisabledReason={translator.translateDisabledReason}
+            copiedInput={copiedTarget === 'input'}
+            copiedResult={copiedTarget === 'result'}
+            canListen={speechAvailable}
+            speakingLanguage={speakingLanguage}
+            canDictate={dictationAvailable}
+            dictatingLanguage={dictatingLanguage}
+            dictationUnavailableReason={dictationUnavailableReason}
+            statusText={expressionStatusText}
+            onInputChange={(value) => translator.editInput(value)}
+            onCopyInput={() =>
+              void copyExpression(
+                'input',
+                translator.sourceLanguage,
+                translator.inputText,
+              )
+            }
+            onCopyResult={() =>
+              void copyExpression(
+                'result',
+                translator.targetLanguage,
+                translator.resultText,
+              )
+            }
+            onListenInput={() =>
+              listenPanel(translator.sourceLanguage, translator.inputText)
+            }
+            onListenResult={() =>
+              listenPanel(translator.targetLanguage, translator.resultText)
+            }
+            onDictateInput={dictateInput}
+            onTranslate={() => void translator.translate()}
+            onSelectMode={(nextMode) => translator.selectMode(nextMode)}
+            onTranslateToSpanish={() => void translator.translate('translate_to_spanish')}
+          />
           <p className='max-w-[calc(100vw-2rem)] break-words text-xs text-slate-500 sm:max-w-full'>
             Browser voice services may process audio during dictation; Flowtranslate
             saves only submitted translation text and history.
@@ -591,18 +642,18 @@ function App() {
           ) : null}
           <LearningView
             history={history}
-            practice={practice}
-            loading={practiceLoading}
-            insufficientHistory={insufficientHistory}
-            error={practiceError}
+            learningInsight={learningInsight}
+            insightLoading={insightLoading}
+            insightError={insightError}
             studyArticle={studyArticle}
             studyLoading={studyLoading}
             studyError={studyError}
             selectedStudyRecordId={selectedStudyRecordId}
-            onGenerate={() => void generateLearningPractice()}
+            onRefreshInsight={() => void loadLearningInsight(true)}
             onOpenStudy={(record) => void openStudyArticle(record)}
             onCloseStudy={closeStudyArticle}
             onListenPhrase={(language, text) => listenPanel(language, text)}
+            onAskBreakdownQuestion={askAboutBreakdown}
             onDelete={(id) => void deleteHistoryItem(id)}
             onClear={() => void clearHistory()}
           />

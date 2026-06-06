@@ -1,5 +1,10 @@
 import type {
+  ExpressionBreakdown,
+  ExpressionMode,
+  BreakdownChatMessage,
   LanguageCode,
+  LearningInsight,
+  LearningInsightResponseMetadata,
   PracticeSet,
   PracticeType,
   StudyArticle,
@@ -15,9 +20,16 @@ export type FlowtranslateUsage = UsageSnapshot;
 export type TranslateResponse = {
   kind: 'translate';
   text: string;
+  mode: ExpressionMode;
+  breakdown?: ExpressionBreakdown | null;
   translationRecord: Pick<
     TranslationRecord,
-    'id' | 'sourceLanguage' | 'targetLanguage' | 'createdAt'
+    | 'id'
+    | 'sourceLanguage'
+    | 'targetLanguage'
+    | 'mode'
+    | 'breakdown'
+    | 'createdAt'
   >;
   usage: FlowtranslateUsage;
 };
@@ -35,11 +47,24 @@ export type StudyArticleResponse = {
   usage: FlowtranslateUsage;
 } & StudyArticleResponseMetadata;
 
+export type LearningInsightResponse = {
+  kind: 'learning_insight';
+  insight: LearningInsight;
+  usage: FlowtranslateUsage;
+} & LearningInsightResponseMetadata;
+
+export type BreakdownChatResponse = {
+  kind: 'breakdown_chat';
+  answer: string;
+  usage: FlowtranslateUsage;
+};
+
 type FlowtranslateRequest =
   | {
       kind: 'translate';
-      sourceLanguage: LanguageCode;
-      targetLanguage: LanguageCode;
+      mode?: ExpressionMode;
+      sourceLanguage?: LanguageCode;
+      targetLanguage?: LanguageCode;
       text: string;
       clientRequestId?: string;
       presetId?: TranslationPresetId;
@@ -51,12 +76,24 @@ type FlowtranslateRequest =
   | {
       kind: 'study_article';
       translationRecordId: string;
+    }
+  | {
+      kind: 'learning_insight';
+      forceRefresh?: boolean;
+    }
+  | {
+      kind: 'breakdown_chat';
+      translationRecordId: string;
+      question: string;
+      history?: BreakdownChatMessage[];
     };
 
 type FlowtranslateResponse =
   | TranslateResponse
   | PracticeResponse
   | StudyArticleResponse
+  | LearningInsightResponse
+  | BreakdownChatResponse
   | {
       error: string;
       usage?: FlowtranslateUsage;
@@ -115,8 +152,9 @@ const requestFlowtranslate = async <TResponse extends FlowtranslateResponse>(
 
 export const generateTranslation = (
   params: {
-    sourceLanguage: LanguageCode;
-    targetLanguage: LanguageCode;
+    mode?: ExpressionMode;
+    sourceLanguage?: LanguageCode;
+    targetLanguage?: LanguageCode;
     text: string;
     clientRequestId?: string;
     presetId?: TranslationPresetId;
@@ -126,11 +164,24 @@ export const generateTranslation = (
   requestFlowtranslate<TranslateResponse>(
     {
       kind: 'translate',
+      mode: params.mode,
       sourceLanguage: params.sourceLanguage,
       targetLanguage: params.targetLanguage,
       text: params.text,
       clientRequestId: params.clientRequestId,
       presetId: params.presetId,
+    },
+    accessToken,
+  );
+
+export const generateLearningInsight = (
+  params: { forceRefresh?: boolean },
+  accessToken: string,
+) =>
+  requestFlowtranslate<LearningInsightResponse>(
+    {
+      kind: 'learning_insight',
+      forceRefresh: params.forceRefresh,
     },
     accessToken,
   );
@@ -155,6 +206,24 @@ export const generateStudyArticle = (
     {
       kind: 'study_article',
       translationRecordId: params.translationRecordId,
+    },
+    accessToken,
+  );
+
+export const askBreakdownQuestion = (
+  params: {
+    translationRecordId: string;
+    question: string;
+    history?: BreakdownChatMessage[];
+  },
+  accessToken: string,
+) =>
+  requestFlowtranslate<BreakdownChatResponse>(
+    {
+      kind: 'breakdown_chat',
+      translationRecordId: params.translationRecordId,
+      question: params.question,
+      history: params.history,
     },
     accessToken,
   );

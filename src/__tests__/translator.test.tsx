@@ -3,29 +3,34 @@ import { describe, expect, it } from 'vitest';
 import App from '../App';
 
 describe('translator UI', () => {
-  it('renders synchronized Spanish and English panels as the primary view', () => {
+  it('renders one expression input and one result surface as the primary view', () => {
     render(<App />);
 
-    expect(screen.getByRole('heading', { name: 'Spanish' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'English' })).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('Escribe o pega texto en español...')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('Type or paste English text...')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Expression input' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Result' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Expression input')).toBeInTheDocument();
     expect(
-      screen.getByRole('button', { name: /translate spanish to english/i }),
+      screen.getByRole('button', { name: /translate to english/i }),
+    ).toHaveAttribute('aria-pressed', 'true');
+    expect(
+      screen.getByRole('button', { name: /improve english/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /explain in spanish/i }),
     ).toBeInTheDocument();
   });
 
-  it('marks the edited panel as source and exposes copy actions', () => {
+  it('detects English as improvement while keeping the Spanish action available', () => {
     render(<App />);
 
-    fireEvent.change(screen.getByPlaceholderText('Type or paste English text...'), {
-      target: { value: 'hello' },
+    fireEvent.change(screen.getByLabelText('Expression input'), {
+      target: { value: 'I need help with this task' },
     });
 
-    expect(screen.getAllByText('Source').length).toBeGreaterThan(0);
-    expect(screen.getAllByRole('button', { name: /copy/i }).length).toBe(2);
     expect(
-      screen.getByRole('button', { name: /translate english to spanish/i }),
-    ).toBeInTheDocument();
+      screen.getByRole('button', { name: /improve english/i }),
+    ).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: /^Spanish$/i })).toBeEnabled();
+    expect(screen.getAllByRole('button', { name: /copy/i }).length).toBe(2);
   });
 });

@@ -1,4 +1,8 @@
-import type { TranslationRecord } from '@eb-packages/flowtranslate-core';
+import type {
+  ExpressionBreakdown,
+  ExpressionMode,
+  TranslationRecord,
+} from '@eb-packages/flowtranslate-core';
 import { supabase } from '../lib/supabase';
 
 type TranslationRow = {
@@ -7,6 +11,8 @@ type TranslationRow = {
   target_language: 'es' | 'en';
   source_text: string;
   translated_text: string;
+  mode: ExpressionMode | null;
+  breakdown: ExpressionBreakdown | null;
   request_hash: string;
   pair_hash: string;
   created_at: string;
@@ -19,6 +25,8 @@ const mapRow = (row: TranslationRow): TranslationRecord => ({
   targetLanguage: row.target_language,
   sourceText: row.source_text,
   translatedText: row.translated_text,
+  mode: row.mode || undefined,
+  breakdown: row.breakdown || null,
   requestHash: row.request_hash,
   pairHash: row.pair_hash,
   createdAt: row.created_at,
@@ -31,7 +39,7 @@ export const listTranslationHistory = async () => {
   const { data, error } = await supabase
     .from('translation_records')
     .select(
-      'id, source_language, target_language, source_text, translated_text, request_hash, pair_hash, created_at, deleted_at',
+      'id, source_language, target_language, source_text, translated_text, mode, breakdown, request_hash, pair_hash, created_at, deleted_at',
     )
     .is('deleted_at', null)
     .order('created_at', { ascending: false })

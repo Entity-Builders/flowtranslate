@@ -7,6 +7,7 @@ type TranslationActionsProps = {
   canListen: boolean;
   isSpeaking: boolean;
   onListen: () => void;
+  showDictate?: boolean;
   canDictate: boolean;
   isDictating: boolean;
   dictationUnavailableReason: string;
@@ -20,12 +21,13 @@ export const TranslationActions = ({
   canListen,
   isSpeaking,
   onListen,
+  showDictate = true,
   canDictate,
   isDictating,
   dictationUnavailableReason,
   onDictate,
 }: TranslationActionsProps) => (
-  <div className='flex w-full shrink-0 items-center justify-start gap-2 sm:w-auto sm:justify-end'>
+  <div className='flex w-full min-w-0 shrink-0 flex-wrap items-center justify-start gap-2 sm:w-auto sm:justify-end'>
     {canListen ? (
       <button
         type='button'
@@ -43,28 +45,30 @@ export const TranslationActions = ({
       </button>
     ) : null}
 
-    <button
-      type='button'
-      onClick={onDictate}
-      disabled={!canDictate}
-      className={`inline-flex h-10 w-10 items-center justify-center rounded-md transition-colors ${
-        canDictate
-          ? isDictating
-            ? 'bg-rose-600 text-white hover:bg-rose-500'
-            : 'border border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-950'
-          : 'border border-slate-100 text-slate-300'
-      }`}
-      aria-label={
-        canDictate
-          ? isDictating
-            ? 'Stop microphone dictation'
-            : 'Start microphone dictation'
-          : 'Microphone dictation unavailable'
-      }
-      title={canDictate ? 'Microphone dictation' : dictationUnavailableReason}
-    >
-      {canDictate ? <Mic size={17} /> : <MicOff size={17} />}
-    </button>
+    {showDictate ? (
+      <button
+        type='button'
+        onClick={onDictate}
+        disabled={!canDictate}
+        className={`inline-flex h-10 w-10 items-center justify-center rounded-md transition-colors ${
+          canDictate
+            ? isDictating
+              ? 'bg-rose-600 text-white hover:bg-rose-500'
+              : 'border border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-950'
+            : 'border border-slate-100 text-slate-300'
+        }`}
+        aria-label={
+          canDictate
+            ? isDictating
+              ? 'Stop microphone dictation'
+              : 'Start microphone dictation'
+            : 'Microphone dictation unavailable'
+        }
+        title={canDictate ? 'Microphone dictation' : dictationUnavailableReason}
+      >
+        {canDictate ? <Mic size={17} /> : <MicOff size={17} />}
+      </button>
+    ) : null}
 
     <button
       type='button'

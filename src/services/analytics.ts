@@ -29,6 +29,9 @@ export function initAnalytics() {
     apiHost: POSTHOG_HOST,
   });
 
-  // Tag every event with the project name for multi-app filtering
-  analytics.setGlobalProperties({ project: 'flowtranslate' });
+  // Tag every event for shared Entity Builders PostHog project filtering.
+  analytics.setGlobalProperties({
+    app: 'flowtranslate',
+    project: 'flowtranslate',
+  });
 }

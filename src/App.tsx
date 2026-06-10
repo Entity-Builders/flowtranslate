@@ -491,8 +491,8 @@ function App() {
     'Microphone dictation is unavailable in this browser.';
 
   return (
-    <div className='flex h-screen flex-col overflow-x-hidden bg-slate-50 text-slate-950'>
-      <header className='flex min-h-16 shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-white px-3 sm:px-4'>
+    <div className='flex h-[100dvh] min-h-0 flex-col overflow-x-hidden bg-slate-50 text-slate-950'>
+      <header className='flex min-h-16 shrink-0 items-center justify-between gap-2 border-b border-slate-200 bg-white px-3 sm:gap-3 sm:px-4'>
         <div className='flex min-w-0 items-center gap-3'>
           <div className='flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-slate-950 text-white'>
             <Languages size={19} />
@@ -505,30 +505,30 @@ function App() {
           </div>
         </div>
 
-        <nav className='flex shrink-0 rounded-md bg-slate-100 p-1'>
+        <nav className='flex min-w-0 shrink rounded-md bg-slate-100 p-1'>
           <button
             type='button'
             onClick={() => setView('translate')}
-            className={`inline-flex h-10 items-center gap-2 rounded-md px-3 text-sm font-semibold transition-colors ${
+            className={`inline-flex h-10 items-center gap-1.5 rounded-md px-2 text-sm font-semibold transition-colors sm:gap-2 sm:px-3 ${
               view === 'translate'
                 ? 'bg-white text-slate-950 shadow-sm'
                 : 'text-slate-500 hover:text-slate-800'
             }`}
           >
             <Languages size={16} />
-            Translate
+            <span className='hidden min-[360px]:inline'>Translate</span>
           </button>
           <button
             type='button'
             onClick={() => setView('learning')}
-            className={`inline-flex h-10 items-center gap-2 rounded-md px-3 text-sm font-semibold transition-colors ${
+            className={`inline-flex h-10 items-center gap-1.5 rounded-md px-2 text-sm font-semibold transition-colors sm:gap-2 sm:px-3 ${
               view === 'learning'
                 ? 'bg-white text-slate-950 shadow-sm'
                 : 'text-slate-500 hover:text-slate-800'
             }`}
           >
             <BookOpen size={16} />
-            Learning
+            <span className='hidden min-[360px]:inline'>Learning</span>
           </button>
         </nav>
 
@@ -556,7 +556,7 @@ function App() {
       ) : null}
 
       {view === 'translate' ? (
-        <main className='flex min-h-0 w-full max-w-full flex-1 flex-col gap-3 overflow-x-hidden overflow-y-auto p-4 lg:overflow-hidden'>
+        <main className='flex min-h-0 w-full max-w-full flex-1 flex-col gap-3 overflow-x-hidden overflow-y-auto p-3 sm:p-4 lg:overflow-hidden'>
           {translator.message ? (
             <div className={`border px-3 py-2 text-sm ${statusTone}`}>
               {translator.message}

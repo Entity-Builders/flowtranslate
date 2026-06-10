@@ -126,9 +126,9 @@ export const ExpressionWorkspace = ({
   const isTranslating = status === 'translating';
 
   return (
-    <section className='grid w-full max-w-full grid-cols-1 gap-4 overflow-x-hidden lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]'>
-      <div className='flex min-h-[420px] min-w-0 max-w-full flex-col overflow-hidden border border-slate-200 bg-white lg:min-h-0 lg:overflow-y-auto'>
-        <div className='border-b border-slate-100 px-4 py-3 sm:px-5'>
+    <section className='grid w-full min-w-0 max-w-full grid-cols-1 gap-3 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)] lg:gap-4'>
+      <div className='flex min-h-[360px] min-w-0 max-w-full flex-col border border-slate-200 bg-white sm:min-h-[420px] lg:min-h-0 lg:overflow-y-auto'>
+        <div className='border-b border-slate-100 px-3 py-3 sm:px-5'>
           <div className='flex flex-wrap items-center justify-between gap-3'>
             <div className='min-w-0'>
               <h2 className='text-base font-black text-slate-950'>Expression input</h2>
@@ -150,23 +150,23 @@ export const ExpressionWorkspace = ({
             />
           </div>
 
-          <div className='mt-4 grid gap-2 sm:grid-cols-3'>
+          <div className='mt-3 grid grid-cols-3 gap-1.5 sm:mt-4 sm:gap-2'>
             {EXPRESSION_MODES.map((item) => (
               <button
                 key={item}
                 type='button'
                 onClick={() => onSelectMode(item)}
                 aria-pressed={mode === item}
-                className={`min-h-16 rounded-md border px-3 py-2 text-left transition-colors ${
+                className={`min-h-12 rounded-md border px-2 py-2 text-left transition-colors sm:min-h-16 sm:px-3 ${
                   mode === item
                     ? modeTone[item]
                     : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'
                 }`}
               >
-                <span className='block text-sm font-black'>
+                <span className='block text-xs font-black leading-tight sm:text-sm'>
                   {EXPRESSION_MODE_LABELS[item]}
                 </span>
-                <span className='mt-1 block break-words text-xs font-semibold opacity-75'>
+                <span className='mt-1 hidden break-words text-xs font-semibold opacity-75 sm:block'>
                   {modeDescriptions[item]}
                 </span>
               </button>
@@ -184,12 +184,12 @@ export const ExpressionWorkspace = ({
             }
           }}
           placeholder='Write Spanish to get English, or write English to improve it...'
-          className='min-h-0 w-full min-w-0 flex-1 resize-none break-words bg-transparent p-5 text-xl leading-relaxed text-slate-900 outline-none [overflow-wrap:anywhere] placeholder:text-slate-300'
+          className='min-h-36 w-full min-w-0 flex-1 resize-none break-words bg-transparent p-4 text-lg leading-relaxed text-slate-900 outline-none [overflow-wrap:anywhere] placeholder:text-slate-300 sm:p-5 sm:text-xl'
           spellCheck
           aria-label='Expression input'
         />
 
-        <div className='flex min-h-14 flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-4 py-3 text-sm text-slate-500'>
+        <div className='flex min-h-14 flex-col items-stretch justify-between gap-3 border-t border-slate-100 px-3 py-3 text-sm text-slate-500 sm:flex-row sm:items-center sm:px-4'>
           <span className='min-w-0 break-words font-semibold'>
             {statusText || detectionCopy(mode, modeDetection)}
           </span>
@@ -197,7 +197,7 @@ export const ExpressionWorkspace = ({
             type='button'
             onClick={onTranslate}
             disabled={!canTranslate}
-            className={`inline-flex h-10 items-center gap-2 rounded-md px-3 text-sm font-black transition-colors ${
+            className={`inline-flex h-10 w-full items-center justify-center gap-2 rounded-md px-3 text-sm font-black transition-colors sm:w-auto ${
               canTranslate
                 ? 'bg-slate-950 text-white hover:bg-slate-800'
                 : 'bg-slate-100 text-slate-400'
@@ -214,8 +214,8 @@ export const ExpressionWorkspace = ({
         </div>
       </div>
 
-      <div className='flex min-h-[420px] min-w-0 max-w-full flex-col overflow-hidden border border-slate-200 bg-white lg:min-h-0 lg:overflow-y-auto'>
-        <div className='flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 sm:px-5'>
+      <div className='flex min-h-[320px] min-w-0 max-w-full flex-col border border-slate-200 bg-white sm:min-h-[420px] lg:min-h-0 lg:overflow-y-auto'>
+        <div className='flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-3 py-3 sm:px-5'>
           <div className='min-w-0'>
             <h2 className='text-base font-black text-slate-950'>Result</h2>
             <p className='mt-1 text-xs font-semibold uppercase tracking-normal text-slate-500'>
@@ -253,13 +253,13 @@ export const ExpressionWorkspace = ({
           </div>
         </div>
 
-        <div className='min-h-[12rem] min-w-0 max-w-full flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-5 lg:min-h-[14rem]'>
+        <div className='min-h-40 min-w-0 max-w-full flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-5 lg:min-h-[14rem]'>
           {resultText.trim() ? (
-            <p className='max-w-full break-words text-2xl font-black leading-[1.12] text-slate-950 [overflow-wrap:anywhere] sm:text-3xl xl:text-[2.125rem]'>
+            <p className='max-w-full break-words text-xl font-black leading-[1.16] text-slate-950 [overflow-wrap:anywhere] sm:text-3xl xl:text-[2.125rem]'>
               {resultText}
             </p>
           ) : (
-            <div className='flex h-full min-h-44 items-center rounded-md border border-dashed border-slate-200 bg-slate-50 p-4 text-sm font-semibold leading-6 text-slate-500'>
+            <div className='flex h-full min-h-36 items-center rounded-md border border-dashed border-slate-200 bg-slate-50 p-4 text-sm font-semibold leading-6 text-slate-500'>
               {resultPlaceholder(mode)}
             </div>
           )}

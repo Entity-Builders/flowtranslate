@@ -1,8 +1,23 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../App';
 
+const analyticsScreen = vi.hoisted(() => vi.fn());
+const analyticsTrack = vi.hoisted(() => vi.fn());
+
+vi.mock('../services/analytics', () => ({
+  analytics: {
+    screen: analyticsScreen,
+    track: analyticsTrack,
+  },
+}));
+
 describe('translator UI', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.clearAllMocks();
+  });
+
   it('renders one expression input and one result surface as the primary view', () => {
     render(<App />);
 
@@ -18,6 +33,30 @@ describe('translator UI', () => {
     expect(
       screen.getByRole('button', { name: /explain in spanish/i }),
     ).toBeInTheDocument();
+  });
+
+  it('tracks app view changes for Translate and Learning', () => {
+    render(<App />);
+
+    expect(analyticsScreen).toHaveBeenCalledWith(
+      'translate',
+      expect.objectContaining({
+        signed_in: false,
+        has_saved_history: false,
+        history_count: 0,
+      }),
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /learning/i }));
+
+    expect(analyticsScreen).toHaveBeenCalledWith(
+      'learning',
+      expect.objectContaining({
+        signed_in: false,
+        has_saved_history: false,
+        history_count: 0,
+      }),
+    );
   });
 
   it('detects English as improvement while keeping the Spanish action available', () => {

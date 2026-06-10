@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import type { StudyArticle } from '@eb-packages/flowtranslate-core';
 import { describe, expect, it, vi } from 'vitest';
 import App from '../App';
+import { ExpressionBreakdownDetails } from '../components/ExpressionBreakdownDetails';
 import { LearningView } from '../components/LearningView';
 import { StudyArticleView } from '../components/StudyArticleView';
 
@@ -155,6 +156,38 @@ describe('learning UI', () => {
       screen.getByText(/Se corrigio la conjugacion del verbo/),
     ).toBeInTheDocument();
     expect(screen.getByText('Generating study article')).toBeInTheDocument();
+  });
+
+  it('renders multiple tense notes when a phrase mixes clauses', () => {
+    render(
+      <ExpressionBreakdownDetails
+        defaultOpen
+        breakdown={{
+          changed: true,
+          confidence: 'high',
+          feedback: ['Se separan el estado pasado y la peticion actual.'],
+          tense: 'Past continuous + modal request',
+          tenses: [
+            {
+              label: 'Past continuous',
+              text: 'was freezing',
+              note: 'Describe una situacion en progreso durante la noche anterior.',
+            },
+            {
+              label: 'Modal request',
+              text: 'can we turn up',
+              note: 'Usa can para pedir permiso o proponer una accion para esta noche.',
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(screen.getByText('Tenses')).toBeInTheDocument();
+    expect(screen.getByText('Past continuous')).toBeInTheDocument();
+    expect(screen.getByText('was freezing')).toBeInTheDocument();
+    expect(screen.getByText('Modal request')).toBeInTheDocument();
+    expect(screen.getByText('can we turn up')).toBeInTheDocument();
   });
 
   it('lets the user ask AI questions about a saved Spanish breakdown', async () => {

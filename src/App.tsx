@@ -9,10 +9,13 @@ import type {
 } from '@eb-packages/flowtranslate-core';
 import {
   BookOpen,
+  Chrome,
   Languages,
   LogOut,
+  Mail,
   Settings,
   ShieldCheck,
+  UserRound,
   WifiOff,
   X,
 } from 'lucide-react';
@@ -63,10 +66,14 @@ const appendRecognizedText = (currentText: string, transcript: string) => {
   return `${currentText}${/\s$/.test(currentText) ? '' : ' '}${trimmedTranscript}`;
 };
 
+const guestLearningMessage =
+  'Connect a free account to unlock personal Learning and keep your progress.';
+
 function App() {
   const account = useFlowtranslateAccount();
   const [view, setView] = useState<AppView>(readInitialView);
   const [showAccount, setShowAccount] = useState(false);
+  const [showEmailSignIn, setShowEmailSignIn] = useState(false);
   const [online, setOnline] = useState(isOnline);
   const [usage, setUsage] = useState<UsageSnapshot | null>(null);
   const [history, setHistory] = useState<TranslationRecord[]>([]);
@@ -91,6 +98,8 @@ function App() {
   const [voiceMessage, setVoiceMessage] = useState('');
   const dictationRef = useRef<DictationSession | null>(null);
   const renderedStudyArticleRef = useRef<string | null>(null);
+  const trackedViewRef = useRef<AppView | null>(null);
+  const autoGuestStartedRef = useRef(false);
 
   useEffect(() => subscribeToOnlineState(setOnline), []);
 
@@ -107,6 +116,27 @@ function App() {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.activeView, view);
   }, [view]);
+
+  useEffect(() => {
+    if (
+      autoGuestStartedRef.current ||
+      !account.isSupabaseConfigured ||
+      account.authLoading ||
+      account.busy ||
+      account.session
+    ) {
+      return;
+    }
+
+    autoGuestStartedRef.current = true;
+    void account.signInAsGuest({ source: 'automatic' });
+  }, [
+    account.authLoading,
+    account.busy,
+    account.isSupabaseConfigured,
+    account.session,
+    account.signInAsGuest,
+  ]);
 
   useEffect(() => {
     if (!studyArticle) {
@@ -158,10 +188,24 @@ function App() {
 
   const translator = useBidirectionalTranslator({
     accessToken: account.accessToken,
+    authPending: account.authLoading || (account.busy && !account.session),
     online,
     onUsage: handleUsage,
     onSavedTranslation: handleSavedTranslation,
   });
+
+  useEffect(() => {
+    if (trackedViewRef.current === view) return;
+
+    trackedViewRef.current = view;
+    analytics.screen(view, {
+      signed_in: Boolean(account.session),
+      account_kind: account.accountKind,
+      has_saved_history: history.length > 0,
+      history_count: history.length,
+      has_translation_result: Boolean(translator.resultText.trim()),
+    });
+  }, [account.accountKind, account.session, history.length, translator.resultText, view]);
 
   const selectPreset = useCallback(
     (nextPresetId: TranslationPresetId) => {
@@ -174,8 +218,14 @@ function App() {
   );
 
   useEffect(() => {
-    if (translator.status === 'auth') setShowAccount(true);
-  }, [translator.status]);
+    if (
+      translator.status === 'auth' &&
+      !account.authLoading &&
+      !account.busy
+    ) {
+      setShowAccount(true);
+    }
+  }, [account.authLoading, account.busy, translator.status]);
 
   const copyExpression = async (
     target: Exclude<CopiedTarget, null>,
@@ -298,6 +348,17 @@ function App() {
         return;
       }
 
+      if (account.isGuest) {
+        if (!silent) {
+          setShowAccount(true);
+          setInsightError(guestLearningMessage);
+          analytics.track('learning_guest_blocked', {
+            surface: 'insight',
+          });
+        }
+        return;
+      }
+
       setInsightLoading(true);
       analytics.track('learning_insight_submitted', {
         history_count: history.length,
@@ -330,13 +391,15 @@ function App() {
         setInsightLoading(false);
       }
     },
-    [account.accessToken, history.length, online],
+    [account.accessToken, account.isGuest, history.length, online],
   );
 
   useEffect(() => {
-    if (view !== 'learning' || !account.accessToken || !online) return;
+    if (view !== 'learning' || !account.accessToken || account.isGuest || !online) {
+      return;
+    }
     void loadLearningInsight(false, true);
-  }, [account.accessToken, loadLearningInsight, online, view]);
+  }, [account.accessToken, account.isGuest, loadLearningInsight, online, view]);
 
   const openStudyArticle = async (record: TranslationRecord) => {
     setStudyError('');
@@ -351,6 +414,15 @@ function App() {
     if (!account.accessToken) {
       setShowAccount(true);
       setStudyError('Sign in to study saved translations.');
+      return;
+    }
+
+    if (account.isGuest) {
+      setShowAccount(true);
+      setStudyError(guestLearningMessage);
+      analytics.track('learning_guest_blocked', {
+        surface: 'study_article',
+      });
       return;
     }
 
@@ -412,6 +484,14 @@ function App() {
         throw new Error('Sign in to ask AI about this breakdown.');
       }
 
+      if (account.isGuest) {
+        setShowAccount(true);
+        analytics.track('learning_guest_blocked', {
+          surface: 'breakdown_chat',
+        });
+        throw new Error(guestLearningMessage);
+      }
+
       analytics.track('learning_breakdown_chat_submitted', {
         mode: record.mode || null,
         question_length: trimmedQuestion.length,
@@ -443,7 +523,7 @@ function App() {
         throw error;
       }
     },
-    [account.accessToken, online],
+    [account.accessToken, account.isGuest, online],
   );
 
   const deleteHistoryItem = async (id: string) => {
@@ -479,7 +559,14 @@ function App() {
     return 'border-emerald-200 bg-emerald-50 text-emerald-700';
   }, [translator.status]);
 
-  const accountButtonLabel = account.userEmail || 'Account';
+  const accountButtonLabel = account.displayName;
+  const accountButtonIcon = account.isGuest ? (
+    <UserRound size={17} />
+  ) : account.session ? (
+    <ShieldCheck size={17} />
+  ) : (
+    <Settings size={17} />
+  );
   const expressionStatusText = translator.status === 'translating'
     ? 'Generating...'
     : translator.status === 'typing'
@@ -533,16 +620,13 @@ function App() {
         </nav>
 
         <div className='flex min-w-0 items-center gap-2'>
-          <div className='hidden lg:block'>
-            <QuotaStatus usage={usage} compact />
-          </div>
           <button
             type='button'
             onClick={() => setShowAccount(true)}
             className='inline-flex h-10 w-10 shrink-0 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white text-sm font-semibold text-slate-600 hover:text-slate-950 sm:w-auto sm:max-w-44 sm:px-3'
             title='Account'
           >
-            {account.session ? <ShieldCheck size={17} /> : <Settings size={17} />}
+            {accountButtonIcon}
             <span className='hidden truncate sm:inline'>{accountButtonLabel}</span>
           </button>
         </div>
@@ -682,55 +766,85 @@ function App() {
               <div className='border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800'>
                 Supabase environment variables are required for accounts and AI work.
               </div>
+            ) : account.authLoading ? (
+              <div className='border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600'>
+                Checking account...
+              </div>
             ) : account.session ? (
-              <div className='space-y-4'>
-                <div className='border border-slate-200 p-3'>
-                  <div className='text-xs font-bold uppercase text-slate-400'>
-                    Signed in
+              <div className='space-y-5'>
+                <div className='space-y-2'>
+                  <div className='flex items-center gap-2 text-xs font-bold uppercase text-slate-400'>
+                    {account.isGuest ? <UserRound size={14} /> : <ShieldCheck size={14} />}
+                    {account.isGuest ? 'Guest trial' : 'Signed in'}
                   </div>
-                  <div className='mt-1 truncate text-sm font-bold text-slate-950'>
-                    {account.userEmail}
+                  <div className='truncate text-base font-bold text-slate-950'>
+                    {account.displayName}
                   </div>
+                  <p className='text-sm leading-6 text-slate-600'>
+                    {account.isGuest
+                      ? 'Translate now, then connect Google for more monthly AI access and personal Learning.'
+                      : 'Your free Flowtranslate account is connected.'}
+                  </p>
                 </div>
-                <QuotaStatus usage={usage} />
+
+                <QuotaStatus usage={usage} accountKind={account.accountKind} />
+
+                {account.error ? (
+                  <div className='border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700'>
+                    {account.error}
+                  </div>
+                ) : null}
+
+                {account.message ? (
+                  <div className='border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700'>
+                    {account.message}
+                  </div>
+                ) : null}
+
+                {account.isGuest ? (
+                  <button
+                    type='button'
+                    onClick={() => void account.signInWithGoogle()}
+                    disabled={account.busy}
+                    className='inline-flex h-11 w-full items-center justify-center gap-2 rounded-md bg-slate-950 text-sm font-bold text-white hover:bg-slate-800 disabled:bg-slate-300'
+                  >
+                    <Chrome size={16} />
+                    Connect with Google
+                  </button>
+                ) : null}
+
                 <button
                   type='button'
                   onClick={() => void account.signOut()}
-                  className='inline-flex h-11 w-full items-center justify-center gap-2 rounded-md border border-slate-200 text-sm font-bold text-slate-700 hover:bg-slate-50'
+                  disabled={account.busy}
+                  className='inline-flex h-11 w-full items-center justify-center gap-2 rounded-md border border-slate-200 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:text-slate-300'
                 >
                   <LogOut size={16} />
                   Sign out
                 </button>
               </div>
             ) : (
-              <form onSubmit={account.submit} className='space-y-4'>
-                <label className='block'>
-                  <span className='mb-2 block text-sm font-bold text-slate-700'>
-                    Email
-                  </span>
-                  <input
-                    type='email'
-                    value={account.email}
-                    onChange={(event) => account.setEmail(event.target.value)}
+              <div className='space-y-4'>
+                <div className='space-y-3'>
+                  <button
+                    type='button'
+                    onClick={() => void account.signInWithGoogle()}
                     disabled={account.busy}
-                    className='h-11 w-full rounded-md border border-slate-200 px-3 outline-none focus:border-slate-500'
-                    placeholder='you@example.com'
-                  />
-                </label>
-
-                <label className='block'>
-                  <span className='mb-2 block text-sm font-bold text-slate-700'>
-                    Code
-                  </span>
-                  <input
-                    inputMode='numeric'
-                    value={account.code}
-                    onChange={(event) => account.setCode(event.target.value)}
+                    className='inline-flex h-11 w-full items-center justify-center gap-2 rounded-md bg-slate-950 text-sm font-bold text-white hover:bg-slate-800 disabled:bg-slate-300'
+                  >
+                    <Chrome size={16} />
+                    Continue with Google
+                  </button>
+                  <button
+                    type='button'
+                    onClick={() => void account.signInAsGuest()}
                     disabled={account.busy}
-                    className='h-11 w-full rounded-md border border-slate-200 px-3 text-lg font-bold tracking-normal outline-none focus:border-slate-500'
-                    placeholder='000000'
-                  />
-                </label>
+                    className='inline-flex h-11 w-full items-center justify-center gap-2 rounded-md border border-slate-200 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:text-slate-300'
+                  >
+                    <UserRound size={16} />
+                    Try guest trial
+                  </button>
+                </div>
 
                 {account.error ? (
                   <div className='border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700'>
@@ -745,28 +859,72 @@ function App() {
                 ) : null}
 
                 <button
-                  type='submit'
+                  type='button'
+                  onClick={() => setShowEmailSignIn((current) => !current)}
                   disabled={account.busy}
-                  className='h-11 w-full rounded-md bg-slate-950 text-sm font-bold text-white hover:bg-slate-800 disabled:bg-slate-300'
+                  className='inline-flex h-11 w-full items-center justify-center gap-2 rounded-md border border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-50 disabled:text-slate-300'
                 >
-                  {account.busy
-                    ? 'Checking'
-                    : account.code.trim()
-                      ? 'Verify code'
-                      : 'Send code'}
+                  <Mail size={16} />
+                  {showEmailSignIn ? 'Hide email code' : 'Use email code'}
                 </button>
 
-                {account.codeSent ? (
-                  <button
-                    type='button'
-                    onClick={() => void account.requestCode()}
-                    disabled={account.busy}
-                    className='h-11 w-full rounded-md border border-slate-200 text-sm font-bold text-slate-700 hover:bg-slate-50'
-                  >
-                    Send a new code
-                  </button>
+                {showEmailSignIn ? (
+                  <form onSubmit={account.submit} className='space-y-4 border-t border-slate-200 pt-4'>
+                    <label className='block'>
+                      <span className='mb-2 block text-sm font-bold text-slate-700'>
+                        Email
+                      </span>
+                      <input
+                        type='email'
+                        value={account.email}
+                        onChange={(event) => account.setEmail(event.target.value)}
+                        disabled={account.busy}
+                        className='h-11 w-full rounded-md border border-slate-200 px-3 outline-none focus:border-slate-500'
+                        placeholder='you@example.com'
+                      />
+                    </label>
+
+                    {account.codeSent ? (
+                      <label className='block'>
+                        <span className='mb-2 block text-sm font-bold text-slate-700'>
+                          Code
+                        </span>
+                        <input
+                          inputMode='numeric'
+                          value={account.code}
+                          onChange={(event) => account.setCode(event.target.value)}
+                          disabled={account.busy}
+                          className='h-11 w-full rounded-md border border-slate-200 px-3 text-lg font-bold tracking-normal outline-none focus:border-slate-500'
+                          placeholder='000000'
+                        />
+                      </label>
+                    ) : null}
+
+                    <button
+                      type='submit'
+                      disabled={account.busy}
+                      className='h-11 w-full rounded-md bg-slate-950 text-sm font-bold text-white hover:bg-slate-800 disabled:bg-slate-300'
+                    >
+                      {account.busy
+                        ? 'Checking'
+                        : account.codeSent
+                          ? 'Verify code'
+                          : 'Send code'}
+                    </button>
+
+                    {account.codeSent ? (
+                      <button
+                        type='button'
+                        onClick={() => void account.requestCode()}
+                        disabled={account.busy}
+                        className='h-11 w-full rounded-md border border-slate-200 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:text-slate-300'
+                      >
+                        Send a new code
+                      </button>
+                    ) : null}
+                  </form>
                 ) : null}
-              </form>
+              </div>
             )}
           </div>
         </div>

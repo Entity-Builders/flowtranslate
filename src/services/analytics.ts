@@ -9,6 +9,14 @@ import { Analytics, PostHogProvider } from '@eb-packages/analytics';
 const POSTHOG_KEY = import.meta.env.VITE_POSTHOG_KEY || '';
 const POSTHOG_HOST =
   import.meta.env.VITE_POSTHOG_HOST || 'https://us.i.posthog.com';
+const ATTRIBUTION_KEYS = [
+  'utm_source',
+  'utm_medium',
+  'utm_campaign',
+  'utm_content',
+  'utm_term',
+] as const;
+const MAX_ATTRIBUTION_VALUE_LENGTH = 120;
 
 // Create the shared analytics instance for this app
 export const analytics = new Analytics(new PostHogProvider());
@@ -34,4 +42,48 @@ export function initAnalytics() {
     app: 'flowtranslate',
     project: 'flowtranslate',
   });
+}
+
+const boundedAttributionValue = (value: string | null) => {
+  const trimmed = value?.trim();
+  if (!trimmed) return undefined;
+  return trimmed.slice(0, MAX_ATTRIBUTION_VALUE_LENGTH);
+};
+
+const referrerDomain = () => {
+  if (typeof document === 'undefined' || !document.referrer) return null;
+
+  try {
+    return new URL(document.referrer).hostname || null;
+  } catch {
+    return null;
+  }
+};
+
+export function getLaunchAnalyticsProperties(): Record<string, unknown> {
+  if (typeof window === 'undefined') {
+    return {
+      path: 'unknown',
+      has_referrer: false,
+      has_utm: false,
+    };
+  }
+
+  const url = new URL(window.location.href);
+  const properties: Record<string, unknown> = {
+    path: url.pathname || '/',
+    referrer_domain: referrerDomain(),
+    has_referrer: Boolean(document.referrer),
+    has_utm: false,
+  };
+
+  for (const key of ATTRIBUTION_KEYS) {
+    const value = boundedAttributionValue(url.searchParams.get(key));
+    if (!value) continue;
+
+    properties[key] = value;
+    properties.has_utm = true;
+  }
+
+  return properties;
 }

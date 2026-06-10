@@ -6,16 +6,32 @@ import type {
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TRANSLATION_IDLE_DELAY_MS } from '../constants';
 import {
+  FlowtranslateApiError,
   generateTranslation,
   type TranslateResponse,
 } from '../services/flowtranslate-api';
 import { useBidirectionalTranslator } from './useBidirectionalTranslator';
 
+const analyticsTrack = vi.hoisted(() => vi.fn());
+
+vi.mock('../services/analytics', () => ({
+  analytics: {
+    track: analyticsTrack,
+  },
+}));
+
 vi.mock('../services/flowtranslate-api', () => ({
   generateTranslation: vi.fn(),
   FlowtranslateApiError: class FlowtranslateApiError extends Error {
-    status = 500;
-    usage = undefined;
+    status: number;
+    usage: typeof usage | undefined;
+
+    constructor(message: string, status = 500, nextUsage?: typeof usage) {
+      super(message);
+      this.name = 'FlowtranslateApiError';
+      this.status = status;
+      this.usage = nextUsage;
+    }
   },
 }));
 
@@ -141,6 +157,34 @@ describe('useBidirectionalTranslator', () => {
         breakdown,
       }),
     );
+    expect(analyticsTrack).toHaveBeenCalledWith(
+      'translation_submitted',
+      expect.objectContaining({
+        mode: 'translate_to_english',
+        preset_id: 'natural',
+        trigger: 'auto_idle',
+        source_language: 'es',
+        target_language: 'en',
+        input_chars: 15,
+      }),
+    );
+    expect(analyticsTrack).toHaveBeenCalledWith(
+      'translation_succeeded',
+      expect.objectContaining({
+        mode: 'translate_to_english',
+        output_chars: 19,
+        charged: true,
+        reused: false,
+        remaining_quota: 96,
+      }),
+    );
+
+    const submittedProperties = analyticsTrack.mock.calls.find(
+      ([eventName]) => eventName === 'translation_submitted',
+    )?.[1] as Record<string, unknown>;
+    expect(submittedProperties).not.toHaveProperty('text');
+    expect(submittedProperties).not.toHaveProperty('source_text');
+    expect(submittedProperties).not.toHaveProperty('translated_text');
   });
 
   it('auto-improves English after the idle delay', async () => {
@@ -179,6 +223,74 @@ describe('useBidirectionalTranslator', () => {
       }),
       'token',
     );
+  });
+
+  it('waits for automatic guest auth before translating pending input', async () => {
+    vi.mocked(generateTranslation).mockResolvedValueOnce(
+      responseFor({
+        text: 'hello, how are you?',
+        mode: 'translate_to_english',
+        sourceLanguage: 'es',
+        targetLanguage: 'en',
+      }),
+    );
+
+    const { result, rerender } = renderHook(
+      ({
+        accessToken,
+        authPending,
+      }: {
+        accessToken: string;
+        authPending: boolean;
+      }) =>
+        useBidirectionalTranslator({
+          accessToken,
+          authPending,
+          online: true,
+          onUsage: vi.fn(),
+          onSavedTranslation: vi.fn(),
+        }),
+      {
+        initialProps: {
+          accessToken: '',
+          authPending: true,
+        },
+      },
+    );
+
+    act(() => result.current.editInput('hola como estas'));
+
+    expect(result.current.status).toBe('typing');
+    expect(result.current.message).toBe('Starting guest trial...');
+    expect(result.current.translateDisabledReason).toBe('Starting guest trial...');
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(TRANSLATION_IDLE_DELAY_MS);
+    });
+
+    expect(generateTranslation).not.toHaveBeenCalled();
+    expect(analyticsTrack).not.toHaveBeenCalledWith(
+      'translation_blocked',
+      expect.objectContaining({ reason: 'auth' }),
+    );
+
+    rerender({
+      accessToken: 'guest-token',
+      authPending: false,
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(TRANSLATION_IDLE_DELAY_MS);
+    });
+
+    expect(generateTranslation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: 'translate_to_english',
+        text: 'hola como estas',
+      }),
+      'guest-token',
+    );
+    expect(result.current.resultText).toBe('hello, how are you?');
   });
 
   it('uses the Spanish understanding action for incoming English', async () => {
@@ -246,6 +358,15 @@ describe('useBidirectionalTranslator', () => {
       await vi.advanceTimersByTimeAsync(TRANSLATION_IDLE_DELAY_MS);
     });
     expect(generateTranslation).not.toHaveBeenCalled();
+    expect(analyticsTrack).toHaveBeenCalledWith(
+      'translation_blocked',
+      expect.objectContaining({
+        reason: 'ambiguous',
+        trigger: 'auto_idle',
+        detection_reason: 'ambiguous',
+        input_chars: 2,
+      }),
+    );
 
     act(() => result.current.selectMode('improve_english'));
     await act(async () => {
@@ -319,5 +440,55 @@ describe('useBidirectionalTranslator', () => {
     expect(result.current.inputText).toBe('I need help');
     expect(result.current.resultText).toBe('Necesito ayuda.');
     expect(result.current.mode).toBe('translate_to_spanish');
+  });
+
+  it('tracks quota-blocked translation failures without source text', async () => {
+    const exhaustedUsage = {
+      ...usage,
+      usedThisMonth: 100,
+      remainingThisMonth: 0,
+      charged: false,
+    };
+    vi.mocked(generateTranslation).mockRejectedValueOnce(
+      new FlowtranslateApiError('Monthly quota reached.', 402, exhaustedUsage),
+    );
+
+    const onUsage = vi.fn();
+    const { result } = renderHook(() =>
+      useBidirectionalTranslator({
+        accessToken: 'token',
+        online: true,
+        onUsage,
+        onSavedTranslation: vi.fn(),
+      }),
+    );
+
+    act(() => result.current.editInput('necesito ayuda con esto'));
+
+    await act(async () => {
+      await result.current.translate();
+    });
+
+    expect(result.current.status).toBe('quota');
+    expect(onUsage).toHaveBeenCalledWith(exhaustedUsage);
+    expect(analyticsTrack).toHaveBeenCalledWith(
+      'translation_blocked',
+      expect.objectContaining({
+        reason: 'quota',
+        mode: 'translate_to_english',
+        trigger: 'manual_generate',
+        error_status: 402,
+        remaining_quota: 0,
+      }),
+    );
+
+    const blockedProperties = analyticsTrack.mock.calls.find(
+      ([eventName, properties]) =>
+        eventName === 'translation_blocked' &&
+        (properties as Record<string, unknown>).reason === 'quota',
+    )?.[1] as Record<string, unknown>;
+    expect(blockedProperties).not.toHaveProperty('text');
+    expect(blockedProperties).not.toHaveProperty('source_text');
+    expect(blockedProperties).not.toHaveProperty('translated_text');
   });
 });

@@ -13,6 +13,7 @@ import {
 } from '@eb-packages/flowtranslate-core';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { TRANSLATION_IDLE_DELAY_MS } from '../constants';
+import { analytics } from '../services/analytics';
 import { FlowtranslateApiError, generateTranslation } from '../services/flowtranslate-api';
 
 type TranslatorStatus =
@@ -25,10 +26,22 @@ type TranslatorStatus =
   | 'quota'
   | 'auth';
 
-type ScheduleReason = 'detected' | 'manual';
+type TranslationTrigger =
+  | 'auto_idle'
+  | 'manual_generate'
+  | 'mode_selected'
+  | 'preset_selected';
+
+type TranslationBlockedReason =
+  | 'offline'
+  | 'auth'
+  | 'quota'
+  | 'ambiguous'
+  | 'mixed_input';
 
 type UseBidirectionalTranslatorParams = {
   accessToken: string;
+  authPending?: boolean;
   online: boolean;
   onUsage: (usage: UsageSnapshot) => void;
   onSavedTranslation: (record: TranslationRecord) => void;
@@ -43,6 +56,30 @@ const createRequestKey = (
   presetId: TranslationPresetId,
 ) => [mode, presetId, normalizeText(sourceText)].join(':');
 
+const currentTimeMs = () =>
+  typeof performance === 'undefined' ? Date.now() : performance.now();
+
+const elapsedMs = (startedAt: number) =>
+  Math.max(0, Math.round(currentTimeMs() - startedAt));
+
+const translationAnalyticsProperties = (
+  mode: ExpressionMode,
+  sourceText: string,
+  presetId: TranslationPresetId,
+  trigger: TranslationTrigger,
+) => {
+  const direction = createExpressionDirection(mode);
+
+  return {
+    mode,
+    preset_id: presetId,
+    trigger,
+    source_language: direction.sourceLanguage,
+    target_language: direction.targetLanguage,
+    input_chars: sourceText.trim().length,
+  };
+};
+
 const fallbackDetection = (mode: ExpressionMode): IntentDetectionResult => ({
   mode,
   confidence: 'low',
@@ -52,6 +89,7 @@ const fallbackDetection = (mode: ExpressionMode): IntentDetectionResult => ({
 
 export const useBidirectionalTranslator = ({
   accessToken,
+  authPending = false,
   online,
   onUsage,
   onSavedTranslation,
@@ -73,6 +111,8 @@ export const useBidirectionalTranslator = ({
   const lastCompletedKeyRef = useRef('');
   const inFlightKeyRef = useRef('');
   const inputTextRef = useRef('');
+  const previousAccessTokenRef = useRef(accessToken);
+  const lastBlockedAnalyticsKeyRef = useRef('');
   const modeRef = useRef<ExpressionMode>(DEFAULT_EXPRESSION_MODE);
   const lastModeRef = useRef<ExpressionMode>(DEFAULT_EXPRESSION_MODE);
   const presetIdRef = useRef<TranslationPresetId>(
@@ -94,27 +134,80 @@ export const useBidirectionalTranslator = ({
     setMode(nextMode);
   }, []);
 
+  const trackTranslationBlocked = useCallback(
+    (
+      reason: TranslationBlockedReason,
+      nextMode: ExpressionMode,
+      nextSourceText: string,
+      nextPresetId: TranslationPresetId,
+      trigger: TranslationTrigger,
+      properties: Record<string, unknown> = {},
+    ) => {
+      const trimmedSource = nextSourceText.trim();
+      if (!trimmedSource) return;
+
+      const analyticsKey = [reason, nextMode, nextPresetId, trigger].join(':');
+      if (lastBlockedAnalyticsKeyRef.current === analyticsKey) return;
+
+      lastBlockedAnalyticsKeyRef.current = analyticsKey;
+      analytics.track('translation_blocked', {
+        ...translationAnalyticsProperties(
+          nextMode,
+          trimmedSource,
+          nextPresetId,
+          trigger,
+        ),
+        reason,
+        ...properties,
+      });
+    },
+    [],
+  );
+
   const runTranslation = useCallback(
     async (
       nextMode: ExpressionMode,
       nextSourceText: string,
       nextPresetId: TranslationPresetId = presetIdRef.current,
+      trigger: TranslationTrigger = 'manual_generate',
     ) => {
       const trimmedSource = nextSourceText.trim();
       if (!trimmedSource) {
         setStatus('idle');
         setMessage('');
         setHasPendingChanges(false);
+        lastBlockedAnalyticsKeyRef.current = '';
         return;
       }
 
       if (!online) {
+        trackTranslationBlocked(
+          'offline',
+          nextMode,
+          trimmedSource,
+          nextPresetId,
+          trigger,
+        );
         setStatus('offline');
         setMessage('Offline. Existing text stays readable; new AI work needs a connection.');
         return;
       }
 
       if (!accessToken) {
+        if (authPending) {
+          setStatus('typing');
+          setMessage('Starting guest trial...');
+          setHasPendingChanges(true);
+          return;
+        }
+
+        trackTranslationBlocked(
+          'auth',
+          nextMode,
+          trimmedSource,
+          nextPresetId,
+          trigger,
+        );
         setStatus('auth');
         setMessage('Sign in to translate and save history.');
         return;
@@ -127,6 +220,15 @@ export const useBidirectionalTranslator = ({
       );
 
       if (requestKey === lastCompletedKeyRef.current) {
+        analytics.track('translation_reused', {
+          ...translationAnalyticsProperties(
+            nextMode,
+            trimmedSource,
+            nextPresetId,
+            trigger,
+          ),
+          reuse_source: 'client_current_result',
+        });
         setStatus('idle');
         setMessage('Already current.');
         setHasPendingChanges(false);
@@ -136,10 +238,20 @@ export const useBidirectionalTranslator = ({
       if (requestKey === inFlightKeyRef.current) return;
 
       const requestSequence = sequenceRef.current + 1;
+      const startedAt = currentTimeMs();
       sequenceRef.current = requestSequence;
       inFlightKeyRef.current = requestKey;
+      lastBlockedAnalyticsKeyRef.current = '';
       setStatus('translating');
       setMessage('Generating...');
+      analytics.track('translation_submitted', {
+        ...translationAnalyticsProperties(
+          nextMode,
+          trimmedSource,
+          nextPresetId,
+          trigger,
+        ),
+      });
 
       try {
         const result = await generateTranslation(
@@ -194,21 +306,82 @@ export const useBidirectionalTranslator = ({
           breakdown: nextBreakdown,
           createdAt: result.translationRecord.createdAt,
         });
+        analytics.track('translation_succeeded', {
+          ...translationAnalyticsProperties(
+            responseMode,
+            trimmedSource,
+            nextPresetId,
+            trigger,
+          ),
+          output_chars: result.text.trim().length,
+          latency_ms: elapsedMs(startedAt),
+          charged: result.usage.charged,
+          reused: !result.usage.charged,
+          estimated_tokens: result.usage.estimatedTokens,
+          used_this_month: result.usage.usedThisMonth,
+          remaining_quota: result.usage.remainingThisMonth,
+        });
       } catch (error) {
         if (error instanceof FlowtranslateApiError) {
           if (error.usage) onUsage(error.usage);
+          const errorProperties = {
+            ...translationAnalyticsProperties(
+              nextMode,
+              trimmedSource,
+              nextPresetId,
+              trigger,
+            ),
+            latency_ms: elapsedMs(startedAt),
+            error_status: error.status,
+            remaining_quota: error.usage?.remainingThisMonth ?? null,
+          };
+
+          if (error.status === 402) {
+            analytics.track('translation_blocked', {
+              ...errorProperties,
+              reason: 'quota',
+            });
+          } else if (error.status === 401) {
+            analytics.track('translation_blocked', {
+              ...errorProperties,
+              reason: 'auth',
+            });
+          } else {
+            analytics.track('translation_failed', {
+              ...errorProperties,
+              error_type: 'api_error',
+            });
+          }
           setStatus(error.status === 402 ? 'quota' : error.status === 401 ? 'auth' : 'error');
           setMessage(error.message);
           return;
         }
 
+        analytics.track('translation_failed', {
+          ...translationAnalyticsProperties(
+            nextMode,
+            trimmedSource,
+            nextPresetId,
+            trigger,
+          ),
+          latency_ms: elapsedMs(startedAt),
+          error_type: 'exception',
+        });
         setStatus('error');
         setMessage(error instanceof Error ? error.message : 'Expression generation failed.');
       } finally {
         if (inFlightKeyRef.current === requestKey) inFlightKeyRef.current = '';
       }
     },
-    [accessToken, online, onSavedTranslation, onUsage, updateMode],
+    [
+      accessToken,
+      authPending,
+      online,
+      onSavedTranslation,
+      onUsage,
+      trackTranslationBlocked,
+      updateMode,
+    ],
   );
 
   const scheduleTranslation = useCallback(
@@ -216,7 +389,7 @@ export const useBidirectionalTranslator = ({
       nextSourceText: string,
       nextMode: ExpressionMode,
       nextPresetId: TranslationPresetId,
-      reason: ScheduleReason,
+      trigger: TranslationTrigger,
       detection: IntentDetectionResult,
     ) => {
       clearScheduledTranslation();
@@ -228,18 +401,39 @@ export const useBidirectionalTranslator = ({
         setHasPendingChanges(false);
         setBreakdown(null);
         setResultText('');
+        lastBlockedAnalyticsKeyRef.current = '';
         return;
       }
 
       setHasPendingChanges(true);
 
       if (!online) {
+        trackTranslationBlocked(
+          'offline',
+          nextMode,
+          trimmedSource,
+          nextPresetId,
+          trigger,
+        );
         setStatus('offline');
         setMessage('Offline. Existing text stays readable; new AI work needs a connection.');
         return;
       }
 
       if (!accessToken) {
+        if (authPending) {
+          setStatus('typing');
+          setMessage('Starting guest trial...');
+          return;
+        }
+
+        trackTranslationBlocked(
+          'auth',
+          nextMode,
+          trimmedSource,
+          nextPresetId,
+          trigger,
+        );
         setStatus('auth');
         setMessage('Sign in to translate and save history.');
         return;
@@ -258,7 +452,18 @@ export const useBidirectionalTranslator = ({
         return;
       }
 
-      if (reason === 'detected' && !detection.automatic) {
+      if (trigger === 'auto_idle' && !detection.automatic) {
+        trackTranslationBlocked(
+          detection.reason === 'mixed' ? 'mixed_input' : 'ambiguous',
+          nextMode,
+          trimmedSource,
+          nextPresetId,
+          trigger,
+          {
+            detection_reason: detection.reason,
+            detection_confidence: detection.confidence,
+          },
+        );
         setStatus('typing');
         setMessage(
           detection.reason === 'ambiguous'
@@ -272,14 +477,16 @@ export const useBidirectionalTranslator = ({
       setMessage('Auto-generating after a short pause...');
       timerRef.current = window.setTimeout(() => {
         timerRef.current = null;
-        void runTranslation(nextMode, trimmedSource, nextPresetId);
+        void runTranslation(nextMode, trimmedSource, nextPresetId, trigger);
       }, TRANSLATION_IDLE_DELAY_MS);
     },
     [
       accessToken,
+      authPending,
       clearScheduledTranslation,
       online,
       runTranslation,
+      trackTranslationBlocked,
     ],
   );
 
@@ -300,7 +507,7 @@ export const useBidirectionalTranslator = ({
         value,
         nextMode,
         presetIdRef.current,
-        'detected',
+        'auto_idle',
         nextDetection,
       );
     },
@@ -317,7 +524,7 @@ export const useBidirectionalTranslator = ({
         inputTextRef.current,
         nextMode,
         presetIdRef.current,
-        'manual',
+        'mode_selected',
         nextDetection,
       );
     },
@@ -335,12 +542,38 @@ export const useBidirectionalTranslator = ({
         inputTextRef.current,
         modeRef.current,
         nextPresetId,
-        'manual',
+        'preset_selected',
         fallbackDetection(modeRef.current),
       );
     },
     [scheduleTranslation],
   );
+
+  useEffect(() => {
+    const hadAccessToken = Boolean(previousAccessTokenRef.current);
+    previousAccessTokenRef.current = accessToken;
+
+    if (
+      hadAccessToken ||
+      !accessToken ||
+      !hasPendingChanges ||
+      !inputTextRef.current.trim()
+    ) {
+      return;
+    }
+
+    const nextDetection = detectExpressionMode(
+      inputTextRef.current,
+      lastModeRef.current,
+    );
+    scheduleTranslation(
+      inputTextRef.current,
+      modeRef.current,
+      presetIdRef.current,
+      'auto_idle',
+      nextDetection,
+    );
+  }, [accessToken, hasPendingChanges, scheduleTranslation]);
 
   const translate = useCallback(
     (nextMode: ExpressionMode = modeRef.current) => {
@@ -371,7 +604,9 @@ export const useBidirectionalTranslator = ({
     : !online
       ? 'Offline. New AI work needs a connection.'
       : !accessToken
-        ? 'Sign in to translate and save history.'
+        ? authPending
+          ? 'Starting guest trial...'
+          : 'Sign in to translate and save history.'
         : status === 'translating'
           ? 'Generation in progress.'
           : '';

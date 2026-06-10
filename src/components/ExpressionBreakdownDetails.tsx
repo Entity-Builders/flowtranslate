@@ -100,6 +100,12 @@ export const ExpressionBreakdownDetails = ({
     );
   }
 
+  const tenseNotes = breakdown.tenses?.length
+    ? breakdown.tenses
+    : breakdown.tense
+      ? [{ label: breakdown.tense, text: '', note: '' }]
+      : [];
+
   return (
     <details
       className={`max-w-full shrink-0 overflow-hidden px-4 py-3 sm:px-5 ${borderClass}`}
@@ -146,14 +152,37 @@ export const ExpressionBreakdownDetails = ({
         </div>
 
         <div className='min-w-0 space-y-3'>
-          {breakdown.tense ? (
+          {tenseNotes.length ? (
             <div className='rounded-md border border-slate-200 bg-white p-3'>
               <div className='text-xs font-black uppercase tracking-normal text-slate-400'>
-                Tense
+                {tenseNotes.length > 1 ? 'Tenses' : 'Tense'}
               </div>
-              <p className='mt-2 break-words text-sm font-semibold text-slate-800 [overflow-wrap:anywhere]'>
-                {breakdown.tense}
-              </p>
+              <div className='mt-2 space-y-2'>
+                {tenseNotes.map((tense, index) => (
+                  <div
+                    key={`${tense.label}-${tense.text || index}`}
+                    className={
+                      tenseNotes.length > 1
+                        ? 'rounded-md bg-slate-50 p-2'
+                        : undefined
+                    }
+                  >
+                    <div className='break-words text-sm font-semibold text-slate-800 [overflow-wrap:anywhere]'>
+                      {tense.label}
+                    </div>
+                    {tense.text ? (
+                      <div className='mt-1 break-words text-xs font-bold text-slate-500 [overflow-wrap:anywhere]'>
+                        {tense.text}
+                      </div>
+                    ) : null}
+                    {tense.note ? (
+                      <div className='mt-1 break-words text-xs font-semibold leading-5 text-slate-500 [overflow-wrap:anywhere]'>
+                        {tense.note}
+                      </div>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
             </div>
           ) : null}
 

@@ -4,14 +4,17 @@ import {
   type ExpressionMode,
   type IntentDetectionResult,
   type LanguageCode,
+  type TranslationPresetId,
 } from '@eb-packages/flowtranslate-core';
 import {
   Loader2,
   MessageSquareText,
   Sparkles,
 } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ExpressionBreakdownDetails } from './ExpressionBreakdownDetails';
 import { TranslationActions } from './TranslationActions';
+import { TranslationPresetControl } from './TranslationPresetControl';
 
 type ExpressionWorkspaceStatus =
   | 'idle'
@@ -30,6 +33,7 @@ type ExpressionWorkspaceProps = {
   modeDetection: IntentDetectionResult;
   sourceLanguage: LanguageCode;
   targetLanguage: LanguageCode;
+  presetId: TranslationPresetId;
   breakdown: ExpressionBreakdown | null;
   breakdownStatus?: 'idle' | 'enriching' | 'ready' | 'error';
   translationRecordId?: string;
@@ -52,6 +56,8 @@ type ExpressionWorkspaceProps = {
   onDictateInput: () => void;
   onTranslate: () => void;
   onSelectMode: (mode: ExpressionMode) => void;
+  onSelectPreset: (presetId: TranslationPresetId) => void;
+  onRequestBreakdown: () => void;
   onTranslateToSpanish: () => void;
 };
 
@@ -112,6 +118,7 @@ export const ExpressionWorkspace = ({
   modeDetection,
   sourceLanguage,
   targetLanguage,
+  presetId,
   breakdown,
   breakdownStatus = 'idle',
   translationRecordId = '',
@@ -134,9 +141,61 @@ export const ExpressionWorkspace = ({
   onDictateInput,
   onTranslate,
   onSelectMode,
+  onSelectPreset,
+  onRequestBreakdown,
   onTranslateToSpanish,
 }: ExpressionWorkspaceProps) => {
   const isTranslating = status === 'translating';
+  const [isBreakdownOpen, setIsBreakdownOpen] = useState(false);
+  const previousBreakdownKeyRef = useRef('');
+  const requestedBreakdownKeyRef = useRef('');
+  const breakdownKey = translationRecordId || resultText.trim();
+
+  useEffect(() => {
+    if (!breakdownKey) return;
+
+    const previousKey = previousBreakdownKeyRef.current;
+    if (previousKey && previousKey !== breakdownKey) {
+      setIsBreakdownOpen(false);
+      requestedBreakdownKeyRef.current = '';
+    }
+
+    previousBreakdownKeyRef.current = breakdownKey;
+  }, [breakdownKey]);
+
+  const requestCurrentBreakdown = useCallback(() => {
+    if (!translationRecordId || !resultText.trim() || isTranslating) return;
+    if (breakdownStatus === 'enriching') return;
+    if (requestedBreakdownKeyRef.current === translationRecordId) return;
+
+    requestedBreakdownKeyRef.current = translationRecordId;
+    onRequestBreakdown();
+  }, [
+    breakdownStatus,
+    isTranslating,
+    onRequestBreakdown,
+    resultText,
+    translationRecordId,
+  ]);
+
+  useEffect(() => {
+    if (!isBreakdownOpen) return;
+    requestCurrentBreakdown();
+  }, [isBreakdownOpen, requestCurrentBreakdown]);
+
+  const handleBreakdownOpenChange = useCallback(
+    (nextOpen: boolean) => {
+      setIsBreakdownOpen(nextOpen);
+
+      if (!nextOpen) {
+        requestedBreakdownKeyRef.current = '';
+        return;
+      }
+
+      requestCurrentBreakdown();
+    },
+    [requestCurrentBreakdown],
+  );
 
   return (
     <section className='grid w-full min-w-0 max-w-full grid-cols-1 gap-3 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)] lg:gap-4'>
@@ -228,41 +287,47 @@ export const ExpressionWorkspace = ({
       </div>
 
       <div className='flex min-h-[320px] min-w-0 max-w-full flex-col border border-slate-200 bg-white sm:min-h-[420px] lg:min-h-0 lg:overflow-y-auto'>
-        <div className='flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-3 py-3 sm:px-5'>
+        <div className='flex flex-col gap-3 border-b border-slate-100 px-3 py-3 sm:flex-row sm:items-start sm:justify-between sm:px-5'>
           <div className='min-w-0'>
             <h2 className='text-base font-black text-slate-950'>Respuesta</h2>
             <p className='mt-1 text-xs font-semibold uppercase tracking-normal text-slate-500'>
               Salida en {languageLabels[targetLanguage]}
             </p>
           </div>
-          <div className='flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:justify-end'>
-            <button
-              type='button'
-              onClick={onTranslateToSpanish}
-              disabled={!inputText.trim() || isTranslating}
-              className={`inline-flex h-10 items-center gap-2 rounded-md border px-3 text-sm font-bold transition-colors ${
-                inputText.trim() && !isTranslating
-                  ? 'border-amber-200 bg-amber-50 text-amber-900 hover:bg-amber-100'
-                  : 'border-slate-100 bg-slate-50 text-slate-300'
-              }`}
-              title='Entender un mensaje en ingles'
-            >
-              <MessageSquareText size={16} />
-              Espanol
-            </button>
-            <TranslationActions
-              text={resultText}
-              copied={copiedResult}
-              canListen={canListen}
-              isSpeaking={speakingLanguage === targetLanguage}
-              canDictate={false}
-              showDictate={false}
-              isDictating={false}
-              dictationUnavailableReason={dictationUnavailableReason}
-              onCopy={onCopyResult}
-              onListen={onListenResult}
-              onDictate={() => undefined}
+          <div className='flex w-full min-w-0 flex-col gap-2 sm:w-auto sm:items-end'>
+            <TranslationPresetControl
+              value={presetId}
+              onChange={onSelectPreset}
             />
+            <div className='flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:justify-end'>
+              <button
+                type='button'
+                onClick={onTranslateToSpanish}
+                disabled={!inputText.trim() || isTranslating}
+                className={`inline-flex h-10 items-center gap-2 rounded-md border px-3 text-sm font-bold transition-colors ${
+                  inputText.trim() && !isTranslating
+                    ? 'border-amber-200 bg-amber-50 text-amber-900 hover:bg-amber-100'
+                    : 'border-slate-100 bg-slate-50 text-slate-300'
+                }`}
+                title='Entender un mensaje en ingles'
+              >
+                <MessageSquareText size={16} />
+                Espanol
+              </button>
+              <TranslationActions
+                text={resultText}
+                copied={copiedResult}
+                canListen={canListen}
+                isSpeaking={speakingLanguage === targetLanguage}
+                canDictate={false}
+                showDictate={false}
+                isDictating={false}
+                dictationUnavailableReason={dictationUnavailableReason}
+                onCopy={onCopyResult}
+                onListen={onListenResult}
+                onDictate={() => undefined}
+              />
+            </div>
           </div>
         </div>
 
@@ -279,9 +344,17 @@ export const ExpressionWorkspace = ({
         </div>
 
         <ExpressionBreakdownDetails
-          key={translationRecordId || resultText || 'empty-breakdown'}
+          key={breakdownKey || 'empty-breakdown'}
           breakdown={breakdown}
+          emptyDescription={
+            resultText.trim()
+              ? 'Abrilo para preparar un desglose completo.'
+              : undefined
+          }
           isEnriching={breakdownStatus === 'enriching'}
+          hasEnrichmentError={breakdownStatus === 'error'}
+          open={isBreakdownOpen}
+          onOpenChange={handleBreakdownOpenChange}
         />
       </div>
     </section>

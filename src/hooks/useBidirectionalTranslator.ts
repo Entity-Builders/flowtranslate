@@ -36,6 +36,8 @@ type TranslationTrigger =
   | 'mode_selected'
   | 'preset_selected';
 
+type BreakdownTrigger = 'panel_opened';
+
 type TranslationBlockedReason =
   | 'offline'
   | 'auth'
@@ -72,7 +74,7 @@ const translationAnalyticsProperties = (
   mode: ExpressionMode,
   sourceText: string,
   presetId: TranslationPresetId,
-  trigger: TranslationTrigger,
+  trigger: TranslationTrigger | BreakdownTrigger,
 ) => {
   const direction = createExpressionDirection(mode);
 
@@ -88,6 +90,16 @@ const translationAnalyticsProperties = (
 
 const isConversationReplyMode = (mode: ExpressionMode) =>
   mode !== 'translate_to_spanish';
+
+const isEnrichedBreakdown = (value: ExpressionBreakdown | null) => {
+  if (!value) return false;
+  const hasTenses = Boolean(value.tenses?.length);
+  const hasStructure = Boolean(value.structure?.length);
+  const hasAlternatives = Boolean(value.alternatives?.length);
+  const hasMistake = Boolean(value.commonMistake?.trim());
+
+  return hasTenses || hasStructure || hasAlternatives || hasMistake;
+};
 
 const fallbackDetection = (mode: ExpressionMode): IntentDetectionResult => ({
   mode,
@@ -126,6 +138,7 @@ export const useBidirectionalTranslator = ({
   const previousAccessTokenRef = useRef(accessToken);
   const lastBlockedAnalyticsKeyRef = useRef('');
   const translationRecordIdRef = useRef('');
+  const translationRecordCreatedAtRef = useRef('');
   const modeRef = useRef<ExpressionMode>(DEFAULT_EXPRESSION_MODE);
   const lastModeRef = useRef<ExpressionMode>(DEFAULT_EXPRESSION_MODE);
   const presetIdRef = useRef<TranslationPresetId>(
@@ -147,8 +160,9 @@ export const useBidirectionalTranslator = ({
     setMode(nextMode);
   }, []);
 
-  const updateTranslationRecordId = useCallback((nextId: string) => {
+  const updateTranslationRecordId = useCallback((nextId: string, createdAt = '') => {
     translationRecordIdRef.current = nextId;
+    translationRecordCreatedAtRef.current = createdAt;
     setTranslationRecordId(nextId);
   }, []);
 
@@ -190,21 +204,13 @@ export const useBidirectionalTranslator = ({
       sourceText: string;
       translatedText: string;
       presetId: TranslationPresetId;
-      trigger: TranslationTrigger;
+      trigger: BreakdownTrigger;
       createdAt: string;
     }) => {
       if (!params.recordId || !accessToken) return;
 
       const startedAt = currentTimeMs();
       setBreakdownStatus('enriching');
-      analytics.track('breakdown_enrichment_requested', {
-        ...translationAnalyticsProperties(
-          params.mode,
-          params.sourceText,
-          params.presetId,
-          params.trigger,
-        ),
-      });
 
       const isStillCurrent = () =>
         translationRecordIdRef.current === params.recordId &&
@@ -229,8 +235,20 @@ export const useBidirectionalTranslator = ({
 
         const nextBreakdown =
           response.breakdown || response.translationRecord.breakdown || null;
-        if (!nextBreakdown) {
+        if (!isEnrichedBreakdown(nextBreakdown)) {
           setBreakdownStatus('error');
+          analytics.track('breakdown_enrichment_failed', {
+            ...translationAnalyticsProperties(
+              params.mode,
+              params.sourceText,
+              params.presetId,
+              params.trigger,
+            ),
+            latency_ms: elapsedMs(startedAt),
+            error_status: null,
+            remaining_quota: response.usage.remainingThisMonth,
+            reason: 'missing_enriched_breakdown',
+          });
           return;
         }
 
@@ -264,6 +282,28 @@ export const useBidirectionalTranslator = ({
           cached: Boolean(response.cached),
           remaining_quota: response.usage.remainingThisMonth,
         });
+        if (response.cached) {
+          analytics.track('breakdown_enrichment_cached', {
+            ...translationAnalyticsProperties(
+              params.mode,
+              params.sourceText,
+              params.presetId,
+              params.trigger,
+            ),
+          });
+        }
+        if (response.usage.charged) {
+          analytics.track('breakdown_enrichment_charged', {
+            ...translationAnalyticsProperties(
+              params.mode,
+              params.sourceText,
+              params.presetId,
+              params.trigger,
+            ),
+            estimated_tokens: response.usage.estimatedTokens,
+            remaining_quota: response.usage.remainingThisMonth,
+          });
+        }
       } catch (error) {
         if (!isStillCurrent()) return;
 
@@ -291,6 +331,91 @@ export const useBidirectionalTranslator = ({
     },
     [accessToken, onSavedTranslation, onUsage],
   );
+
+  const requestBreakdown = useCallback(() => {
+    const recordId = translationRecordIdRef.current;
+    const sourceText = inputTextRef.current.trim();
+    const translatedText = resultText.trim();
+    const currentMode = modeRef.current;
+    const currentPresetId = presetIdRef.current;
+    const trigger: BreakdownTrigger = 'panel_opened';
+
+    if (!recordId || !sourceText || !translatedText) return;
+    if (breakdownStatus === 'enriching') return;
+
+    analytics.track('breakdown_enrichment_requested', {
+      ...translationAnalyticsProperties(
+        currentMode,
+        sourceText,
+        currentPresetId,
+        trigger,
+      ),
+    });
+
+    if (isEnrichedBreakdown(breakdown)) {
+      setBreakdownStatus('ready');
+      analytics.track('breakdown_enrichment_cached', {
+        ...translationAnalyticsProperties(
+          currentMode,
+          sourceText,
+          currentPresetId,
+          trigger,
+        ),
+        cache_source: 'client_state',
+      });
+      return;
+    }
+
+    if (!online) {
+      setBreakdownStatus('error');
+      analytics.track('breakdown_enrichment_failed', {
+        ...translationAnalyticsProperties(
+          currentMode,
+          sourceText,
+          currentPresetId,
+          trigger,
+        ),
+        error_status: null,
+        remaining_quota: null,
+        reason: 'offline',
+      });
+      return;
+    }
+
+    if (!accessToken) {
+      setBreakdownStatus('error');
+      analytics.track('breakdown_enrichment_failed', {
+        ...translationAnalyticsProperties(
+          currentMode,
+          sourceText,
+          currentPresetId,
+          trigger,
+        ),
+        error_status: 401,
+        remaining_quota: null,
+        reason: 'auth',
+      });
+      return;
+    }
+
+    void enrichSavedBreakdown({
+      recordId,
+      requestSequence: sequenceRef.current,
+      mode: currentMode,
+      sourceText,
+      translatedText,
+      presetId: currentPresetId,
+      trigger,
+      createdAt: translationRecordCreatedAtRef.current,
+    });
+  }, [
+    accessToken,
+    breakdown,
+    breakdownStatus,
+    enrichSavedBreakdown,
+    online,
+    resultText,
+  ]);
 
   const runTranslation = useCallback(
     async (
@@ -370,6 +495,7 @@ export const useBidirectionalTranslator = ({
       sequenceRef.current = requestSequence;
       inFlightKeyRef.current = requestKey;
       lastBlockedAnalyticsKeyRef.current = '';
+      setBreakdown(null);
       setBreakdownStatus('idle');
       setStatus('translating');
       setMessage('Generando respuesta...');
@@ -418,16 +544,23 @@ export const useBidirectionalTranslator = ({
           return;
         }
 
-        const nextBreakdown =
+        const savedBreakdown =
           result.breakdown || result.translationRecord.breakdown || null;
+        const displayBreakdown = isEnrichedBreakdown(savedBreakdown)
+          ? savedBreakdown
+          : null;
         const responseMode = result.mode || result.translationRecord.mode || nextMode;
         const responseDirection = createExpressionDirection(responseMode);
         const nextRecordId = result.translationRecord.id;
 
         updateMode(responseMode);
-        updateTranslationRecordId(nextRecordId);
+        updateTranslationRecordId(
+          nextRecordId,
+          result.translationRecord.createdAt,
+        );
         setResultText(result.text);
-        setBreakdown(nextBreakdown);
+        setBreakdown(displayBreakdown);
+        setBreakdownStatus(displayBreakdown ? 'ready' : 'idle');
         lastCompletedKeyRef.current = requestKey;
         setStatus('idle');
         setMessage(
@@ -448,7 +581,7 @@ export const useBidirectionalTranslator = ({
           sourceText: trimmedSource,
           translatedText: result.text,
           mode: responseMode,
-          breakdown: nextBreakdown,
+          breakdown: savedBreakdown,
           createdAt: result.translationRecord.createdAt,
         });
         analytics.track('translation_succeeded', {
@@ -482,16 +615,6 @@ export const useBidirectionalTranslator = ({
           });
         }
 
-        void enrichSavedBreakdown({
-          recordId: nextRecordId,
-          requestSequence,
-          mode: responseMode,
-          sourceText: trimmedSource,
-          translatedText: result.text,
-          presetId: nextPresetId,
-          trigger,
-          createdAt: result.translationRecord.createdAt,
-        });
       } catch (error) {
         if (error instanceof FlowtranslateApiError) {
           if (error.usage) onUsage(error.usage);
@@ -550,7 +673,6 @@ export const useBidirectionalTranslator = ({
       online,
       onSavedTranslation,
       onUsage,
-      enrichSavedBreakdown,
       trackTranslationBlocked,
       updateMode,
       updateTranslationRecordId,
@@ -662,6 +784,7 @@ export const useBidirectionalTranslator = ({
       online,
       runTranslation,
       trackTranslationBlocked,
+      updateTranslationRecordId,
     ],
   );
 
@@ -713,15 +836,15 @@ export const useBidirectionalTranslator = ({
       sequenceRef.current += 1;
       presetIdRef.current = nextPresetId;
       setPresetId(nextPresetId);
-      scheduleTranslation(
-        inputTextRef.current,
+      clearScheduledTranslation();
+      void runTranslation(
         modeRef.current,
+        inputTextRef.current,
         nextPresetId,
         'preset_selected',
-        fallbackDetection(modeRef.current),
       );
     },
-    [scheduleTranslation],
+    [clearScheduledTranslation, runTranslation],
   );
 
   useEffect(() => {
@@ -805,6 +928,7 @@ export const useBidirectionalTranslator = ({
     canTranslate,
     translateDisabledReason,
     translate,
+    requestBreakdown,
     selectPreset,
     selectMode,
     editInput,

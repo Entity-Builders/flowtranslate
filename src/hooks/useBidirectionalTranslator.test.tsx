@@ -52,6 +52,13 @@ const breakdown: ExpressionBreakdown = {
   confidence: 'high',
   feedback: ['Suena natural en este contexto.'],
   tense: 'Simple present',
+  tenses: [
+    {
+      label: 'Simple present',
+      text: 'need',
+      note: 'Describe una necesidad actual.',
+    },
+  ],
   structure: [
     {
       text: 'I',
@@ -62,11 +69,30 @@ const breakdown: ExpressionBreakdown = {
   commonMistake: 'Do not omit the subject in English.',
 };
 
+const partialRichBreakdown: ExpressionBreakdown = {
+  changed: true,
+  confidence: 'high',
+  feedback: ['Suena natural en este contexto.'],
+  tenses: [
+    {
+      label: 'Simple present',
+      text: 'need',
+      note: 'Describe una necesidad actual.',
+    },
+  ],
+  structure: [
+    {
+      text: 'I need help',
+      role: 'other',
+      note: 'Frase completa con sujeto y verbo.',
+    },
+  ],
+};
+
 const minimalBreakdown: ExpressionBreakdown = {
   changed: true,
   confidence: 'high',
-  feedback: ['Respuesta lista rapidamente.'],
-  whyThisWorks: 'La frase conserva la idea central.',
+  feedback: [],
 };
 
 const createDeferred = <TValue,>() => {
@@ -85,7 +111,7 @@ const responseFor = ({
   sourceLanguage,
   targetLanguage,
   createdAt = '2026-06-01T00:00:00.000Z',
-  nextBreakdown = breakdown,
+  nextBreakdown = minimalBreakdown,
 }: {
   id?: string;
   text: string;
@@ -93,7 +119,7 @@ const responseFor = ({
   sourceLanguage: 'es' | 'en';
   targetLanguage: 'es' | 'en';
   createdAt?: string;
-  nextBreakdown?: ExpressionBreakdown;
+  nextBreakdown?: ExpressionBreakdown | null;
 }): TranslateResponse => ({
   kind: 'translate',
   text,
@@ -189,9 +215,10 @@ describe('useBidirectionalTranslator', () => {
     });
 
     expect(result.current.resultText).toBe('hello, how are you?');
-    expect(result.current.breakdown).toBe(breakdown);
-    expect(result.current.breakdownStatus).toBe('ready');
+    expect(result.current.breakdown).toBeNull();
+    expect(result.current.breakdownStatus).toBe('idle');
     expect(result.current.translationRecordId).toBe('record-1');
+    expect(enrichBreakdown).not.toHaveBeenCalled();
     expect(generateTranslation).toHaveBeenCalledWith(
       expect.objectContaining({
         mode: 'translate_to_english',
@@ -204,7 +231,7 @@ describe('useBidirectionalTranslator', () => {
     expect(onSavedTranslation).toHaveBeenCalledWith(
       expect.objectContaining({
         mode: 'translate_to_english',
-        breakdown,
+        breakdown: minimalBreakdown,
       }),
     );
     expect(analyticsTrack).toHaveBeenCalledWith(
@@ -264,7 +291,7 @@ describe('useBidirectionalTranslator', () => {
     expect(generatedProperties).not.toHaveProperty('translated_text');
   });
 
-  it('shows the fast answer before enriching the breakdown in the background', async () => {
+  it('requests the breakdown only after the user opens Desglose', async () => {
     const deferredEnrichment =
       createDeferred<BreakdownEnrichmentResponse>();
 
@@ -298,7 +325,12 @@ describe('useBidirectionalTranslator', () => {
     });
 
     expect(result.current.resultText).toBe('I think she got arrested too.');
-    expect(result.current.breakdown).toBe(minimalBreakdown);
+    expect(result.current.breakdown).toBeNull();
+    expect(result.current.breakdownStatus).toBe('idle');
+    expect(enrichBreakdown).not.toHaveBeenCalled();
+
+    act(() => result.current.requestBreakdown());
+
     expect(result.current.breakdownStatus).toBe('enriching');
     expect(enrichBreakdown).toHaveBeenCalledWith(
       { translationRecordId: 'record-fast' },
@@ -324,6 +356,255 @@ describe('useBidirectionalTranslator', () => {
       expect.objectContaining({
         id: 'record-fast',
         breakdown,
+      }),
+    );
+    expect(analyticsTrack).toHaveBeenCalledWith(
+      'breakdown_enrichment_requested',
+      expect.objectContaining({
+        mode: 'translate_to_english',
+        trigger: 'panel_opened',
+      }),
+    );
+    expect(analyticsTrack).toHaveBeenCalledWith(
+      'breakdown_enrichment_charged',
+      expect.objectContaining({
+        mode: 'translate_to_english',
+        trigger: 'panel_opened',
+      }),
+    );
+  });
+
+  it('uses cached enriched breakdowns without calling the API again', async () => {
+    vi.mocked(generateTranslation).mockResolvedValueOnce(
+      responseFor({
+        id: 'record-cached',
+        text: 'I need help with this.',
+        mode: 'translate_to_english',
+        sourceLanguage: 'es',
+        targetLanguage: 'en',
+        nextBreakdown: partialRichBreakdown,
+      }),
+    );
+
+    const { result } = renderHook(() =>
+      useBidirectionalTranslator({
+        accessToken: 'token',
+        online: true,
+        onUsage: vi.fn(),
+        onSavedTranslation: vi.fn(),
+      }),
+    );
+
+    act(() => result.current.editInput('necesito ayuda con esto'));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(TRANSLATION_IDLE_DELAY_MS);
+    });
+
+    expect(result.current.breakdown).toBe(partialRichBreakdown);
+    expect(result.current.breakdownStatus).toBe('ready');
+
+    act(() => result.current.requestBreakdown());
+
+    expect(enrichBreakdown).not.toHaveBeenCalled();
+    expect(result.current.breakdownStatus).toBe('ready');
+    expect(analyticsTrack).toHaveBeenCalledWith(
+      'breakdown_enrichment_cached',
+      expect.objectContaining({
+        mode: 'translate_to_english',
+        trigger: 'panel_opened',
+        cache_source: 'client_state',
+      }),
+    );
+  });
+
+  it('ignores stale breakdown enrichment responses', async () => {
+    const firstEnrichment = createDeferred<BreakdownEnrichmentResponse>();
+    vi.mocked(generateTranslation)
+      .mockResolvedValueOnce(
+        responseFor({
+          id: 'record-old',
+          text: 'I need help with this.',
+          mode: 'translate_to_english',
+          sourceLanguage: 'es',
+          targetLanguage: 'en',
+        }),
+      )
+      .mockResolvedValueOnce(
+        responseFor({
+          id: 'record-new',
+          text: 'Necesito ayuda.',
+          mode: 'translate_to_spanish',
+          sourceLanguage: 'en',
+          targetLanguage: 'es',
+          createdAt: '2026-06-01T00:00:01.000Z',
+        }),
+      );
+    vi.mocked(enrichBreakdown).mockReturnValueOnce(firstEnrichment.promise);
+
+    const { result } = renderHook(() =>
+      useBidirectionalTranslator({
+        accessToken: 'token',
+        online: true,
+        onUsage: vi.fn(),
+        onSavedTranslation: vi.fn(),
+      }),
+    );
+
+    act(() => result.current.editInput('necesito ayuda con esto'));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(TRANSLATION_IDLE_DELAY_MS);
+    });
+    act(() => result.current.requestBreakdown());
+
+    let secondSubmit: Promise<void> = Promise.resolve();
+    act(() => {
+      result.current.editInput('I need help');
+      secondSubmit = result.current.translate('translate_to_spanish');
+    });
+
+    await act(async () => {
+      await secondSubmit;
+    });
+
+    await act(async () => {
+      firstEnrichment.resolve(
+        enrichmentFor({
+          id: 'record-old',
+          mode: 'translate_to_english',
+          sourceLanguage: 'es',
+          targetLanguage: 'en',
+          nextBreakdown: breakdown,
+        }),
+      );
+      await Promise.resolve();
+    });
+
+    expect(result.current.translationRecordId).toBe('record-new');
+    expect(result.current.resultText).toBe('Necesito ayuda.');
+    expect(result.current.breakdown).toBeNull();
+    expect(result.current.breakdownStatus).toBe('idle');
+  });
+
+  it('marks on-demand breakdown failures without losing the translation', async () => {
+    const exhaustedUsage = {
+      ...usage,
+      usedThisMonth: 100,
+      remainingThisMonth: 0,
+      charged: false,
+    };
+    vi.mocked(generateTranslation).mockResolvedValueOnce(
+      responseFor({
+        id: 'record-error',
+        text: 'I need help with this.',
+        mode: 'translate_to_english',
+        sourceLanguage: 'es',
+        targetLanguage: 'en',
+      }),
+    );
+    vi.mocked(enrichBreakdown).mockRejectedValueOnce(
+      new FlowtranslateApiError('Monthly quota reached.', 402, exhaustedUsage),
+    );
+
+    const onUsage = vi.fn();
+    const { result } = renderHook(() =>
+      useBidirectionalTranslator({
+        accessToken: 'token',
+        online: true,
+        onUsage,
+        onSavedTranslation: vi.fn(),
+      }),
+    );
+
+    act(() => result.current.editInput('necesito ayuda con esto'));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(TRANSLATION_IDLE_DELAY_MS);
+    });
+
+    act(() => result.current.requestBreakdown());
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(result.current.resultText).toBe('I need help with this.');
+    expect(result.current.breakdown).toBeNull();
+    expect(result.current.breakdownStatus).toBe('error');
+    expect(onUsage).toHaveBeenCalledWith(exhaustedUsage);
+    expect(analyticsTrack).toHaveBeenCalledWith(
+      'breakdown_enrichment_failed',
+      expect.objectContaining({
+        mode: 'translate_to_english',
+        trigger: 'panel_opened',
+        error_status: 402,
+        remaining_quota: 0,
+      }),
+    );
+  });
+
+  it('regenerates the current answer immediately when the response tone changes', async () => {
+    vi.mocked(generateTranslation)
+      .mockResolvedValueOnce(
+        responseFor({
+          id: 'record-natural',
+          text: 'I need help with this.',
+          mode: 'translate_to_english',
+          sourceLanguage: 'es',
+          targetLanguage: 'en',
+        }),
+      )
+      .mockResolvedValueOnce(
+        responseFor({
+          id: 'record-professional',
+          text: 'I would appreciate your help with this.',
+          mode: 'translate_to_english',
+          sourceLanguage: 'es',
+          targetLanguage: 'en',
+        }),
+      );
+
+    const { result } = renderHook(() =>
+      useBidirectionalTranslator({
+        accessToken: 'token',
+        online: true,
+        onUsage: vi.fn(),
+        onSavedTranslation: vi.fn(),
+      }),
+    );
+
+    act(() => result.current.editInput('necesito ayuda con esto'));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(TRANSLATION_IDLE_DELAY_MS);
+    });
+
+    expect(result.current.resultText).toBe('I need help with this.');
+
+    act(() => result.current.selectPreset('professional'));
+
+    expect(result.current.presetId).toBe('professional');
+    expect(result.current.status).toBe('translating');
+    expect(generateTranslation).toHaveBeenCalledTimes(2);
+    expect(generateTranslation).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        mode: 'translate_to_english',
+        text: 'necesito ayuda con esto',
+        presetId: 'professional',
+      }),
+      'token',
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(result.current.resultText).toBe(
+      'I would appreciate your help with this.',
+    );
+    expect(analyticsTrack).toHaveBeenCalledWith(
+      'translation_submitted',
+      expect.objectContaining({
+        mode: 'translate_to_english',
+        preset_id: 'professional',
+        trigger: 'preset_selected',
       }),
     );
   });

@@ -10,7 +10,7 @@ import {
   MessageCircleQuestion,
   Send,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 const structureRoleTone: Record<
   NonNullable<ExpressionBreakdown['structure']>[number]['role'],
@@ -31,6 +31,10 @@ type ExpressionBreakdownDetailsProps = {
   emptyDescription?: string;
   withTopBorder?: boolean;
   isEnriching?: boolean;
+  hasEnrichmentError?: boolean;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  onOpen?: () => void;
   onAskQuestion?: (
     question: string,
     history: BreakdownChatMessage[],
@@ -62,13 +66,43 @@ export const ExpressionBreakdownDetails = ({
   emptyDescription = 'Genera una respuesta para ver tiempos, estructura y notas de uso.',
   withTopBorder = true,
   isEnriching = false,
+  hasEnrichmentError = false,
+  open,
+  onOpenChange,
+  onOpen,
   onAskQuestion,
 }: ExpressionBreakdownDetailsProps) => {
   const [question, setQuestion] = useState('');
   const [messages, setMessages] = useState<BreakdownChatMessage[]>([]);
   const [asking, setAsking] = useState(false);
   const [chatError, setChatError] = useState('');
+  const [localIsOpen, setLocalIsOpen] = useState(defaultOpen);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const isOpen = open ?? localIsOpen;
   const borderClass = withTopBorder ? 'border-t border-slate-100' : '';
+
+  const handleHeaderClick = () => {
+    const nextOpen = !isOpen;
+    if (open === undefined) {
+      setLocalIsOpen(nextOpen);
+    }
+    onOpenChange?.(nextOpen);
+    if (nextOpen) onOpen?.();
+  };
+
+  useEffect(() => {
+    if (!isOpen || !breakdown || isEnriching) return;
+
+    const contentElement = contentRef.current;
+    if (
+      !contentElement ||
+      typeof contentElement.scrollIntoView !== 'function'
+    ) {
+      return;
+    }
+
+    contentElement.scrollIntoView({ block: 'nearest' });
+  }, [breakdown, isEnriching, isOpen]);
 
   const submitQuestion = async () => {
     const trimmedQuestion = question.trim();
@@ -90,7 +124,7 @@ export const ExpressionBreakdownDetails = ({
         { role: 'assistant', content: answer },
       ]);
     } catch (error) {
-        setChatError(
+      setChatError(
         error instanceof Error
           ? error.message
           : 'No pudimos responder esta pregunta.',
@@ -102,18 +136,31 @@ export const ExpressionBreakdownDetails = ({
 
   if (!breakdown) {
     return (
-      <details
+      <div
         className={`max-w-full shrink-0 overflow-hidden px-4 py-3 sm:px-5 ${borderClass}`}
-        open={defaultOpen}
       >
-        <summary className='flex cursor-pointer list-none items-center gap-2 text-sm font-bold text-slate-500'>
-          <ChevronDown size={16} />
+        <button
+          type='button'
+          aria-expanded={isOpen}
+          onClick={handleHeaderClick}
+          className='flex w-full cursor-pointer items-center gap-2 text-left text-sm font-bold text-slate-500'
+        >
+          <ChevronDown
+            size={16}
+            className={`transition-transform ${isOpen ? 'rotate-180' : ''}`}
+          />
           Desglose
-        </summary>
-        <p className='mt-3 text-sm text-slate-500'>
-          {isEnriching ? 'Completando el desglose...' : emptyDescription}
-        </p>
-      </details>
+        </button>
+        {isOpen ? (
+          <p className='mt-3 text-sm text-slate-500'>
+            {isEnriching
+              ? 'Preparando desglose...'
+              : hasEnrichmentError
+                ? 'No pudimos preparar el desglose ahora. Proba abrirlo de nuevo en un momento.'
+                : emptyDescription}
+          </p>
+        ) : null}
+      </div>
     );
   }
 
@@ -124,13 +171,20 @@ export const ExpressionBreakdownDetails = ({
       : [];
 
   return (
-    <details
+    <div
       className={`max-w-full shrink-0 overflow-hidden px-4 py-3 sm:px-5 ${borderClass}`}
-      open={defaultOpen}
     >
-      <summary className='flex cursor-pointer list-none flex-wrap items-center justify-between gap-3 text-sm font-bold text-slate-700'>
+      <button
+        type='button'
+        aria-expanded={isOpen}
+        onClick={handleHeaderClick}
+        className='flex w-full cursor-pointer flex-wrap items-center justify-between gap-3 text-left text-sm font-bold text-slate-700'
+      >
         <span className='inline-flex min-w-0 items-center gap-2 break-words'>
-          <ChevronDown size={16} className='shrink-0' />
+          <ChevronDown
+            size={16}
+            className={`shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+          />
           Desglose
         </span>
         <span className='inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1 text-xs font-bold text-slate-600'>
@@ -145,8 +199,10 @@ export const ExpressionBreakdownDetails = ({
             'Ya suena natural'
           )}
         </span>
-      </summary>
+      </button>
 
+      {isOpen ? (
+        <div ref={contentRef}>
       <div className='mt-4 grid min-w-0 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(240px,0.85fr)]'>
         <div className='min-w-0 space-y-3'>
           {breakdown.feedback.length ? (
@@ -346,6 +402,8 @@ export const ExpressionBreakdownDetails = ({
           </form>
         </div>
       ) : null}
-    </details>
+        </div>
+      ) : null}
+    </div>
   );
 };

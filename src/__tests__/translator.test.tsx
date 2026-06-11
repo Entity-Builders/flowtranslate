@@ -24,6 +24,7 @@ describe('translator UI', () => {
     expect(screen.getByRole('heading', { name: 'Mensaje o idea' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Respuesta' })).toBeInTheDocument();
     expect(screen.getByLabelText('Mensaje o idea')).toBeInTheDocument();
+    expect(screen.getByLabelText('Tono de respuesta')).toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: /responder en ingles/i }),
     ).toHaveAttribute('aria-pressed', 'true');

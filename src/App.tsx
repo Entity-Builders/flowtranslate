@@ -25,7 +25,6 @@ import { ExpressionWorkspace } from './components/ExpressionWorkspace';
 import { STORAGE_KEYS } from './constants';
 import { LearningView } from './components/LearningView';
 import { QuotaStatus } from './components/QuotaStatus';
-import { TranslationPresetControl } from './components/TranslationPresetControl';
 import { useBidirectionalTranslator } from './hooks/useBidirectionalTranslator';
 import { useFlowtranslateAccount } from './hooks/useFlowtranslateAccount';
 import { analytics } from './services/analytics';
@@ -770,20 +769,6 @@ function App() {
             </div>
           ) : null}
 
-          <div className='flex flex-wrap items-center justify-between gap-3'>
-            <TranslationPresetControl
-              value={translator.presetId}
-              onChange={selectPreset}
-            />
-            <div className='text-xs font-semibold text-slate-500'>
-              {translator.status === 'typing'
-                ? 'La IA espera una pausa corta'
-                : translator.hasPendingChanges
-                  ? 'Tambien podes generar manualmente'
-                  : ' '}
-            </div>
-          </div>
-
           <ExpressionWorkspace
             inputText={translator.inputText}
             resultText={translator.resultText}
@@ -791,6 +776,7 @@ function App() {
             modeDetection={translator.modeDetection}
             sourceLanguage={translator.sourceLanguage}
             targetLanguage={translator.targetLanguage}
+            presetId={translator.presetId}
             breakdown={translator.breakdown}
             breakdownStatus={translator.breakdownStatus}
             translationRecordId={translator.translationRecordId}
@@ -829,6 +815,8 @@ function App() {
             onDictateInput={dictateInput}
             onTranslate={() => void translator.translate()}
             onSelectMode={(nextMode) => translator.selectMode(nextMode)}
+            onSelectPreset={selectPreset}
+            onRequestBreakdown={() => translator.requestBreakdown()}
             onTranslateToSpanish={() => void translator.translate('translate_to_spanish')}
           />
           <p className='max-w-[calc(100vw-2rem)] break-words text-xs text-slate-500 sm:max-w-full'>

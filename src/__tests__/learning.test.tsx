@@ -1,8 +1,9 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { StudyArticle } from '@eb-packages/flowtranslate-core';
 import { describe, expect, it, vi } from 'vitest';
 import App from '../App';
 import { ExpressionBreakdownDetails } from '../components/ExpressionBreakdownDetails';
+import { ExpressionWorkspace } from '../components/ExpressionWorkspace';
 import { LearningView } from '../components/LearningView';
 import { StudyArticleView } from '../components/StudyArticleView';
 
@@ -188,6 +189,262 @@ describe('learning UI', () => {
     expect(screen.getByText('was freezing')).toBeInTheDocument();
     expect(screen.getByText('Modal request')).toBeInTheDocument();
     expect(screen.getByText('can we turn up')).toBeInTheDocument();
+  });
+
+  it('shows an empty on-demand breakdown state before enrichment', () => {
+    render(
+      <ExpressionBreakdownDetails
+        defaultOpen
+        breakdown={null}
+        emptyDescription='Abrilo para preparar un desglose completo.'
+      />,
+    );
+
+    expect(screen.getByText('Desglose')).toBeInTheDocument();
+    expect(
+      screen.getByText('Abrilo para preparar un desglose completo.'),
+    ).toBeInTheDocument();
+  });
+
+  it('shows the on-demand breakdown loading state', () => {
+    render(
+      <ExpressionBreakdownDetails
+        defaultOpen
+        breakdown={null}
+        isEnriching
+      />,
+    );
+
+    expect(screen.getByText('Preparando desglose...')).toBeInTheDocument();
+  });
+
+  it('requests on-demand breakdown when the panel opens', () => {
+    const requestBreakdown = vi.fn();
+
+    render(
+      <ExpressionBreakdownDetails
+        breakdown={null}
+        onOpen={requestBreakdown}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Desglose' }));
+
+    expect(requestBreakdown).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps Desglose open while enrichment state changes', () => {
+    const richBreakdown = {
+      changed: true,
+      confidence: 'high' as const,
+      feedback: ['Listo.'],
+      tenses: [
+        {
+          label: 'Simple present',
+          text: 'need',
+          note: 'Describe una necesidad actual.',
+        },
+      ],
+      structure: [
+        {
+          text: 'I need help',
+          role: 'other' as const,
+          note: 'Frase completa.',
+        },
+      ],
+    };
+    const requestBreakdown = vi.fn();
+    const { rerender } = render(
+      <ExpressionBreakdownDetails
+        breakdown={null}
+        onOpen={requestBreakdown}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Desglose' }));
+
+    expect(requestBreakdown).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: 'Desglose' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+
+    rerender(
+      <ExpressionBreakdownDetails
+        breakdown={null}
+        isEnriching
+        onOpen={requestBreakdown}
+      />,
+    );
+    expect(screen.getByRole('button', { name: 'Desglose' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+    expect(screen.getByText('Preparando desglose...')).toBeInTheDocument();
+
+    rerender(
+      <ExpressionBreakdownDetails
+        breakdown={richBreakdown}
+        onOpen={requestBreakdown}
+      />,
+    );
+    expect(screen.getByRole('button', { name: /desglose/i })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+    expect(screen.getByText('Simple present')).toBeInTheDocument();
+  });
+
+  it('requests Desglose after the translation record arrives if it was already open', async () => {
+    const requestBreakdown = vi.fn();
+    const noop = () => undefined;
+    const baseProps = {
+      inputText: 'Creo que necesito ayuda',
+      resultText: '',
+      mode: 'translate_to_english' as const,
+      modeDetection: {
+        mode: 'translate_to_english' as const,
+        confidence: 'high' as const,
+        reason: 'spanish' as const,
+        automatic: true,
+      },
+      sourceLanguage: 'es' as const,
+      targetLanguage: 'en' as const,
+      presetId: 'natural' as const,
+      breakdown: null,
+      breakdownStatus: 'idle' as const,
+      translationRecordId: '',
+      status: 'translating' as const,
+      canTranslate: false,
+      translateDisabledReason: 'Generando',
+      copiedInput: false,
+      copiedResult: false,
+      canListen: false,
+      speakingLanguage: null,
+      canDictate: false,
+      dictatingLanguage: null,
+      dictationUnavailableReason: 'No disponible',
+      onInputChange: noop,
+      onCopyInput: noop,
+      onCopyResult: noop,
+      onListenInput: noop,
+      onListenResult: noop,
+      onDictateInput: noop,
+      onTranslate: noop,
+      onSelectMode: noop,
+      onSelectPreset: noop,
+      onRequestBreakdown: requestBreakdown,
+      onTranslateToSpanish: noop,
+    };
+
+    const { rerender } = render(<ExpressionWorkspace {...baseProps} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Desglose' }));
+
+    expect(requestBreakdown).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Desglose' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+
+    rerender(
+      <ExpressionWorkspace
+        {...baseProps}
+        resultText='I think I need help.'
+        translationRecordId='record-1'
+        status='idle'
+        canTranslate
+        translateDisabledReason=''
+      />,
+    );
+
+    await waitFor(() => expect(requestBreakdown).toHaveBeenCalledTimes(1));
+    expect(screen.getByRole('button', { name: 'Desglose' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+  });
+
+  it('keeps the workspace Desglose open when enriched content arrives', () => {
+    const richBreakdown = {
+      changed: true,
+      confidence: 'high' as const,
+      feedback: ['Listo.'],
+      tenses: [
+        {
+          label: 'Simple present',
+          text: 'need',
+          note: 'Describe una necesidad actual.',
+        },
+      ],
+      structure: [
+        {
+          text: 'I need help',
+          role: 'other' as const,
+          note: 'Frase completa.',
+        },
+      ],
+    };
+    const requestBreakdown = vi.fn();
+    const noop = () => undefined;
+    const baseProps = {
+      inputText: 'Creo que necesito ayuda',
+      resultText: 'I think I need help.',
+      mode: 'translate_to_english' as const,
+      modeDetection: {
+        mode: 'translate_to_english' as const,
+        confidence: 'high' as const,
+        reason: 'spanish' as const,
+        automatic: true,
+      },
+      sourceLanguage: 'es' as const,
+      targetLanguage: 'en' as const,
+      presetId: 'natural' as const,
+      breakdown: null,
+      breakdownStatus: 'idle' as const,
+      translationRecordId: 'record-1',
+      status: 'idle' as const,
+      canTranslate: true,
+      translateDisabledReason: '',
+      copiedInput: false,
+      copiedResult: false,
+      canListen: false,
+      speakingLanguage: null,
+      canDictate: false,
+      dictatingLanguage: null,
+      dictationUnavailableReason: 'No disponible',
+      onInputChange: noop,
+      onCopyInput: noop,
+      onCopyResult: noop,
+      onListenInput: noop,
+      onListenResult: noop,
+      onDictateInput: noop,
+      onTranslate: noop,
+      onSelectMode: noop,
+      onSelectPreset: noop,
+      onRequestBreakdown: requestBreakdown,
+      onTranslateToSpanish: noop,
+    };
+
+    const { rerender } = render(<ExpressionWorkspace {...baseProps} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Desglose' }));
+
+    expect(requestBreakdown).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <ExpressionWorkspace
+        {...baseProps}
+        breakdown={richBreakdown}
+        breakdownStatus='ready'
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: /desglose/i })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+    expect(screen.getByText('Simple present')).toBeInTheDocument();
   });
 
   it('lets the user ask AI questions about a saved Spanish breakdown', async () => {

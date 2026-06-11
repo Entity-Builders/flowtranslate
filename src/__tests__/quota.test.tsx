@@ -9,7 +9,8 @@ describe('quota and account UI', () => {
 
     expect(screen.queryByText(/Gemini API key/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/monthly AI tokens left/i)).not.toBeInTheDocument();
-    expect(screen.getByTitle('Account')).toBeInTheDocument();
+    expect(screen.queryByText(/creditos mensuales/i)).not.toBeInTheDocument();
+    expect(screen.getByTitle('Cuenta')).toBeInTheDocument();
   });
 
   it('describes usage in human terms before secondary token detail', () => {
@@ -27,10 +28,10 @@ describe('quota and account UI', () => {
       />,
     );
 
-    expect(screen.getByText('Running low')).toBeInTheDocument();
-    expect(screen.getByText(/Guest trial/i)).toBeInTheDocument();
+    expect(screen.getByText('Te queda poco')).toBeInTheDocument();
+    expect(screen.getByText(/Prueba gratis/i)).toBeInTheDocument();
     expect(
-      screen.getByText(/Technical limit: 250 of 2,000 monthly AI tokens left/i),
+      screen.getByText(/Detalle tecnico: quedan 250 de 2,000 creditos mensuales de IA/i),
     ).toBeInTheDocument();
   });
 });

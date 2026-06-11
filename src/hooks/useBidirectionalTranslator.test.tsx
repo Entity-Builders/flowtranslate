@@ -169,7 +169,28 @@ describe('useBidirectionalTranslator', () => {
       }),
     );
     expect(analyticsTrack).toHaveBeenCalledWith(
+      'conversation_reply_requested',
+      expect.objectContaining({
+        mode: 'translate_to_english',
+        preset_id: 'natural',
+        trigger: 'auto_idle',
+        source_language: 'es',
+        target_language: 'en',
+        input_chars: 15,
+      }),
+    );
+    expect(analyticsTrack).toHaveBeenCalledWith(
       'translation_succeeded',
+      expect.objectContaining({
+        mode: 'translate_to_english',
+        output_chars: 19,
+        charged: true,
+        reused: false,
+        remaining_quota: 96,
+      }),
+    );
+    expect(analyticsTrack).toHaveBeenCalledWith(
+      'conversation_reply_generated',
       expect.objectContaining({
         mode: 'translate_to_english',
         output_chars: 19,
@@ -185,6 +206,12 @@ describe('useBidirectionalTranslator', () => {
     expect(submittedProperties).not.toHaveProperty('text');
     expect(submittedProperties).not.toHaveProperty('source_text');
     expect(submittedProperties).not.toHaveProperty('translated_text');
+    const generatedProperties = analyticsTrack.mock.calls.find(
+      ([eventName]) => eventName === 'conversation_reply_generated',
+    )?.[1] as Record<string, unknown>;
+    expect(generatedProperties).not.toHaveProperty('text');
+    expect(generatedProperties).not.toHaveProperty('source_text');
+    expect(generatedProperties).not.toHaveProperty('translated_text');
   });
 
   it('auto-improves English after the idle delay', async () => {
@@ -261,8 +288,8 @@ describe('useBidirectionalTranslator', () => {
     act(() => result.current.editInput('hola como estas'));
 
     expect(result.current.status).toBe('typing');
-    expect(result.current.message).toBe('Starting guest trial...');
-    expect(result.current.translateDisabledReason).toBe('Starting guest trial...');
+    expect(result.current.message).toBe('Preparando tu prueba gratis...');
+    expect(result.current.translateDisabledReason).toBe('Preparando tu prueba gratis...');
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(TRANSLATION_IDLE_DELAY_MS);
@@ -331,6 +358,12 @@ describe('useBidirectionalTranslator', () => {
         text: 'I need help',
       }),
       'token',
+    );
+    expect(analyticsTrack).not.toHaveBeenCalledWith(
+      'conversation_reply_requested',
+      expect.objectContaining({
+        mode: 'translate_to_spanish',
+      }),
     );
   });
 

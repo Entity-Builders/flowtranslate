@@ -18,6 +18,41 @@ const ATTRIBUTION_KEYS = [
 ] as const;
 const MAX_ATTRIBUTION_VALUE_LENGTH = 120;
 
+export const COMMERCIAL_ANALYTICS_EVENTS = [
+  'conversation_reply_requested',
+  'conversation_reply_generated',
+  'conversation_reply_copied',
+  'conversation_tone_changed',
+  'account_connect_prompt_shown',
+  'account_connect_prompt_clicked',
+  'upgrade_intent_clicked',
+  'checkout_started',
+  'payment_succeeded',
+  'payment_failed',
+  'pro_entitlement_granted',
+] as const;
+
+export const SENSITIVE_ANALYTICS_PROPERTY_NAMES = [
+  'text',
+  'source_text',
+  'translated_text',
+  'generated_text',
+  'email',
+  'code',
+  'otp',
+  'card',
+  'payment_method',
+] as const;
+
+export const hasUnsafeCommercialAnalyticsProperty = (
+  properties: Record<string, unknown>,
+) =>
+  Object.keys(properties).some((key) =>
+    SENSITIVE_ANALYTICS_PROPERTY_NAMES.some((sensitiveKey) =>
+      key.toLocaleLowerCase().includes(sensitiveKey),
+    ),
+  );
+
 // Create the shared analytics instance for this app
 export const analytics = new Analytics(new PostHogProvider());
 

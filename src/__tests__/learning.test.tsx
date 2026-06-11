@@ -10,13 +10,13 @@ describe('learning UI', () => {
   it('keeps Learning in a separate view with empty history state', () => {
     render(<App />);
 
-    fireEvent.click(screen.getByRole('button', { name: /learning/i }));
+    fireEvent.click(screen.getByRole('button', { name: /aprender/i }));
 
-    expect(screen.getByRole('heading', { name: 'History' })).toBeInTheDocument();
-    expect(screen.getAllByText(/Saved expressions will appear here/i).length).toBeGreaterThan(0);
-    expect(screen.getByRole('heading', { name: 'Learning dashboard' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Historial' })).toBeInTheDocument();
+    expect(screen.getAllByText(/Tus respuestas guardadas van a aparecer aca/i).length).toBeGreaterThan(0);
+    expect(screen.getByRole('heading', { name: 'Panel de Learning' })).toBeInTheDocument();
     expect(
-      screen.getByRole('heading', { name: 'Useful English from your history' }),
+      screen.getByRole('heading', { name: 'Ingles util desde tu historial' }),
     ).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Recommended exercises' })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Practice' })).not.toBeInTheDocument();
@@ -76,11 +76,11 @@ describe('learning UI', () => {
       />,
     );
 
-    expect(screen.getByRole('heading', { name: 'Study Article' })).toBeInTheDocument();
-    expect(screen.getByText('Lesson: Talking about Plans')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Articulo de estudio' })).toBeInTheDocument();
+    expect(screen.getByText('Leccion: Talking about Plans')).toBeInTheDocument();
     expect(screen.getByText(history[0].sourceText)).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Learning dashboard' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'History' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Panel de Learning' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Historial' })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Practice' })).not.toBeInTheDocument();
   });
 
@@ -148,14 +148,14 @@ describe('learning UI', () => {
       />,
     );
 
-    expect(screen.getByText('Spanish breakdown')).toBeInTheDocument();
-    expect(screen.getByText('Adjusted')).toBeInTheDocument();
+    expect(screen.getByText('Desglose')).toBeInTheDocument();
+    expect(screen.getByText('Ajustado')).toBeInTheDocument();
     expect(screen.getByText('Past habitual')).toBeInTheDocument();
     expect(screen.getByText('used to buy')).toBeInTheDocument();
     expect(
       screen.getByText(/Se corrigio la conjugacion del verbo/),
     ).toBeInTheDocument();
-    expect(screen.getByText('Generating study article')).toBeInTheDocument();
+    expect(screen.getByText('Generando articulo de estudio')).toBeInTheDocument();
   });
 
   it('renders multiple tense notes when a phrase mixes clauses', () => {
@@ -183,7 +183,7 @@ describe('learning UI', () => {
       />,
     );
 
-    expect(screen.getByText('Tenses')).toBeInTheDocument();
+    expect(screen.getByText('Tiempos')).toBeInTheDocument();
     expect(screen.getByText('Past continuous')).toBeInTheDocument();
     expect(screen.getByText('was freezing')).toBeInTheDocument();
     expect(screen.getByText('Modal request')).toBeInTheDocument();
@@ -233,11 +233,11 @@ describe('learning UI', () => {
       />,
     );
 
-    fireEvent.change(screen.getByLabelText('Ask about this breakdown'), {
+    fireEvent.change(screen.getByLabelText('Preguntar sobre este desglose'), {
       target: { value: 'What if I said "I need help with this"?' },
     });
     fireEvent.click(
-      screen.getByRole('button', { name: 'Send breakdown question' }),
+      screen.getByRole('button', { name: 'Enviar pregunta del desglose' }),
     );
 
     expect(
@@ -290,9 +290,9 @@ describe('learning UI', () => {
       />,
     );
 
-    expect(screen.getByRole('heading', { name: 'Useful English from your history' })).toBeInTheDocument();
-    expect(screen.getByText('From your writing')).toBeInTheDocument();
-    expect(screen.getByText('From conversations')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Ingles util desde tu historial' })).toBeInTheDocument();
+    expect(screen.getByText('Desde lo que escribis')).toBeInTheDocument();
+    expect(screen.getByText('Desde conversaciones')).toBeInTheDocument();
     expect(screen.getByText('I need help with this task.')).toBeInTheDocument();
     expect(screen.getByText('Can you follow up?')).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Practice' })).not.toBeInTheDocument();

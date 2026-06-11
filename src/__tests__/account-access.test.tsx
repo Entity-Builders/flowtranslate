@@ -11,6 +11,7 @@ const signInWithOtp = vi.hoisted(() => vi.fn());
 const linkIdentity = vi.hoisted(() => vi.fn());
 const verifyOtp = vi.hoisted(() => vi.fn());
 const signOut = vi.hoisted(() => vi.fn());
+const generateTranslation = vi.hoisted(() => vi.fn());
 
 vi.mock('../services/analytics', () => ({
   analytics: {
@@ -23,6 +24,23 @@ vi.mock('../services/translation-history', () => ({
   listTranslationHistory: vi.fn().mockResolvedValue([]),
   deleteTranslationRecord: vi.fn().mockResolvedValue(undefined),
   clearTranslationHistory: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock('../services/flowtranslate-api', () => ({
+  FlowtranslateApiError: class FlowtranslateApiError extends Error {
+    status: number;
+    usage: unknown;
+
+    constructor(message: string, status = 500, usage?: unknown) {
+      super(message);
+      this.status = status;
+      this.usage = usage;
+    }
+  },
+  generateTranslation,
+  generateLearningInsight: vi.fn(),
+  generateStudyArticle: vi.fn(),
+  askBreakdownQuestion: vi.fn(),
 }));
 
 vi.mock('../lib/supabase', () => ({
@@ -74,13 +92,35 @@ describe('account access UI', () => {
     linkIdentity.mockResolvedValue({ error: null });
     verifyOtp.mockResolvedValue({ error: null });
     signOut.mockResolvedValue({ error: null });
+    generateTranslation.mockResolvedValue({
+      kind: 'translate',
+      text: 'Hi, can you send me the update?',
+      mode: 'translate_to_english',
+      breakdown: null,
+      translationRecord: {
+        id: 'record-1',
+        sourceLanguage: 'es',
+        targetLanguage: 'en',
+        mode: 'translate_to_english',
+        breakdown: null,
+        createdAt: '2026-06-05T12:00:00.000Z',
+      },
+      usage: {
+        estimatedTokens: 4,
+        monthlyQuota: 100,
+        usedThisMonth: 4,
+        remainingThisMonth: 96,
+        charged: true,
+        resetAt: '2026-07-01T00:00:00.000Z',
+      },
+    });
   });
 
   it('starts an anonymous guest session on first load without opening the account modal', async () => {
     render(<App />);
 
     await waitFor(() => expect(signInAnonymously).toHaveBeenCalledTimes(1));
-    expect(screen.queryByRole('heading', { name: 'Account' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Cuenta' })).not.toBeInTheDocument();
     expect(analyticsTrack).toHaveBeenCalledWith('auth_guest_submitted', {
       method: 'anonymous',
       source: 'automatic',
@@ -95,33 +135,33 @@ describe('account access UI', () => {
 
     render(<App />);
 
-    expect(await screen.findByText('Guest trial')).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Account' })).not.toBeInTheDocument();
+    expect(await screen.findByText('Prueba gratis')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Cuenta' })).not.toBeInTheDocument();
   });
 
   it('offers Google, guest trial, and progressive email code sign-in', async () => {
     render(<App />);
 
     await waitFor(() => expect(signInAnonymously).toHaveBeenCalledTimes(1));
-    fireEvent.click(screen.getByTitle('Account'));
+    fireEvent.click(screen.getByTitle('Cuenta'));
 
     expect(
-      await screen.findByRole('button', { name: /continue with google/i }),
+      await screen.findByRole('button', { name: /continuar con google/i }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole('button', { name: /try guest trial/i }),
+      screen.getByRole('button', { name: /iniciar prueba gratis/i }),
     ).toBeInTheDocument();
-    expect(screen.queryByLabelText(/code/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/codigo/i)).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /use email code/i }));
+    fireEvent.click(screen.getByRole('button', { name: /usar codigo por email/i }));
 
     expect(screen.getByLabelText(/email/i)).toBeInTheDocument();
-    expect(screen.queryByLabelText(/code/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/codigo/i)).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText(/email/i), {
       target: { value: 'juan@example.com' },
     });
-    fireEvent.click(screen.getByRole('button', { name: /send code/i }));
+    fireEvent.click(screen.getByRole('button', { name: /enviar codigo/i }));
 
     await waitFor(() => expect(signInWithOtp).toHaveBeenCalledWith({
       email: 'juan@example.com',
@@ -129,16 +169,16 @@ describe('account access UI', () => {
         emailRedirectTo: window.location.origin,
       },
     }));
-    expect(await screen.findByLabelText(/code/i)).toBeInTheDocument();
+    expect(await screen.findByLabelText(/codigo/i)).toBeInTheDocument();
   });
 
   it('starts guest auth and Google OAuth from the account modal', async () => {
     render(<App />);
 
     await waitFor(() => expect(signInAnonymously).toHaveBeenCalledTimes(1));
-    fireEvent.click(screen.getByTitle('Account'));
+    fireEvent.click(screen.getByTitle('Cuenta'));
     fireEvent.click(
-      await screen.findByRole('button', { name: /continue with google/i }),
+      await screen.findByRole('button', { name: /continuar con google/i }),
     );
 
     await waitFor(() => expect(signInWithOAuth).toHaveBeenCalledWith({
@@ -148,7 +188,7 @@ describe('account access UI', () => {
       },
     }));
 
-    fireEvent.click(screen.getByRole('button', { name: /try guest trial/i }));
+    fireEvent.click(screen.getByRole('button', { name: /iniciar prueba gratis/i }));
 
     await waitFor(() => expect(signInAnonymously).toHaveBeenCalledTimes(2));
     expect(analyticsTrack).toHaveBeenCalledWith('auth_guest_submitted', {
@@ -162,9 +202,9 @@ describe('account access UI', () => {
 
     render(<App />);
 
-    fireEvent.click(await screen.findByTitle('Account'));
+    fireEvent.click(await screen.findByTitle('Cuenta'));
     fireEvent.click(
-      await screen.findByRole('button', { name: /connect with google/i }),
+      await screen.findByRole('button', { name: /conectar con google/i }),
     );
 
     await waitFor(() => expect(linkIdentity).toHaveBeenCalledWith({
@@ -173,6 +213,40 @@ describe('account access UI', () => {
         redirectTo: window.location.origin,
       },
     }));
-    expect(screen.getAllByText(/guest trial/i).length).toBeGreaterThan(1);
+    expect(screen.getAllByText(/prueba gratis/i).length).toBeGreaterThan(1);
+  });
+
+  it('prompts guests to connect an account only after repeated copied replies', async () => {
+    signInAnonymously.mockResolvedValueOnce({
+      data: { session: guestSession },
+      error: null,
+    });
+
+    render(<App />);
+
+    await screen.findByText('Prueba gratis');
+    expect(screen.queryByText(/Guarda tu tono/i)).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Mensaje o idea'), {
+      target: { value: 'me pasas el update?' },
+    });
+    fireEvent.click(screen.getByTitle('Generar respuesta'));
+
+    expect(
+      await screen.findByText('Hi, can you send me the update?'),
+    ).toBeInTheDocument();
+
+    const resultCopyButton = () => screen.getAllByTitle('Copiar texto')[1];
+    fireEvent.click(resultCopyButton());
+    fireEvent.click(resultCopyButton());
+
+    expect(await screen.findByText(/Guarda tu tono/i)).toBeInTheDocument();
+    expect(analyticsTrack).toHaveBeenCalledWith(
+      'account_connect_prompt_shown',
+      expect.objectContaining({
+        surface: 'translate_soft_banner',
+        reason: 'copied_replies',
+      }),
+    );
   });
 });

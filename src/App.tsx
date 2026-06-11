@@ -67,10 +67,18 @@ const appendRecognizedText = (currentText: string, transcript: string) => {
 };
 
 const guestLearningMessage =
-  'Connect a free account to unlock personal Learning and keep your progress.';
+  'Conecta una cuenta gratis para desbloquear Learning personal y conservar tu progreso.';
+const ACCOUNT_PROMPT_COPY_THRESHOLD = 2;
 
 function App() {
   const account = useFlowtranslateAccount();
+  const {
+    authLoading,
+    busy: accountBusy,
+    isSupabaseConfigured,
+    session,
+    signInAsGuest,
+  } = account;
   const [view, setView] = useState<AppView>(readInitialView);
   const [showAccount, setShowAccount] = useState(false);
   const [showEmailSignIn, setShowEmailSignIn] = useState(false);
@@ -96,9 +104,12 @@ function App() {
   const [dictatingLanguage, setDictatingLanguage] =
     useState<LanguageCode | null>(null);
   const [voiceMessage, setVoiceMessage] = useState('');
+  const [resultCopyCount, setResultCopyCount] = useState(0);
+  const [accountPromptDismissed, setAccountPromptDismissed] = useState(false);
   const dictationRef = useRef<DictationSession | null>(null);
   const renderedStudyArticleRef = useRef<string | null>(null);
   const trackedViewRef = useRef<AppView | null>(null);
+  const trackedAccountPromptRef = useRef(false);
   const autoGuestStartedRef = useRef(false);
 
   useEffect(() => subscribeToOnlineState(setOnline), []);
@@ -120,23 +131,17 @@ function App() {
   useEffect(() => {
     if (
       autoGuestStartedRef.current ||
-      !account.isSupabaseConfigured ||
-      account.authLoading ||
-      account.busy ||
-      account.session
+      !isSupabaseConfigured ||
+      authLoading ||
+      accountBusy ||
+      session
     ) {
       return;
     }
 
     autoGuestStartedRef.current = true;
-    void account.signInAsGuest({ source: 'automatic' });
-  }, [
-    account.authLoading,
-    account.busy,
-    account.isSupabaseConfigured,
-    account.session,
-    account.signInAsGuest,
-  ]);
+    void signInAsGuest({ source: 'automatic' });
+  }, [accountBusy, authLoading, isSupabaseConfigured, session, signInAsGuest]);
 
   useEffect(() => {
     if (!studyArticle) {
@@ -166,7 +171,7 @@ function App() {
       setHistory(await listTranslationHistory());
     } catch (error) {
       setHistoryError(
-        error instanceof Error ? error.message : 'Could not load history.',
+        error instanceof Error ? error.message : 'No pudimos cargar tu historial.',
       );
     }
   }, [account.accessToken]);
@@ -205,6 +210,13 @@ function App() {
       history_count: history.length,
       has_translation_result: Boolean(translator.resultText.trim()),
     });
+    if (view === 'learning') {
+      analytics.track('learning_opened', {
+        account_kind: account.accountKind,
+        history_count: history.length,
+        has_saved_history: history.length > 0,
+      });
+    }
   }, [account.accountKind, account.session, history.length, translator.resultText, view]);
 
   const selectPreset = useCallback(
@@ -213,8 +225,14 @@ function App() {
       analytics.track('translation_preset_selected', {
         preset_id: nextPresetId,
       });
+      analytics.track('conversation_tone_changed', {
+        preset_id: nextPresetId,
+        account_kind: account.accountKind,
+        input_chars: translator.inputText.trim().length,
+        has_result: Boolean(translator.resultText.trim()),
+      });
     },
-    [translator],
+    [account.accountKind, translator],
   );
 
   useEffect(() => {
@@ -241,6 +259,16 @@ function App() {
       language,
       text_length: text.length,
     });
+    if (target === 'result') {
+      setResultCopyCount((current) => current + 1);
+      analytics.track('conversation_reply_copied', {
+        language,
+        text_length: text.length,
+        mode: translator.mode,
+        preset_id: translator.presetId,
+        account_kind: account.accountKind,
+      });
+    }
     window.setTimeout(() => setCopiedTarget(null), 1600);
   };
 
@@ -264,7 +292,7 @@ function App() {
     });
 
     if (!started) {
-      setVoiceMessage('Audio playback is unavailable in this browser.');
+      setVoiceMessage('La reproduccion de audio no esta disponible en este navegador.');
       return;
     }
 
@@ -290,7 +318,7 @@ function App() {
     }
 
     if (!dictationAvailable) {
-      setVoiceMessage('Microphone dictation is unavailable in this browser.');
+      setVoiceMessage('El dictado por microfono no esta disponible en este navegador.');
       return;
     }
 
@@ -303,7 +331,7 @@ function App() {
         const nextText = appendRecognizedText(baseText, transcript);
         translator.editInput(nextText);
 
-        setVoiceMessage('Dictation added to the expression input.');
+        setVoiceMessage('Dictado agregado al mensaje.');
         analytics.track('translation_dictation_completed', {
           language,
           text_length: transcript.trim().length,
@@ -321,13 +349,13 @@ function App() {
     });
 
     if (!session) {
-      setVoiceMessage('Microphone dictation is unavailable in this browser.');
+      setVoiceMessage('El dictado por microfono no esta disponible en este navegador.');
       return;
     }
 
     dictationRef.current = session;
     setDictatingLanguage(language);
-    setVoiceMessage('Listening through the browser microphone service...');
+    setVoiceMessage('Escuchando con el servicio de microfono del navegador...');
     analytics.track('translation_dictation_started', { language });
   };
 
@@ -336,14 +364,14 @@ function App() {
       setInsightError('');
 
       if (!online) {
-        if (!silent) setInsightError('Offline. Learning insights need a connection.');
+        if (!silent) setInsightError('Estas offline. Learning necesita conexion.');
         return;
       }
 
       if (!account.accessToken) {
         if (!silent) {
           setShowAccount(true);
-          setInsightError('Sign in to generate learning insights from history.');
+          setInsightError('Conecta tu cuenta para generar Learning desde tu historial.');
         }
         return;
       }
@@ -352,6 +380,12 @@ function App() {
         if (!silent) {
           setShowAccount(true);
           setInsightError(guestLearningMessage);
+          analytics.track('account_connect_prompt_shown', {
+            surface: 'learning',
+            reason: 'learning_guest',
+            account_kind: account.accountKind,
+            history_count: history.length,
+          });
           analytics.track('learning_guest_blocked', {
             surface: 'insight',
           });
@@ -383,7 +417,7 @@ function App() {
           setInsightError(error.message);
         } else {
           setInsightError(
-            error instanceof Error ? error.message : 'Learning insight failed.',
+            error instanceof Error ? error.message : 'No pudimos generar Learning.',
           );
         }
         analytics.track('learning_insight_failed', { error_type: 'exception' });
@@ -391,7 +425,13 @@ function App() {
         setInsightLoading(false);
       }
     },
-    [account.accessToken, account.isGuest, history.length, online],
+    [
+      account.accessToken,
+      account.accountKind,
+      account.isGuest,
+      history.length,
+      online,
+    ],
   );
 
   useEffect(() => {
@@ -407,19 +447,25 @@ function App() {
     setStudyArticle(null);
 
     if (!online) {
-      setStudyError('Offline. Study articles need a connection.');
+      setStudyError('Estas offline. Los articulos de estudio necesitan conexion.');
       return;
     }
 
     if (!account.accessToken) {
       setShowAccount(true);
-      setStudyError('Sign in to study saved translations.');
+      setStudyError('Conecta tu cuenta para estudiar tus respuestas guardadas.');
       return;
     }
 
     if (account.isGuest) {
       setShowAccount(true);
       setStudyError(guestLearningMessage);
+      analytics.track('account_connect_prompt_shown', {
+        surface: 'study_article',
+        reason: 'learning_guest',
+        account_kind: account.accountKind,
+        history_count: history.length,
+      });
       analytics.track('learning_guest_blocked', {
         surface: 'study_article',
       });
@@ -452,7 +498,7 @@ function App() {
         setStudyError(error.message);
       } else {
         setStudyError(
-          error instanceof Error ? error.message : 'Study article failed.',
+          error instanceof Error ? error.message : 'No pudimos abrir el articulo.',
         );
       }
       analytics.track('learning_study_article_failed', { error_type: 'exception' });
@@ -476,16 +522,22 @@ function App() {
       const trimmedQuestion = question.trim();
 
       if (!online) {
-        throw new Error('Offline. Breakdown questions need a connection.');
+        throw new Error('Estas offline. Las preguntas necesitan conexion.');
       }
 
       if (!account.accessToken) {
         setShowAccount(true);
-        throw new Error('Sign in to ask AI about this breakdown.');
+        throw new Error('Conecta tu cuenta para preguntarle a la IA.');
       }
 
       if (account.isGuest) {
         setShowAccount(true);
+        analytics.track('account_connect_prompt_shown', {
+          surface: 'breakdown_chat',
+          reason: 'learning_guest',
+          account_kind: account.accountKind,
+          history_count: history.length,
+        });
         analytics.track('learning_guest_blocked', {
           surface: 'breakdown_chat',
         });
@@ -523,7 +575,13 @@ function App() {
         throw error;
       }
     },
-    [account.accessToken, account.isGuest, online],
+    [
+      account.accessToken,
+      account.accountKind,
+      account.isGuest,
+      history.length,
+      online,
+    ],
   );
 
   const deleteHistoryItem = async (id: string) => {
@@ -534,7 +592,7 @@ function App() {
       if (selectedStudyRecordId === id) closeStudyArticle();
       analytics.track('translation_history_deleted', { count: 1 });
     } catch (error) {
-      setHistoryError(error instanceof Error ? error.message : 'Delete failed.');
+      setHistoryError(error instanceof Error ? error.message : 'No pudimos borrar ese item.');
     }
   };
 
@@ -546,7 +604,7 @@ function App() {
       closeStudyArticle();
       analytics.track('translation_history_cleared');
     } catch (error) {
-      setHistoryError(error instanceof Error ? error.message : 'Clear failed.');
+      setHistoryError(error instanceof Error ? error.message : 'No pudimos limpiar tu historial.');
     }
   };
 
@@ -559,6 +617,34 @@ function App() {
     return 'border-emerald-200 bg-emerald-50 text-emerald-700';
   }, [translator.status]);
 
+  const shouldShowAccountPrompt =
+    account.isGuest &&
+    !accountPromptDismissed &&
+    resultCopyCount >= ACCOUNT_PROMPT_COPY_THRESHOLD;
+
+  useEffect(() => {
+    if (!shouldShowAccountPrompt) return;
+    if (trackedAccountPromptRef.current) return;
+
+    trackedAccountPromptRef.current = true;
+    analytics.track('account_connect_prompt_shown', {
+      surface: 'translate_soft_banner',
+      reason: 'copied_replies',
+      copy_count: resultCopyCount,
+      account_kind: account.accountKind,
+    });
+  }, [account.accountKind, resultCopyCount, shouldShowAccountPrompt]);
+
+  const openAccountFromPrompt = () => {
+    analytics.track('account_connect_prompt_clicked', {
+      surface: 'translate_soft_banner',
+      reason: 'copied_replies',
+      copy_count: resultCopyCount,
+      account_kind: account.accountKind,
+    });
+    setShowAccount(true);
+  };
+
   const accountButtonLabel = account.displayName;
   const accountButtonIcon = account.isGuest ? (
     <UserRound size={17} />
@@ -568,14 +654,14 @@ function App() {
     <Settings size={17} />
   );
   const expressionStatusText = translator.status === 'translating'
-    ? 'Generating...'
+    ? 'Generando respuesta...'
     : translator.status === 'typing'
-      ? 'Auto-generating soon'
+      ? 'Listo, espero una pausa'
     : translator.hasPendingChanges
-      ? 'Ready to generate'
+      ? 'Listo para responder'
       : translator.message || undefined;
   const dictationUnavailableReason =
-    'Microphone dictation is unavailable in this browser.';
+    'El dictado por microfono no esta disponible en este navegador.';
 
   return (
     <div className='flex h-[100dvh] min-h-0 flex-col overflow-x-hidden bg-slate-50 text-slate-950'>
@@ -587,7 +673,7 @@ function App() {
           <div className='min-w-0'>
             <h1 className='hidden truncate text-lg font-bold leading-none sm:block'>flowtranslate</h1>
             <p className='mt-1 hidden text-xs text-slate-500 sm:block'>
-              Translate first. Learn separately.
+              Responde mejor en ingles, mas rapido.
             </p>
           </div>
         </div>
@@ -603,7 +689,7 @@ function App() {
             }`}
           >
             <Languages size={16} />
-            <span className='hidden min-[360px]:inline'>Translate</span>
+            <span className='hidden min-[360px]:inline'>Responder</span>
           </button>
           <button
             type='button'
@@ -615,7 +701,7 @@ function App() {
             }`}
           >
             <BookOpen size={16} />
-            <span className='hidden min-[360px]:inline'>Learning</span>
+            <span className='hidden min-[360px]:inline'>Aprender</span>
           </button>
         </nav>
 
@@ -624,7 +710,7 @@ function App() {
             type='button'
             onClick={() => setShowAccount(true)}
             className='inline-flex h-10 w-10 shrink-0 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white text-sm font-semibold text-slate-600 hover:text-slate-950 sm:w-auto sm:max-w-44 sm:px-3'
-            title='Account'
+            title='Cuenta'
           >
             {accountButtonIcon}
             <span className='hidden truncate sm:inline'>{accountButtonLabel}</span>
@@ -635,7 +721,7 @@ function App() {
       {!online ? (
         <div className='flex items-center gap-2 border-b border-slate-200 bg-slate-100 px-4 py-2 text-sm text-slate-700'>
           <WifiOff size={16} />
-          Offline shell is available. New AI actions are paused.
+          Estas offline. Podes ver la app, pero las nuevas respuestas con IA quedan pausadas.
         </div>
       ) : null}
 
@@ -653,6 +739,37 @@ function App() {
             </div>
           ) : null}
 
+          {shouldShowAccountPrompt ? (
+            <div className='flex flex-col gap-3 border border-slate-200 bg-white px-3 py-3 text-sm text-slate-700 sm:flex-row sm:items-center sm:justify-between'>
+              <div className='min-w-0'>
+                <p className='font-bold text-slate-950'>
+                  Guarda tu tono para responder mas rapido.
+                </p>
+                <p className='mt-1 leading-5 text-slate-600'>
+                  Conecta una cuenta gratis cuando quieras conservar historial,
+                  preferencias y Learning personal.
+                </p>
+              </div>
+              <div className='flex shrink-0 items-center gap-2'>
+                <button
+                  type='button'
+                  onClick={openAccountFromPrompt}
+                  className='inline-flex h-10 items-center justify-center rounded-md bg-slate-950 px-3 text-sm font-bold text-white hover:bg-slate-800'
+                >
+                  Guardar mi tono
+                </button>
+                <button
+                  type='button'
+                  onClick={() => setAccountPromptDismissed(true)}
+                  className='inline-flex h-10 w-10 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-800'
+                  title='Ocultar'
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+          ) : null}
+
           <div className='flex flex-wrap items-center justify-between gap-3'>
             <TranslationPresetControl
               value={translator.presetId}
@@ -660,9 +777,9 @@ function App() {
             />
             <div className='text-xs font-semibold text-slate-500'>
               {translator.status === 'typing'
-                ? 'Auto-translate is waiting for pause'
+                ? 'La IA espera una pausa corta'
                 : translator.hasPendingChanges
-                  ? 'Manual translate is still available'
+                  ? 'Tambien podes generar manualmente'
                   : ' '}
             </div>
           </div>
@@ -713,8 +830,8 @@ function App() {
             onTranslateToSpanish={() => void translator.translate('translate_to_spanish')}
           />
           <p className='max-w-[calc(100vw-2rem)] break-words text-xs text-slate-500 sm:max-w-full'>
-            Browser voice services may process audio during dictation; Flowtranslate
-            saves only submitted translation text and history.
+            Los servicios de voz del navegador pueden procesar audio durante el
+            dictado; Flowtranslate guarda solo el texto que envias y tu historial.
           </p>
         </main>
       ) : (
@@ -750,13 +867,13 @@ function App() {
             <div className='mb-5 flex items-center justify-between gap-4'>
               <h2 className='flex items-center gap-2 text-lg font-bold'>
                 <ShieldCheck size={19} />
-                Account
+                Cuenta
               </h2>
               <button
                 type='button'
                 onClick={() => setShowAccount(false)}
                 className='rounded-md p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700'
-                title='Close'
+                title='Cerrar'
               >
                 <X size={18} />
               </button>
@@ -764,26 +881,26 @@ function App() {
 
             {!account.isSupabaseConfigured ? (
               <div className='border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800'>
-                Supabase environment variables are required for accounts and AI work.
+                Faltan variables de Supabase para cuentas y respuestas con IA.
               </div>
             ) : account.authLoading ? (
               <div className='border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600'>
-                Checking account...
+                Revisando cuenta...
               </div>
             ) : account.session ? (
               <div className='space-y-5'>
                 <div className='space-y-2'>
                   <div className='flex items-center gap-2 text-xs font-bold uppercase text-slate-400'>
                     {account.isGuest ? <UserRound size={14} /> : <ShieldCheck size={14} />}
-                    {account.isGuest ? 'Guest trial' : 'Signed in'}
+                    {account.isGuest ? 'Prueba gratis' : 'Cuenta conectada'}
                   </div>
                   <div className='truncate text-base font-bold text-slate-950'>
                     {account.displayName}
                   </div>
                   <p className='text-sm leading-6 text-slate-600'>
                     {account.isGuest
-                      ? 'Translate now, then connect Google for more monthly AI access and personal Learning.'
-                      : 'Your free Flowtranslate account is connected.'}
+                      ? 'Responde ahora sin friccion. Conecta Google para conservar tono, historial y Learning personal.'
+                      : 'Tu cuenta gratis de Flowtranslate esta conectada.'}
                   </p>
                 </div>
 
@@ -809,7 +926,7 @@ function App() {
                     className='inline-flex h-11 w-full items-center justify-center gap-2 rounded-md bg-slate-950 text-sm font-bold text-white hover:bg-slate-800 disabled:bg-slate-300'
                   >
                     <Chrome size={16} />
-                    Connect with Google
+                    Conectar con Google
                   </button>
                 ) : null}
 
@@ -820,7 +937,7 @@ function App() {
                   className='inline-flex h-11 w-full items-center justify-center gap-2 rounded-md border border-slate-200 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:text-slate-300'
                 >
                   <LogOut size={16} />
-                  Sign out
+                  Cerrar sesion
                 </button>
               </div>
             ) : (
@@ -833,7 +950,7 @@ function App() {
                     className='inline-flex h-11 w-full items-center justify-center gap-2 rounded-md bg-slate-950 text-sm font-bold text-white hover:bg-slate-800 disabled:bg-slate-300'
                   >
                     <Chrome size={16} />
-                    Continue with Google
+                    Continuar con Google
                   </button>
                   <button
                     type='button'
@@ -842,7 +959,7 @@ function App() {
                     className='inline-flex h-11 w-full items-center justify-center gap-2 rounded-md border border-slate-200 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:text-slate-300'
                   >
                     <UserRound size={16} />
-                    Try guest trial
+                    Iniciar prueba gratis
                   </button>
                 </div>
 
@@ -865,7 +982,7 @@ function App() {
                   className='inline-flex h-11 w-full items-center justify-center gap-2 rounded-md border border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-50 disabled:text-slate-300'
                 >
                   <Mail size={16} />
-                  {showEmailSignIn ? 'Hide email code' : 'Use email code'}
+                  {showEmailSignIn ? 'Ocultar codigo por email' : 'Usar codigo por email'}
                 </button>
 
                 {showEmailSignIn ? (
@@ -887,7 +1004,7 @@ function App() {
                     {account.codeSent ? (
                       <label className='block'>
                         <span className='mb-2 block text-sm font-bold text-slate-700'>
-                          Code
+                          Codigo
                         </span>
                         <input
                           inputMode='numeric'
@@ -906,10 +1023,10 @@ function App() {
                       className='h-11 w-full rounded-md bg-slate-950 text-sm font-bold text-white hover:bg-slate-800 disabled:bg-slate-300'
                     >
                       {account.busy
-                        ? 'Checking'
+                        ? 'Revisando'
                         : account.codeSent
-                          ? 'Verify code'
-                          : 'Send code'}
+                          ? 'Verificar codigo'
+                          : 'Enviar codigo'}
                     </button>
 
                     {account.codeSent ? (
@@ -919,7 +1036,7 @@ function App() {
                         disabled={account.busy}
                         className='h-11 w-full rounded-md border border-slate-200 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:text-slate-300'
                       >
-                        Send a new code
+                        Enviar nuevo codigo
                       </button>
                     ) : null}
                   </form>

@@ -48,7 +48,7 @@ export const TranslatorPanel = ({
       <div className='min-w-0'>
         <h2 className='text-base font-bold text-slate-950'>{label}</h2>
         <p className='mt-1 text-xs font-semibold uppercase tracking-normal text-slate-500'>
-          {isSource ? 'Source' : 'Target'}
+          {isSource ? 'Origen' : 'Salida'}
         </p>
       </div>
       <TranslationActions
@@ -87,7 +87,7 @@ export const TranslatorPanel = ({
     />
 
     <div className='min-h-12 border-t border-slate-100 px-4 py-3 text-sm text-slate-500'>
-      {statusText || `${text.trim().length} characters`}
+      {statusText || `${text.trim().length} caracteres`}
     </div>
   </section>
 );

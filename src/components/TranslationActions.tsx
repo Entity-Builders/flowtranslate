@@ -38,8 +38,8 @@ export const TranslationActions = ({
             ? 'border border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-950'
             : 'border border-slate-100 text-slate-300'
         }`}
-        aria-label={isSpeaking ? 'Stop audio playback' : 'Listen to panel text'}
-        title={isSpeaking ? 'Stop audio playback' : 'Listen to panel text'}
+        aria-label={isSpeaking ? 'Detener audio' : 'Escuchar texto'}
+        title={isSpeaking ? 'Detener audio' : 'Escuchar texto'}
       >
         {isSpeaking ? <Square size={16} /> : <Volume2 size={17} />}
       </button>
@@ -60,11 +60,11 @@ export const TranslationActions = ({
         aria-label={
           canDictate
             ? isDictating
-              ? 'Stop microphone dictation'
-              : 'Start microphone dictation'
-            : 'Microphone dictation unavailable'
+              ? 'Detener dictado'
+              : 'Iniciar dictado'
+            : 'Dictado por microfono no disponible'
         }
-        title={canDictate ? 'Microphone dictation' : dictationUnavailableReason}
+        title={canDictate ? 'Dictado por microfono' : dictationUnavailableReason}
       >
         {canDictate ? <Mic size={17} /> : <MicOff size={17} />}
       </button>
@@ -79,11 +79,11 @@ export const TranslationActions = ({
           ? 'bg-slate-950 text-white hover:bg-slate-800'
           : 'bg-slate-100 text-slate-400'
       }`}
-      aria-label={copied ? 'Copy panel text copied' : 'Copy panel text'}
-      title='Copy panel text'
+      aria-label={copied ? 'Texto copiado' : 'Copiar texto'}
+      title='Copiar texto'
     >
       {copied ? <Check size={16} /> : <Copy size={16} />}
-      <span className='hidden sm:inline'>{copied ? 'Copied' : 'Copy'}</span>
+      <span className='hidden sm:inline'>{copied ? 'Copiado' : 'Copiar'}</span>
     </button>
   </div>
 );

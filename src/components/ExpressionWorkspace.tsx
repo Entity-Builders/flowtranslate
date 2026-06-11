@@ -1,7 +1,5 @@
 import {
-  EXPRESSION_MODE_LABELS,
   EXPRESSION_MODES,
-  LANGUAGE_LABELS,
   type ExpressionBreakdown,
   type ExpressionMode,
   type IntentDetectionResult,
@@ -56,15 +54,26 @@ type ExpressionWorkspaceProps = {
 };
 
 const modeDescriptions: Record<ExpressionMode, string> = {
-  translate_to_english: 'Your Spanish idea as natural English',
-  improve_english: 'Your English, cleaned up and more natural',
-  translate_to_spanish: 'Incoming English explained in Spanish',
+  translate_to_english: 'Tu idea en espanol como respuesta natural',
+  improve_english: 'Tu ingles, mas natural y claro',
+  translate_to_spanish: 'Entende un mensaje recibido',
+};
+
+const modeLabels: Record<ExpressionMode, string> = {
+  translate_to_english: 'Responder en ingles',
+  improve_english: 'Mejorar ingles',
+  translate_to_spanish: 'Entender en espanol',
+};
+
+const languageLabels: Record<LanguageCode, string> = {
+  es: 'Espanol',
+  en: 'Ingles',
 };
 
 const confidenceLabel: Record<IntentDetectionResult['confidence'], string> = {
-  high: 'high confidence',
-  medium: 'medium confidence',
-  low: 'needs confirmation',
+  high: 'alta confianza',
+  medium: 'confianza media',
+  low: 'necesita confirmacion',
 };
 
 const modeTone: Record<ExpressionMode, string> = {
@@ -75,23 +84,23 @@ const modeTone: Record<ExpressionMode, string> = {
 
 const resultPlaceholder = (mode: ExpressionMode) => {
   if (mode === 'translate_to_spanish') {
-    return 'Paste incoming English and choose “Explain in Spanish” to understand it.';
+    return 'Pega un mensaje en ingles y elegi "Entender en espanol" para verlo claro.';
   }
 
   if (mode === 'improve_english') {
-    return 'Your improved English will appear here.';
+    return 'Tu version mas natural en ingles va a aparecer aca.';
   }
 
-  return 'Your English expression will appear here.';
+  return 'Tu respuesta en ingles va a aparecer aca.';
 };
 
 const detectionCopy = (
   mode: ExpressionMode,
   detection: IntentDetectionResult,
 ) => {
-  const label = EXPRESSION_MODE_LABELS[mode];
-  if (!detection.automatic) return `Mode: ${label}`;
-  return `Detected ${label.toLowerCase()} with ${confidenceLabel[detection.confidence]}`;
+  const label = modeLabels[mode];
+  if (!detection.automatic) return `Modo: ${label}`;
+  return `Detectamos ${label.toLowerCase()} con ${confidenceLabel[detection.confidence]}`;
 };
 
 export const ExpressionWorkspace = ({
@@ -131,9 +140,9 @@ export const ExpressionWorkspace = ({
         <div className='border-b border-slate-100 px-3 py-3 sm:px-5'>
           <div className='flex flex-wrap items-center justify-between gap-3'>
             <div className='min-w-0'>
-              <h2 className='text-base font-black text-slate-950'>Expression input</h2>
+              <h2 className='text-base font-black text-slate-950'>Mensaje o idea</h2>
               <p className='mt-1 break-words text-xs font-semibold uppercase tracking-normal text-slate-500'>
-                {LANGUAGE_LABELS[sourceLanguage]} source
+                Origen en {languageLabels[sourceLanguage]}
               </p>
             </div>
             <TranslationActions
@@ -164,7 +173,7 @@ export const ExpressionWorkspace = ({
                 }`}
               >
                 <span className='block text-xs font-black leading-tight sm:text-sm'>
-                  {EXPRESSION_MODE_LABELS[item]}
+                  {modeLabels[item]}
                 </span>
                 <span className='mt-1 hidden break-words text-xs font-semibold opacity-75 sm:block'>
                   {modeDescriptions[item]}
@@ -183,10 +192,10 @@ export const ExpressionWorkspace = ({
               if (canTranslate) onTranslate();
             }
           }}
-          placeholder='Write Spanish to get English, or write English to improve it...'
+          placeholder='Pega un chat de trabajo, escribi tu idea en espanol, o mejora tu ingles...'
           className='min-h-36 w-full min-w-0 flex-1 resize-none break-words bg-transparent p-4 text-lg leading-relaxed text-slate-900 outline-none [overflow-wrap:anywhere] placeholder:text-slate-300 sm:p-5 sm:text-xl'
           spellCheck
-          aria-label='Expression input'
+          aria-label='Mensaje o idea'
         />
 
         <div className='flex min-h-14 flex-col items-stretch justify-between gap-3 border-t border-slate-100 px-3 py-3 text-sm text-slate-500 sm:flex-row sm:items-center sm:px-4'>
@@ -202,14 +211,14 @@ export const ExpressionWorkspace = ({
                 ? 'bg-slate-950 text-white hover:bg-slate-800'
                 : 'bg-slate-100 text-slate-400'
             }`}
-            title={canTranslate ? 'Generate expression' : translateDisabledReason}
+            title={canTranslate ? 'Generar respuesta' : translateDisabledReason}
           >
             {isTranslating ? (
               <Loader2 size={16} className='animate-spin' />
             ) : (
               <Sparkles size={16} />
             )}
-            {isTranslating ? 'Generating' : 'Generate'}
+            {isTranslating ? 'Generando' : 'Responder'}
           </button>
         </div>
       </div>
@@ -217,9 +226,9 @@ export const ExpressionWorkspace = ({
       <div className='flex min-h-[320px] min-w-0 max-w-full flex-col border border-slate-200 bg-white sm:min-h-[420px] lg:min-h-0 lg:overflow-y-auto'>
         <div className='flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-3 py-3 sm:px-5'>
           <div className='min-w-0'>
-            <h2 className='text-base font-black text-slate-950'>Result</h2>
+            <h2 className='text-base font-black text-slate-950'>Respuesta</h2>
             <p className='mt-1 text-xs font-semibold uppercase tracking-normal text-slate-500'>
-              {LANGUAGE_LABELS[targetLanguage]} output
+              Salida en {languageLabels[targetLanguage]}
             </p>
           </div>
           <div className='flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:justify-end'>
@@ -232,10 +241,10 @@ export const ExpressionWorkspace = ({
                   ? 'border-amber-200 bg-amber-50 text-amber-900 hover:bg-amber-100'
                   : 'border-slate-100 bg-slate-50 text-slate-300'
               }`}
-              title='Explain incoming English in Spanish'
+              title='Entender un mensaje en ingles'
             >
               <MessageSquareText size={16} />
-              Spanish
+              Espanol
             </button>
             <TranslationActions
               text={resultText}

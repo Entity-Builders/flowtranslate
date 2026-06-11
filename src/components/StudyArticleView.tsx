@@ -33,19 +33,19 @@ type StudyArticleViewProps = {
 };
 
 const languageLabel: Record<LanguageCode, string> = {
-  es: 'Spanish',
-  en: 'English',
+  es: 'Espanol',
+  en: 'Ingles',
 };
 
 const EmptyStudyArticle = () => (
   <div className='mx-auto w-full max-w-4xl rounded-lg border border-slate-200 bg-white p-5 shadow-sm'>
     <div className='flex items-center gap-2 text-base font-bold text-slate-950'>
       <BookOpen size={18} />
-      Study article
+      Articulo de estudio
     </div>
     <p className='mt-2 text-sm text-slate-500'>
-      Select a saved translation from History to open a grammar article based on
-      your own context.
+      Elegi una respuesta guardada del historial para abrir un articulo basado en
+      tu propio contexto.
     </p>
   </div>
 );
@@ -69,7 +69,7 @@ export const StudyArticleView = ({
   const translatedText = article?.translatedText || selectedRecord?.translatedText;
   const savedBreakdown = selectedRecord?.breakdown || null;
   const readingMinutes = article?.estimatedReadingMinutes;
-  const lessonLabel = article?.title || selectedRecord?.sourceText || 'Selected translation';
+  const lessonLabel = article?.title || selectedRecord?.sourceText || 'Respuesta seleccionada';
   const canListen = Boolean(sourceLanguage && sourceText && onListenPhrase);
 
   return (
@@ -80,30 +80,30 @@ export const StudyArticleView = ({
             type='button'
             onClick={onClose}
             className='inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-950'
-            aria-label='Back to Learning dashboard'
-            title='Back to Learning dashboard'
+            aria-label='Volver al panel de Learning'
+            title='Volver al panel de Learning'
           >
             <ArrowLeft size={17} />
           </button>
           <div className='min-w-0'>
             <h2 className='text-base font-black leading-none text-slate-950'>
-              Study Article
+              Articulo de estudio
             </h2>
             <p className='mt-1 truncate text-xs font-semibold text-slate-500'>
-              Lesson: {lessonLabel}
+              Leccion: {lessonLabel}
             </p>
           </div>
         </div>
         <div className='hidden shrink-0 flex-wrap items-center justify-end gap-2 text-xs font-bold uppercase tracking-normal text-slate-500 sm:flex'>
           {sourceLanguage && targetLanguage ? (
             <span className='rounded-md border border-slate-200 px-2 py-1'>
-              {languageLabel[sourceLanguage]} to {languageLabel[targetLanguage]}
+              {languageLabel[sourceLanguage]} a {languageLabel[targetLanguage]}
             </span>
           ) : null}
           {readingMinutes ? (
             <span className='inline-flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1'>
               <Clock3 size={13} />
-              {readingMinutes} min read
+              {readingMinutes} min lectura
             </span>
           ) : null}
         </div>
@@ -125,8 +125,8 @@ export const StudyArticleView = ({
                   type='button'
                   onClick={() => onListenPhrase?.(sourceLanguage, sourceText)}
                   className='inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-sky-100 text-sky-700 hover:bg-sky-200'
-                  aria-label='Listen to selected phrase'
-                  title='Listen to selected phrase'
+                  aria-label='Escuchar frase seleccionada'
+                  title='Escuchar frase seleccionada'
                 >
                   <Volume2 size={18} />
                 </button>
@@ -138,7 +138,7 @@ export const StudyArticleView = ({
 
               <div className='min-w-0 flex-1'>
                 <div className='text-xs font-black uppercase tracking-normal text-slate-400'>
-                  Selected phrase
+                  Frase seleccionada
                 </div>
                 <p className='mt-2 break-words text-2xl font-black leading-tight text-slate-950 md:text-3xl'>
                   {sourceText}
@@ -159,7 +159,7 @@ export const StudyArticleView = ({
               <div className='mt-4 flex flex-wrap items-center gap-2'>
                 <span className='inline-flex items-center gap-1 text-xs font-black uppercase tracking-normal text-slate-400'>
                   <Target size={13} />
-                  Focus
+                  Foco
                 </span>
                 {article.lessonFocus.map((focus) => (
                   <span
@@ -193,7 +193,7 @@ export const StudyArticleView = ({
         {loading ? (
           <div className='flex min-h-28 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white text-sm font-semibold text-slate-500 shadow-sm'>
             <Loader2 size={18} className='animate-spin' />
-            Generating study article
+            Generando articulo de estudio
           </div>
         ) : null}
 

@@ -37,15 +37,28 @@ type ExpressionBreakdownDetailsProps = {
 };
 
 const starterQuestions = [
-  'What if I said it more casually?',
-  'Can I use this in a call?',
-  'What changes if I use would?',
+  'Como sonaria mas casual?',
+  'Puedo usarlo en una llamada?',
+  'Que cambia si uso would?',
 ];
+
+const structureRoleLabel: Record<
+  NonNullable<ExpressionBreakdown['structure']>[number]['role'],
+  string
+> = {
+  subject: 'sujeto',
+  verb: 'verbo',
+  object: 'objeto',
+  complement: 'complemento',
+  modifier: 'modificador',
+  connector: 'conector',
+  other: 'otro',
+};
 
 export const ExpressionBreakdownDetails = ({
   breakdown,
   defaultOpen = false,
-  emptyDescription = 'Generate an expression to see tense, structure, and usage notes.',
+  emptyDescription = 'Genera una respuesta para ver tiempos, estructura y notas de uso.',
   withTopBorder = true,
   onAskQuestion,
 }: ExpressionBreakdownDetailsProps) => {
@@ -75,10 +88,10 @@ export const ExpressionBreakdownDetails = ({
         { role: 'assistant', content: answer },
       ]);
     } catch (error) {
-      setChatError(
+        setChatError(
         error instanceof Error
           ? error.message
-          : 'Could not answer this breakdown question.',
+          : 'No pudimos responder esta pregunta.',
       );
     } finally {
       setAsking(false);
@@ -93,7 +106,7 @@ export const ExpressionBreakdownDetails = ({
       >
         <summary className='flex cursor-pointer list-none items-center gap-2 text-sm font-bold text-slate-500'>
           <ChevronDown size={16} />
-          Spanish breakdown
+          Desglose
         </summary>
         <p className='mt-3 text-sm text-slate-500'>{emptyDescription}</p>
       </details>
@@ -114,10 +127,10 @@ export const ExpressionBreakdownDetails = ({
       <summary className='flex cursor-pointer list-none flex-wrap items-center justify-between gap-3 text-sm font-bold text-slate-700'>
         <span className='inline-flex min-w-0 items-center gap-2 break-words'>
           <ChevronDown size={16} className='shrink-0' />
-          Spanish breakdown
+          Desglose
         </span>
         <span className='inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1 text-xs font-bold text-slate-600'>
-          {breakdown.changed ? 'Adjusted' : 'Already natural'}
+          {breakdown.changed ? 'Ajustado' : 'Ya suena natural'}
         </span>
       </summary>
 
@@ -127,7 +140,7 @@ export const ExpressionBreakdownDetails = ({
             <div className='rounded-md border border-slate-200 bg-white p-3'>
               <div className='flex items-center gap-2 text-xs font-black uppercase tracking-normal text-slate-400'>
                 <CheckCircle2 size={14} />
-                Feedback
+                Comentarios
               </div>
               <ul className='mt-2 space-y-2 break-words text-sm leading-6 text-slate-700 [overflow-wrap:anywhere]'>
                 {breakdown.feedback.map((item) => (
@@ -155,7 +168,7 @@ export const ExpressionBreakdownDetails = ({
           {tenseNotes.length ? (
             <div className='rounded-md border border-slate-200 bg-white p-3'>
               <div className='text-xs font-black uppercase tracking-normal text-slate-400'>
-                {tenseNotes.length > 1 ? 'Tenses' : 'Tense'}
+                {tenseNotes.length > 1 ? 'Tiempos' : 'Tiempo'}
               </div>
               <div className='mt-2 space-y-2'>
                 {tenseNotes.map((tense, index) => (
@@ -189,7 +202,7 @@ export const ExpressionBreakdownDetails = ({
           {breakdown.structure?.length ? (
             <div className='rounded-md border border-slate-200 bg-white p-3'>
               <div className='text-xs font-black uppercase tracking-normal text-slate-400'>
-                Structure
+                Estructura
               </div>
               <div className='mt-3 flex flex-wrap gap-2'>
                 {breakdown.structure.map((part, index) => (
@@ -202,7 +215,7 @@ export const ExpressionBreakdownDetails = ({
                       {part.text}
                     </span>
                     <span className='mt-1 font-semibold opacity-70'>
-                      {part.role}
+                      {structureRoleLabel[part.role]}
                     </span>
                   </span>
                 ))}
@@ -213,7 +226,7 @@ export const ExpressionBreakdownDetails = ({
           {breakdown.alternatives?.length ? (
             <div className='rounded-md border border-slate-200 bg-white p-3'>
               <div className='text-xs font-black uppercase tracking-normal text-slate-400'>
-                Alternatives
+                Alternativas
               </div>
               <div className='mt-2 space-y-2'>
                 {breakdown.alternatives.map((alternative) => (
@@ -236,7 +249,7 @@ export const ExpressionBreakdownDetails = ({
         <div className='mt-4 rounded-md border border-slate-200 bg-slate-50 p-3'>
           <div className='flex items-center gap-2 text-xs font-black uppercase tracking-normal text-slate-500'>
             <MessageCircleQuestion size={15} />
-            Ask about this breakdown
+            Preguntar sobre este desglose
           </div>
 
           {messages.length ? (
@@ -257,7 +270,7 @@ export const ExpressionBreakdownDetails = ({
                         : 'text-slate-400'
                     }`}
                   >
-                    {message.role === 'user' ? 'You' : 'Tutor'}
+                    {message.role === 'user' ? 'Vos' : 'Tutor'}
                   </div>
                   {message.content}
                 </div>
@@ -296,15 +309,15 @@ export const ExpressionBreakdownDetails = ({
               value={question}
               onChange={(event) => setQuestion(event.target.value)}
               disabled={asking}
-              aria-label='Ask about this breakdown'
-              placeholder='Ask why, compare another phrasing...'
+              aria-label='Preguntar sobre este desglose'
+              placeholder='Pregunta por que, compara otra frase...'
               className='min-w-0 flex-1 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100 disabled:bg-slate-100'
             />
             <button
               type='submit'
               disabled={!question.trim() || asking}
-              aria-label='Send breakdown question'
-              title='Send breakdown question'
+              aria-label='Enviar pregunta del desglose'
+              title='Enviar pregunta del desglose'
               className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md transition ${
                 question.trim() && !asking
                   ? 'bg-slate-950 text-white hover:bg-slate-800'

@@ -49,7 +49,7 @@ type LearningViewProps = {
 };
 
 const formatDate = (value: string) =>
-  new Intl.DateTimeFormat('en', {
+  new Intl.DateTimeFormat('es', {
     month: 'short',
     day: '2-digit',
     hour: '2-digit',
@@ -58,12 +58,12 @@ const formatDate = (value: string) =>
 
 const formatDirection = (
   record: Pick<TranslationRecord, 'sourceLanguage' | 'targetLanguage'>,
-) => `${record.sourceLanguage.toUpperCase()} to ${record.targetLanguage.toUpperCase()}`;
+) => `${record.sourceLanguage.toUpperCase()} a ${record.targetLanguage.toUpperCase()}`;
 
 const modeLabel: Record<ExpressionMode, string> = {
-  translate_to_english: 'Spanish to English',
-  improve_english: 'Improved English',
-  translate_to_spanish: 'English to Spanish',
+  translate_to_english: 'Espanol a ingles',
+  improve_english: 'Ingles mejorado',
+  translate_to_spanish: 'Ingles a espanol',
 };
 
 const formatRecordLabel = (record: TranslationRecord) =>
@@ -171,12 +171,12 @@ export const LearningView = ({
             <div>
               <h2 className='flex items-center gap-2 text-base font-bold text-slate-950'>
                 <BookOpen size={18} />
-                History
+                Historial
               </h2>
               <p className='mt-1 text-sm text-slate-500'>
                 {history.length
-                  ? `${Math.min(history.length, MAX_LEARNING_HISTORY)} recent records feed Learning`
-                  : 'Saved expressions will appear here'}
+                  ? `${Math.min(history.length, MAX_LEARNING_HISTORY)} respuestas recientes alimentan Learning`
+                  : 'Tus respuestas guardadas van a aparecer aca'}
               </p>
             </div>
             <button
@@ -184,7 +184,7 @@ export const LearningView = ({
               onClick={onClear}
               disabled={history.length === 0}
               className='inline-flex h-9 items-center justify-center rounded-md border border-slate-200 px-2 text-slate-500 transition-colors hover:text-rose-600 disabled:text-slate-300'
-              title='Clear all history'
+              title='Limpiar historial'
             >
               <Trash2 size={16} />
             </button>
@@ -194,7 +194,7 @@ export const LearningView = ({
         <div className='min-h-0 flex-1 overflow-y-auto p-2'>
           {history.length === 0 ? (
             <div className='p-4 text-sm text-slate-500'>
-              Save a few real expressions, then come back for contextual learning.
+              Guarda algunas respuestas reales y volve para aprender desde tu contexto.
             </div>
           ) : (
             history.map((record) => (
@@ -222,7 +222,7 @@ export const LearningView = ({
                   </p>
                   <span className='mt-3 inline-flex items-center gap-2 text-xs font-semibold text-slate-700'>
                     <BookOpen size={13} />
-                    Study
+                    Estudiar
                   </span>
                 </button>
                 <div className='mt-2 flex flex-wrap items-center gap-3'>
@@ -232,7 +232,7 @@ export const LearningView = ({
                     className='inline-flex items-center gap-2 text-xs font-semibold text-slate-500 hover:text-rose-600'
                   >
                     <Trash2 size={13} />
-                    Delete
+                    Borrar
                   </button>
                 </div>
               </article>
@@ -245,14 +245,14 @@ export const LearningView = ({
         <div className='border border-slate-200 bg-white p-4'>
           <div className='mb-4 flex flex-wrap items-center justify-between gap-3'>
             <div className='min-w-0'>
-              <h2 className='text-base font-bold text-slate-950'>Learning dashboard</h2>
+              <h2 className='text-base font-bold text-slate-950'>Panel de Learning</h2>
               <p className='mt-1 text-sm text-slate-500'>
-                Personal signals from your saved writing and daily conversations.
+                Senales personales desde tus textos guardados y conversaciones reales.
               </p>
             </div>
             <div className='inline-flex items-center gap-2 rounded-md bg-slate-100 px-3 py-2 text-sm font-bold text-slate-700'>
               <Lightbulb size={16} />
-              {metrics.uniqueContextCount} learning signals
+              {metrics.uniqueContextCount} senales de aprendizaje
             </div>
           </div>
 
@@ -260,46 +260,46 @@ export const LearningView = ({
             <article className='border border-slate-100 p-3'>
               <div className='flex items-center gap-2 text-xs font-bold uppercase tracking-normal text-slate-400'>
                 <BookOpen size={15} />
-                Saved expressions
+                Respuestas guardadas
               </div>
               <div className='mt-3 text-3xl font-black text-slate-950'>
                 {metrics.totalRecords}
               </div>
               <p className='mt-1 text-sm text-slate-500'>
-                {metrics.uniqueContextCount}/{MAX_LEARNING_HISTORY} recent context slots
+                {metrics.uniqueContextCount}/{MAX_LEARNING_HISTORY} lugares de contexto reciente
               </p>
             </article>
 
             <article className='border border-slate-100 p-3'>
               <div className='flex items-center gap-2 text-xs font-bold uppercase tracking-normal text-slate-400'>
                 <Repeat2 size={15} />
-                Reused words
+                Palabras repetidas
               </div>
               <div className='mt-3 text-3xl font-black text-slate-950'>
                 {metrics.reusedWordTotal}
               </div>
               <p className='mt-1 text-sm text-slate-500'>
-                {metrics.reusedWords[0]?.value || 'No repeat pattern yet'}
+                {metrics.reusedWords[0]?.value || 'Todavia no hay patrones repetidos'}
               </p>
             </article>
 
             <article className='border border-slate-100 p-3'>
               <div className='flex items-center gap-2 text-xs font-bold uppercase tracking-normal text-slate-400'>
                 <TrendingUp size={15} />
-                Repeated phrases
+                Frases repetidas
               </div>
               <div className='mt-3 text-3xl font-black text-slate-950'>
                 {metrics.repeatedPhraseTotal}
               </div>
               <p className='mt-1 text-sm text-slate-500'>
-                {metrics.repeatedPhrases[0]?.value || 'Building phrase memory'}
+                {metrics.repeatedPhrases[0]?.value || 'Construyendo memoria de frases'}
               </p>
             </article>
 
             <article className='border border-slate-100 p-3'>
               <div className='flex items-center gap-2 text-xs font-bold uppercase tracking-normal text-slate-400'>
                 <Languages size={15} />
-                Direction mix
+                Direcciones
               </div>
               <div className='mt-3 text-3xl font-black text-slate-950'>
                 {primaryDirection ? `${primaryDirection.percentage}%` : '0%'}
@@ -307,14 +307,14 @@ export const LearningView = ({
               <p className='mt-1 text-sm text-slate-500'>
                 {primaryDirection
                   ? formatDirection(primaryDirection)
-                  : 'No expressions yet'}
+                  : 'Todavia no hay respuestas'}
               </p>
             </article>
           </div>
 
           {metrics.uniqueContextCount === 0 ? (
             <div className='mt-4 border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600'>
-              Save a few real phrases to unlock personal vocabulary signals.
+              Guarda algunas frases reales para desbloquear senales de vocabulario personal.
             </div>
           ) : null}
         </div>
@@ -323,10 +323,10 @@ export const LearningView = ({
           <div className='mb-4 flex flex-wrap items-center justify-between gap-3'>
             <div className='min-w-0'>
               <h2 className='text-base font-bold text-slate-950'>
-                Useful English from your history
+                Ingles util desde tu historial
               </h2>
               <p className='mt-1 text-sm text-slate-500'>
-                Reusable expressions, tone notes, and next-time phrasing from real context.
+                Frases reutilizables, notas de tono y mejores formas para la proxima vez.
               </p>
             </div>
             <button
@@ -344,7 +344,7 @@ export const LearningView = ({
               ) : (
                 <RefreshCw size={16} />
               )}
-              {insightLoading ? 'Refreshing' : 'Refresh'}
+              {insightLoading ? 'Actualizando' : 'Actualizar'}
             </button>
           </div>
 
@@ -358,14 +358,14 @@ export const LearningView = ({
           {insightLoading && !learningInsight ? (
             <div className='flex min-h-24 items-center justify-center gap-2 border border-slate-100 bg-slate-50 text-sm font-semibold text-slate-500'>
               <Loader2 size={17} className='animate-spin' />
-              Loading learning insights
+              Cargando senales de Learning
             </div>
           ) : null}
 
           {!insightLoading && !learningInsight ? (
             <div className='border border-slate-100 bg-slate-50 p-4 text-sm leading-6 text-slate-500'>
-              Saved history unlocks practical English insights. Keep translating real
-              messages and refresh when you want a new snapshot.
+              Tu historial guardado desbloquea aprendizajes practicos. Segui
+              usando mensajes reales y actualiza cuando quieras una nueva lectura.
             </div>
           ) : null}
 
@@ -379,16 +379,16 @@ export const LearningView = ({
 
               <div className='grid gap-4 xl:grid-cols-2'>
                 <InsightItems
-                  title='From your writing'
+                  title='Desde lo que escribis'
                   icon='writing'
                   items={learningInsight.writingItems}
-                  emptyText='Spanish-to-English and improved-English records will shape this group.'
+                  emptyText='Tus respuestas en ingles y mejoras de ingles van a formar este grupo.'
                 />
                 <InsightItems
-                  title='From conversations'
+                  title='Desde conversaciones'
                   icon='conversation'
                   items={learningInsight.conversationItems}
-                  emptyText='Incoming English that you explain in Spanish will shape this group.'
+                  emptyText='Los mensajes en ingles que entiendas en espanol van a formar este grupo.'
                 />
               </div>
             </div>
@@ -398,12 +398,12 @@ export const LearningView = ({
         <section className='border border-slate-200 bg-white p-4'>
           <div className='mb-3 flex items-center gap-2'>
             <Clock size={17} className='text-slate-400' />
-            <h2 className='text-base font-bold text-slate-950'>Recent context</h2>
+            <h2 className='text-base font-bold text-slate-950'>Contexto reciente</h2>
           </div>
           <div className='grid gap-3 md:grid-cols-2'>
             {metrics.recentContexts.length === 0 ? (
               <p className='text-sm text-slate-500'>
-                Recent saved expressions will appear here.
+                Tus respuestas guardadas recientes van a aparecer aca.
               </p>
             ) : (
               metrics.recentContexts.map((record) => (

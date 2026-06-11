@@ -1,7 +1,7 @@
 {
   "name": "flowtranslate",
   "short_name": "flowtranslate",
-  "description": "Bidirectional Spanish and English translation with account-backed learning practice.",
+  "description": "Respondé mejor en inglés en chats de trabajo y aprendé desde tus conversaciones reales.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

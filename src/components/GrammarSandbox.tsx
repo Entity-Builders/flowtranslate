@@ -11,15 +11,15 @@ export const GrammarSandbox = ({ sandbox }: GrammarSandboxProps) => {
   return (
     <section
       className='space-y-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm'
-      aria-label='Grammar Sandbox'
+      aria-label='Practica de gramatica'
     >
       <div className='flex items-center gap-2'>
         <FlaskConical size={16} className='text-slate-400' />
         <span className='text-xs font-black uppercase tracking-normal text-slate-400'>
-          Grammar Sandbox
+          Practica de gramatica
         </span>
         <span className='ml-auto text-xs text-slate-400'>
-          What if you change one thing?
+          Que pasa si cambias una cosa?
         </span>
       </div>
 

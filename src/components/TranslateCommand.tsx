@@ -1,5 +1,4 @@
 import {
-  LANGUAGE_LABELS,
   type LanguageCode,
 } from '@eb-packages/flowtranslate-core';
 import { ArrowLeft, ArrowRight, Loader2 } from 'lucide-react';
@@ -14,6 +13,11 @@ type TranslateCommandProps = {
   onTranslate: () => void;
 };
 
+const languageLabels: Record<LanguageCode, string> = {
+  es: 'Espanol',
+  en: 'Ingles',
+};
+
 export const TranslateCommand = ({
   sourceLanguage,
   targetLanguage,
@@ -23,16 +27,16 @@ export const TranslateCommand = ({
   hasPendingChanges,
   onTranslate,
 }: TranslateCommandProps) => {
-  const sourceLabel = LANGUAGE_LABELS[sourceLanguage];
-  const targetLabel = LANGUAGE_LABELS[targetLanguage];
+  const sourceLabel = languageLabels[sourceLanguage];
+  const targetLabel = languageLabels[targetLanguage];
   const DirectionIcon = sourceLanguage === 'es' ? ArrowRight : ArrowLeft;
   const isTranslating = status === 'translating';
   const helperText = isTranslating
-    ? 'Working'
+    ? 'Generando'
     : canTranslate
       ? hasPendingChanges
-        ? 'Ready'
-        : 'Current'
+        ? 'Listo'
+        : 'Actualizado'
       : disabledReason;
 
   return (
@@ -47,10 +51,10 @@ export const TranslateCommand = ({
               ? 'bg-slate-950 text-white hover:bg-slate-800'
               : 'bg-slate-200 text-slate-500'
           }`}
-          aria-label={`Translate ${sourceLabel} to ${targetLabel}`}
+          aria-label={`Generar de ${sourceLabel} a ${targetLabel}`}
           title={
             canTranslate
-              ? `Translate ${sourceLabel} to ${targetLabel}`
+              ? `Generar de ${sourceLabel} a ${targetLabel}`
               : disabledReason
           }
         >
@@ -59,9 +63,9 @@ export const TranslateCommand = ({
           ) : (
             <DirectionIcon size={18} />
           )}
-          <span>{isTranslating ? 'Translating' : 'Translate'}</span>
+          <span>{isTranslating ? 'Generando' : 'Generar'}</span>
           <span className='text-xs font-semibold opacity-80'>
-            {sourceLanguage.toUpperCase()} to {targetLanguage.toUpperCase()}
+            {sourceLanguage.toUpperCase()} a {targetLanguage.toUpperCase()}
           </span>
         </button>
         <p className='min-h-4 max-w-full truncate text-center text-xs font-semibold text-slate-500'>

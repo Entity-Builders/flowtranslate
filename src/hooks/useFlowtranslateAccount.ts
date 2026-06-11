@@ -75,7 +75,7 @@ export const useFlowtranslateAccount = () => {
       analytics.track('auth_code_request_blocked', {
         reason: 'supabase_not_configured',
       });
-      setError('Supabase is not configured for this environment.');
+      setError('Supabase no esta configurado en este entorno.');
       return;
     }
 
@@ -84,7 +84,7 @@ export const useFlowtranslateAccount = () => {
       analytics.track('auth_code_request_blocked', {
         reason: 'missing_email',
       });
-      setError('Enter an email address to continue.');
+      setError('Ingresa un email para continuar.');
       return;
     }
 
@@ -114,7 +114,7 @@ export const useFlowtranslateAccount = () => {
     });
     setCodeSent(true);
     setCode('');
-    setMessage('Check your email and enter the code here.');
+    setMessage('Revisa tu email e ingresa el codigo aca.');
   };
 
   const verifyCode = async () => {
@@ -125,7 +125,7 @@ export const useFlowtranslateAccount = () => {
       analytics.track('auth_code_verification_blocked', {
         reason: 'supabase_not_configured',
       });
-      setError('Supabase is not configured for this environment.');
+      setError('Supabase no esta configurado en este entorno.');
       return;
     }
 
@@ -134,7 +134,7 @@ export const useFlowtranslateAccount = () => {
       analytics.track('auth_code_verification_blocked', {
         reason: 'missing_credentials',
       });
-      setError('Enter the email and code.');
+      setError('Ingresa el email y el codigo.');
       return;
     }
 
@@ -161,7 +161,7 @@ export const useFlowtranslateAccount = () => {
     analytics.track('auth_code_verification_succeeded', {
       method: 'email_otp',
     });
-    setMessage('Signed in.');
+    setMessage('Cuenta conectada.');
     setCode('');
     setCodeSent(false);
   };
@@ -193,7 +193,7 @@ export const useFlowtranslateAccount = () => {
         reason: 'supabase_not_configured',
         source,
       });
-      setError('Supabase is not configured for this environment.');
+      setError('Supabase no esta configurado en este entorno.');
       return;
     }
 
@@ -227,7 +227,7 @@ export const useFlowtranslateAccount = () => {
     });
     setCode('');
     setCodeSent(false);
-    setMessage(source === 'manual' ? 'Guest trial is ready.' : '');
+    setMessage(source === 'manual' ? 'Tu prueba gratis esta lista.' : '');
   }, []);
 
   const signInWithGoogle = async () => {
@@ -239,7 +239,7 @@ export const useFlowtranslateAccount = () => {
         provider: 'google',
         reason: 'supabase_not_configured',
       });
-      setError('Supabase is not configured for this environment.');
+      setError('Supabase no esta configurado en este entorno.');
       return;
     }
 
@@ -284,8 +284,8 @@ export const useFlowtranslateAccount = () => {
     });
     setMessage(
       accountKind === 'guest'
-        ? 'Finish with Google to connect this guest trial.'
-        : 'Continue with Google to finish signing in.',
+        ? 'Termina con Google para conectar esta prueba gratis.'
+        : 'Continua con Google para terminar el inicio de sesion.',
     );
   };
 
@@ -307,7 +307,7 @@ export const useFlowtranslateAccount = () => {
     accessToken: session?.access_token || '',
     userEmail: session?.user.email || '',
     displayName:
-      accountKind === 'guest' ? 'Guest trial' : session?.user.email || 'Account',
+      accountKind === 'guest' ? 'Prueba gratis' : session?.user.email || 'Cuenta',
     accountKind,
     isGuest: accountKind === 'guest',
     isPermanent: accountKind === 'permanent',

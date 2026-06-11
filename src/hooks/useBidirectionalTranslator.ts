@@ -80,6 +80,9 @@ const translationAnalyticsProperties = (
   };
 };
 
+const isConversationReplyMode = (mode: ExpressionMode) =>
+  mode !== 'translate_to_spanish';
+
 const fallbackDetection = (mode: ExpressionMode): IntentDetectionResult => ({
   mode,
   confidence: 'low',
@@ -189,14 +192,14 @@ export const useBidirectionalTranslator = ({
           trigger,
         );
         setStatus('offline');
-        setMessage('Offline. Existing text stays readable; new AI work needs a connection.');
+        setMessage('Estas offline. El texto queda visible, pero la IA necesita conexion.');
         return;
       }
 
       if (!accessToken) {
         if (authPending) {
           setStatus('typing');
-          setMessage('Starting guest trial...');
+          setMessage('Preparando tu prueba gratis...');
           setHasPendingChanges(true);
           return;
         }
@@ -209,7 +212,7 @@ export const useBidirectionalTranslator = ({
           trigger,
         );
         setStatus('auth');
-        setMessage('Sign in to translate and save history.');
+        setMessage('Conecta tu cuenta para guardar progreso y seguir.');
         return;
       }
 
@@ -230,7 +233,7 @@ export const useBidirectionalTranslator = ({
           reuse_source: 'client_current_result',
         });
         setStatus('idle');
-        setMessage('Already current.');
+        setMessage('Ya esta actualizado.');
         setHasPendingChanges(false);
         return;
       }
@@ -243,7 +246,7 @@ export const useBidirectionalTranslator = ({
       inFlightKeyRef.current = requestKey;
       lastBlockedAnalyticsKeyRef.current = '';
       setStatus('translating');
-      setMessage('Generating...');
+      setMessage('Generando respuesta...');
       analytics.track('translation_submitted', {
         ...translationAnalyticsProperties(
           nextMode,
@@ -252,6 +255,16 @@ export const useBidirectionalTranslator = ({
           trigger,
         ),
       });
+      if (isConversationReplyMode(nextMode)) {
+        analytics.track('conversation_reply_requested', {
+          ...translationAnalyticsProperties(
+            nextMode,
+            trimmedSource,
+            nextPresetId,
+            trigger,
+          ),
+        });
+      }
 
       try {
         const result = await generateTranslation(
@@ -289,7 +302,11 @@ export const useBidirectionalTranslator = ({
         setBreakdown(nextBreakdown);
         lastCompletedKeyRef.current = requestKey;
         setStatus('idle');
-        setMessage(result.usage.charged ? 'Saved to history.' : 'Reused saved expression.');
+        setMessage(
+          result.usage.charged
+            ? 'Guardado en tu historial.'
+            : 'Reusamos una respuesta guardada.',
+        );
         setHasPendingChanges(false);
         onUsage(result.usage);
         onSavedTranslation({
@@ -321,6 +338,21 @@ export const useBidirectionalTranslator = ({
           used_this_month: result.usage.usedThisMonth,
           remaining_quota: result.usage.remainingThisMonth,
         });
+        if (isConversationReplyMode(responseMode)) {
+          analytics.track('conversation_reply_generated', {
+            ...translationAnalyticsProperties(
+              responseMode,
+              trimmedSource,
+              nextPresetId,
+              trigger,
+            ),
+            output_chars: result.text.trim().length,
+            latency_ms: elapsedMs(startedAt),
+            charged: result.usage.charged,
+            reused: !result.usage.charged,
+            remaining_quota: result.usage.remainingThisMonth,
+          });
+        }
       } catch (error) {
         if (error instanceof FlowtranslateApiError) {
           if (error.usage) onUsage(error.usage);
@@ -368,7 +400,7 @@ export const useBidirectionalTranslator = ({
           error_type: 'exception',
         });
         setStatus('error');
-        setMessage(error instanceof Error ? error.message : 'Expression generation failed.');
+        setMessage(error instanceof Error ? error.message : 'No pudimos generar la respuesta.');
       } finally {
         if (inFlightKeyRef.current === requestKey) inFlightKeyRef.current = '';
       }
@@ -416,14 +448,14 @@ export const useBidirectionalTranslator = ({
           trigger,
         );
         setStatus('offline');
-        setMessage('Offline. Existing text stays readable; new AI work needs a connection.');
+        setMessage('Estas offline. El texto queda visible, pero la IA necesita conexion.');
         return;
       }
 
       if (!accessToken) {
         if (authPending) {
           setStatus('typing');
-          setMessage('Starting guest trial...');
+          setMessage('Preparando tu prueba gratis...');
           return;
         }
 
@@ -435,7 +467,7 @@ export const useBidirectionalTranslator = ({
           trigger,
         );
         setStatus('auth');
-        setMessage('Sign in to translate and save history.');
+        setMessage('Conecta tu cuenta para guardar progreso y seguir.');
         return;
       }
 
@@ -447,7 +479,7 @@ export const useBidirectionalTranslator = ({
 
       if (requestKey === lastCompletedKeyRef.current) {
         setStatus('idle');
-        setMessage('Already current.');
+        setMessage('Ya esta actualizado.');
         setHasPendingChanges(false);
         return;
       }
@@ -467,14 +499,14 @@ export const useBidirectionalTranslator = ({
         setStatus('typing');
         setMessage(
           detection.reason === 'ambiguous'
-            ? 'Choose a mode to generate this short text.'
-            : 'Choose a mode for this mixed text.',
+            ? 'Elegi un modo para generar este texto corto.'
+            : 'Elegi un modo para este texto mezclado.',
         );
         return;
       }
 
       setStatus('typing');
-      setMessage('Auto-generating after a short pause...');
+      setMessage('Genero despues de una pausa corta...');
       timerRef.current = window.setTimeout(() => {
         timerRef.current = null;
         void runTranslation(nextMode, trimmedSource, nextPresetId, trigger);
@@ -600,15 +632,15 @@ export const useBidirectionalTranslator = ({
     status !== 'translating';
 
   const translateDisabledReason = !activeSourceText
-    ? 'Add text to generate.'
+    ? 'Agrega texto para responder.'
     : !online
-      ? 'Offline. New AI work needs a connection.'
+      ? 'Estas offline. La IA necesita conexion.'
       : !accessToken
         ? authPending
-          ? 'Starting guest trial...'
-          : 'Sign in to translate and save history.'
+          ? 'Preparando tu prueba gratis...'
+          : 'Conecta tu cuenta para guardar progreso y seguir.'
         : status === 'translating'
-          ? 'Generation in progress.'
+          ? 'Generacion en curso.'
           : '';
 
   const direction = createExpressionDirection(mode);

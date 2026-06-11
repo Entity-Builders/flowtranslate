@@ -17,16 +17,16 @@ const formatResetDate = (resetAt: string) =>
   }).format(new Date(resetAt));
 
 const getUsageLabel = (usage: UsageSnapshot | null) => {
-  if (!usage) return 'AI help ready';
-  if (usage.remainingThisMonth <= 0) return 'Monthly limit reached';
+  if (!usage) return 'Ayuda de IA lista';
+  if (usage.remainingThisMonth <= 0) return 'Llegaste al limite mensual';
 
   const ratio = usage.monthlyQuota > 0
     ? usage.remainingThisMonth / usage.monthlyQuota
     : 0;
 
-  if (ratio <= 0.2) return 'Running low';
-  if (ratio <= 0.6) return 'Some AI help left';
-  return 'Plenty of AI help left';
+  if (ratio <= 0.2) return 'Te queda poco';
+  if (ratio <= 0.6) return 'Todavia tenes ayuda disponible';
+  return 'Tenes bastante ayuda disponible';
 };
 
 export const QuotaStatus = ({
@@ -36,10 +36,10 @@ export const QuotaStatus = ({
 }: QuotaStatusProps) => {
   const planLabel =
     accountKind === 'guest'
-      ? 'Guest trial'
+      ? 'Prueba gratis'
       : accountKind === 'permanent'
-        ? 'Free plan'
-        : 'AI access';
+        ? 'Cuenta gratis'
+        : 'Acceso IA';
   const label = getUsageLabel(usage);
   const percentRemaining = usage
     ? clampPercent(
@@ -70,7 +70,7 @@ export const QuotaStatus = ({
           {!compact ? (
             <div className='mt-0.5 truncate text-xs text-slate-500'>
               {planLabel}
-              {usage ? ` - renews ${formatResetDate(usage.resetAt)}` : ''}
+              {usage ? ` - se renueva ${formatResetDate(usage.resetAt)}` : ''}
             </div>
           ) : null}
         </div>
@@ -86,12 +86,12 @@ export const QuotaStatus = ({
           </div>
           {usage ? (
             <div className='mt-2 text-xs text-slate-500'>
-              Technical limit: {usage.remainingThisMonth.toLocaleString()} of{' '}
-              {usage.monthlyQuota.toLocaleString()} monthly AI tokens left.
+              Detalle tecnico: quedan {usage.remainingThisMonth.toLocaleString()} de{' '}
+              {usage.monthlyQuota.toLocaleString()} creditos mensuales de IA.
             </div>
           ) : (
             <div className='mt-2 text-xs text-slate-500'>
-              Usage details appear after the next AI request.
+              El detalle aparece despues de tu proxima respuesta con IA.
             </div>
           )}
         </div>

@@ -14,7 +14,7 @@ const TONE_COLORS: Record<VibeCheck['tone'], { bar: string; badge: string; text:
   professional: {
     bar: 'bg-blue-500',
     badge: 'bg-blue-50 text-blue-700 border-blue-200',
-    text: 'Professional',
+    text: 'Profesional',
   },
   neutral: {
     bar: 'bg-violet-400',
@@ -29,7 +29,7 @@ const TONE_COLORS: Record<VibeCheck['tone'], { bar: string; badge: string; text:
   slang: {
     bar: 'bg-rose-400',
     badge: 'bg-rose-50 text-rose-700 border-rose-200',
-    text: 'Slang / Informal',
+    text: 'Informal',
   },
 };
 
@@ -41,12 +41,12 @@ export const VibeCheckCard = ({ vibeCheck }: VibeCheckCardProps) => {
   return (
     <section
       className='space-y-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm'
-      aria-label='Vibe Check'
+      aria-label='Chequeo de tono'
     >
       <div className='flex items-center gap-2'>
         <Gauge size={16} className='text-slate-400' />
         <span className='text-xs font-black uppercase tracking-normal text-slate-400'>
-          Vibe Check
+          Chequeo de tono
         </span>
         <span
           className={`ml-auto inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-bold ${colors.badge}`}
@@ -58,7 +58,7 @@ export const VibeCheckCard = ({ vibeCheck }: VibeCheckCardProps) => {
         </span>
       </div>
 
-      <div aria-label={`Tone score: ${vibeCheck.score} out of 10`}>
+      <div aria-label={`Puntaje de tono: ${vibeCheck.score} de 10`}>
         <div className='mb-1 flex justify-between text-[10px] font-semibold text-slate-400'>
           <span>Formal</span>
           <span>Casual</span>

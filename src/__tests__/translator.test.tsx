@@ -21,17 +21,17 @@ describe('translator UI', () => {
   it('renders one expression input and one result surface as the primary view', () => {
     render(<App />);
 
-    expect(screen.getByRole('heading', { name: 'Expression input' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Result' })).toBeInTheDocument();
-    expect(screen.getByLabelText('Expression input')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Mensaje o idea' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Respuesta' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Mensaje o idea')).toBeInTheDocument();
     expect(
-      screen.getByRole('button', { name: /translate to english/i }),
+      screen.getByRole('button', { name: /responder en ingles/i }),
     ).toHaveAttribute('aria-pressed', 'true');
     expect(
-      screen.getByRole('button', { name: /improve english/i }),
+      screen.getByRole('button', { name: /mejorar ingles/i }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole('button', { name: /explain in spanish/i }),
+      screen.getByRole('button', { name: /entender en espanol/i }),
     ).toBeInTheDocument();
   });
 
@@ -47,7 +47,7 @@ describe('translator UI', () => {
       }),
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /learning/i }));
+    fireEvent.click(screen.getByRole('button', { name: /aprender/i }));
 
     expect(analyticsScreen).toHaveBeenCalledWith(
       'learning',
@@ -62,14 +62,14 @@ describe('translator UI', () => {
   it('detects English as improvement while keeping the Spanish action available', () => {
     render(<App />);
 
-    fireEvent.change(screen.getByLabelText('Expression input'), {
+    fireEvent.change(screen.getByLabelText('Mensaje o idea'), {
       target: { value: 'I need help with this task' },
     });
 
     expect(
-      screen.getByRole('button', { name: /improve english/i }),
+      screen.getByRole('button', { name: /mejorar ingles/i }),
     ).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('button', { name: /^Spanish$/i })).toBeEnabled();
-    expect(screen.getAllByRole('button', { name: /copy/i }).length).toBe(2);
+    expect(screen.getByRole('button', { name: /^Espanol$/i })).toBeEnabled();
+    expect(screen.getAllByRole('button', { name: /copiar texto/i }).length).toBe(2);
   });
 });

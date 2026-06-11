@@ -81,7 +81,7 @@ export const speakText = ({
   utterance.voice = selectVoice(language);
   utterance.onend = onEnd;
   utterance.onerror = () => {
-    onError('Audio playback is unavailable in this browser.');
+    onError('La reproduccion de audio no esta disponible en este navegador.');
   };
 
   window.speechSynthesis.speak(utterance);
@@ -90,11 +90,11 @@ export const speakText = ({
 
 const dictationErrorMessage = (error?: string) => {
   if (error === 'not-allowed' || error === 'service-not-allowed') {
-    return 'Microphone permission was denied.';
+    return 'El permiso del microfono fue rechazado.';
   }
-  if (error === 'no-speech') return 'No speech was detected.';
-  if (error === 'audio-capture') return 'No microphone was found.';
-  return 'Microphone dictation stopped unexpectedly.';
+  if (error === 'no-speech') return 'No se detecto voz.';
+  if (error === 'audio-capture') return 'No encontramos un microfono.';
+  return 'El dictado por microfono se detuvo inesperadamente.';
 };
 
 export const startDictation = ({
@@ -133,7 +133,7 @@ export const startDictation = ({
   try {
     recognition.start();
   } catch {
-    onError('Microphone dictation could not start.');
+    onError('No pudimos iniciar el dictado por microfono.');
     return null;
   }
 

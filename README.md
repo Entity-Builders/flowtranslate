@@ -52,6 +52,7 @@ Function environment lives in `eb-infra/supabase/functions/.env`:
 ```bash
 GEMINI_API_KEY=<server-side-key>
 FLOWTRANSLATE_FREE_MONTHLY_TOKENS=20000
+FLOWTRANSLATE_GUEST_MONTHLY_TOKENS=800
 FLOWTRANSLATE_TRANSLATE_MODEL=gemini-2.5-flash-lite
 FLOWTRANSLATE_PRACTICE_MODEL=gemini-2.5-flash
 # Optional legacy fallback for practice when FLOWTRANSLATE_PRACTICE_MODEL is not set.

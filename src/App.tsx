@@ -22,6 +22,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
 import { ExpressionWorkspace } from './components/ExpressionWorkspace';
+import { LandingHero, type LandingExample } from './components/LandingHero';
 import { STORAGE_KEYS } from './constants';
 import { LearningView } from './components/LearningView';
 import { QuotaStatus } from './components/QuotaStatus';
@@ -644,6 +645,15 @@ function App() {
     setShowAccount(true);
   };
 
+  const selectLandingExample = (example: LandingExample) => {
+    translator.editInput(example.text);
+    analytics.track('landing_example_selected', {
+      example_id: example.id,
+      account_kind: account.accountKind,
+      text_length: example.text.length,
+    });
+  };
+
   const accountButtonLabel = account.displayName;
   const accountButtonIcon = account.isGuest ? (
     <UserRound size={17} />
@@ -661,6 +671,16 @@ function App() {
       : translator.message || undefined;
   const dictationUnavailableReason =
     'El dictado por microfono no esta disponible en este navegador.';
+  const shouldShowLandingHero =
+    view === 'translate' &&
+    !translator.inputText.trim() &&
+    !translator.resultText.trim();
+  const shouldReserveMobileResultSheet =
+    view === 'translate' &&
+    (translator.status === 'translating' || Boolean(translator.resultText.trim()));
+  const shouldHideTranslatorMessageOnMobile =
+    shouldReserveMobileResultSheet &&
+    !['error', 'quota', 'auth', 'offline'].includes(translator.status);
 
   return (
     <div className='flex h-[100dvh] min-h-0 flex-col overflow-x-hidden bg-slate-50 text-slate-950'>
@@ -725,9 +745,23 @@ function App() {
       ) : null}
 
       {view === 'translate' ? (
-        <main className='flex min-h-0 w-full max-w-full flex-1 flex-col gap-3 overflow-x-hidden overflow-y-auto p-3 sm:p-4 lg:overflow-hidden'>
+        <main
+          className={`flex min-h-0 w-full max-w-full flex-1 flex-col gap-3 overflow-x-hidden overflow-y-auto p-3 sm:p-4 ${
+            shouldReserveMobileResultSheet ? 'pb-28 sm:pb-32 lg:pb-4' : ''
+          }`}
+        >
+          {shouldShowLandingHero ? (
+            <LandingHero
+              onSelectExample={selectLandingExample}
+            />
+          ) : null}
+
           {translator.message ? (
-            <div className={`border px-3 py-2 text-sm ${statusTone}`}>
+            <div
+              className={`border px-3 py-2 text-sm ${statusTone} ${
+                shouldHideTranslatorMessageOnMobile ? 'hidden lg:block' : ''
+              }`}
+            >
               {translator.message}
             </div>
           ) : null}

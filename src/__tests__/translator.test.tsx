@@ -21,6 +21,11 @@ describe('translator UI', () => {
   it('renders one expression input and one result surface as the primary view', () => {
     render(<App />);
 
+    expect(
+      screen.getByRole('heading', {
+        name: /responde mejor en ingles, sin sonar traducido/i,
+      }),
+    ).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Mensaje o idea' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Respuesta' })).toBeInTheDocument();
     expect(screen.getByLabelText('Mensaje o idea')).toBeInTheDocument();
@@ -34,6 +39,28 @@ describe('translator UI', () => {
     expect(
       screen.getByRole('button', { name: /entender en espanol/i }),
     ).toBeInTheDocument();
+  });
+
+  it('lets visitors start from a work example before signing in', () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('button', { name: /responder a un cliente/i }));
+
+    expect(screen.getByLabelText('Mensaje o idea')).toHaveValue(
+      'Decile a un cliente que el reporte se demora hasta manana, pero que ya estamos revisando los datos y le vamos a mandar una version clara apenas este lista.',
+    );
+    expect(
+      screen.queryByRole('heading', {
+        name: /responde mejor en ingles, sin sonar traducido/i,
+      }),
+    ).not.toBeInTheDocument();
+    expect(analyticsTrack).toHaveBeenCalledWith(
+      'landing_example_selected',
+      expect.objectContaining({
+        example_id: 'client-delay',
+        account_kind: 'none',
+      }),
+    );
   });
 
   it('tracks app view changes for Translate and Learning', () => {

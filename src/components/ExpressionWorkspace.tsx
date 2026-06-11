@@ -7,9 +7,13 @@ import {
   type TranslationPresetId,
 } from '@eb-packages/flowtranslate-core';
 import {
+  ChevronDown,
+  ChevronUp,
   Loader2,
   MessageSquareText,
   Sparkles,
+  Square,
+  Volume2,
 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ExpressionBreakdownDetails } from './ExpressionBreakdownDetails';
@@ -92,14 +96,14 @@ const modeTone: Record<ExpressionMode, string> = {
 
 const resultPlaceholder = (mode: ExpressionMode) => {
   if (mode === 'translate_to_spanish') {
-    return 'Pega un mensaje en ingles y elegi "Entender en espanol" para verlo claro.';
+    return 'Vas a ver el mensaje en espanol claro, con una respuesta que puedas preparar despues.';
   }
 
   if (mode === 'improve_english') {
-    return 'Tu version mas natural en ingles va a aparecer aca.';
+    return 'Vas a recibir una version mas natural, clara y lista para copiar.';
   }
 
-  return 'Tu respuesta en ingles va a aparecer aca.';
+  return 'Vas a recibir una respuesta en ingles lista para copiar, con tono natural y desglose opcional.';
 };
 
 const detectionCopy = (
@@ -147,9 +151,41 @@ export const ExpressionWorkspace = ({
 }: ExpressionWorkspaceProps) => {
   const isTranslating = status === 'translating';
   const [isBreakdownOpen, setIsBreakdownOpen] = useState(false);
+  const [isMobileResultOpen, setIsMobileResultOpen] = useState(false);
+  const inputTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const previousBreakdownKeyRef = useRef('');
+  const previousResultTextRef = useRef('');
   const requestedBreakdownKeyRef = useRef('');
   const breakdownKey = translationRecordId || resultText.trim();
+  const trimmedInputText = inputText.trim();
+  const trimmedResultText = resultText.trim();
+  const hasResult = Boolean(trimmedResultText);
+  const shouldShowMobileResultSheet = isTranslating || hasResult;
+
+  useEffect(() => {
+    if (!trimmedResultText) {
+      previousResultTextRef.current = '';
+      setIsMobileResultOpen(false);
+      return;
+    }
+
+    if (previousResultTextRef.current !== trimmedResultText) {
+      previousResultTextRef.current = trimmedResultText;
+      setIsMobileResultOpen(true);
+    }
+  }, [trimmedResultText]);
+
+  useEffect(() => {
+    if (status === 'typing') setIsMobileResultOpen(false);
+  }, [status]);
+
+  useEffect(() => {
+    const inputElement = inputTextareaRef.current;
+    if (!inputElement) return;
+
+    inputElement.style.minHeight = '0px';
+    inputElement.style.minHeight = `${Math.max(144, inputElement.scrollHeight)}px`;
+  }, [inputText]);
 
   useEffect(() => {
     if (!breakdownKey) return;
@@ -198,8 +234,8 @@ export const ExpressionWorkspace = ({
   );
 
   return (
-    <section className='grid w-full min-w-0 max-w-full grid-cols-1 gap-3 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)] lg:gap-4'>
-      <div className='flex min-h-[360px] min-w-0 max-w-full flex-col border border-slate-200 bg-white sm:min-h-[420px] lg:min-h-0 lg:overflow-y-auto'>
+    <section className='grid w-full min-w-0 max-w-full grid-cols-1 gap-3 lg:flex-1 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)] lg:gap-4'>
+      <div className='flex min-h-[360px] min-w-0 max-w-full flex-col border border-slate-200 bg-white sm:min-h-[420px]'>
         <div className='border-b border-slate-100 px-3 py-3 sm:px-5'>
           <div className='flex flex-wrap items-center justify-between gap-3'>
             <div className='min-w-0'>
@@ -247,6 +283,7 @@ export const ExpressionWorkspace = ({
         </div>
 
         <textarea
+          ref={inputTextareaRef}
           value={inputText}
           onChange={(event) => onInputChange(event.target.value)}
           onKeyDown={(event) => {
@@ -255,8 +292,8 @@ export const ExpressionWorkspace = ({
               if (canTranslate) onTranslate();
             }
           }}
-          placeholder='Pega un chat de trabajo, escribi tu idea en espanol, o mejora tu ingles...'
-          className='min-h-36 w-full min-w-0 flex-1 resize-none break-words bg-transparent p-4 text-lg leading-relaxed text-slate-900 outline-none [overflow-wrap:anywhere] placeholder:text-slate-300 sm:p-5 sm:text-xl'
+          placeholder='Pega un chat de trabajo o escribi la idea que queres responder en ingles...'
+          className='min-h-36 w-full min-w-0 flex-1 resize-none overflow-hidden break-words bg-transparent p-4 text-lg leading-relaxed text-slate-900 outline-none [overflow-wrap:anywhere] placeholder:text-slate-300 sm:p-5 sm:text-xl'
           spellCheck
           aria-label='Mensaje o idea'
         />
@@ -286,7 +323,7 @@ export const ExpressionWorkspace = ({
         </div>
       </div>
 
-      <div className='flex min-h-[320px] min-w-0 max-w-full flex-col border border-slate-200 bg-white sm:min-h-[420px] lg:min-h-0 lg:overflow-y-auto'>
+      <div className='hidden min-h-[320px] min-w-0 max-w-full flex-col border border-slate-200 bg-white sm:min-h-[420px] lg:flex'>
         <div className='flex flex-col gap-3 border-b border-slate-100 px-3 py-3 sm:flex-row sm:items-start sm:justify-between sm:px-5'>
           <div className='min-w-0'>
             <h2 className='text-base font-black text-slate-950'>Respuesta</h2>
@@ -303,9 +340,9 @@ export const ExpressionWorkspace = ({
               <button
                 type='button'
                 onClick={onTranslateToSpanish}
-                disabled={!inputText.trim() || isTranslating}
+                disabled={!trimmedInputText || isTranslating}
                 className={`inline-flex h-10 items-center gap-2 rounded-md border px-3 text-sm font-bold transition-colors ${
-                  inputText.trim() && !isTranslating
+                  trimmedInputText && !isTranslating
                     ? 'border-amber-200 bg-amber-50 text-amber-900 hover:bg-amber-100'
                     : 'border-slate-100 bg-slate-50 text-slate-300'
                 }`}
@@ -331,8 +368,8 @@ export const ExpressionWorkspace = ({
           </div>
         </div>
 
-        <div className='min-h-40 min-w-0 max-w-full flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-5 lg:min-h-[14rem]'>
-          {resultText.trim() ? (
+        <div className='min-h-40 min-w-0 max-w-full flex-1 p-3 sm:p-5 lg:min-h-[14rem]'>
+          {hasResult ? (
             <p className='max-w-full break-words text-xl font-black leading-[1.16] text-slate-950 [overflow-wrap:anywhere] sm:text-3xl xl:text-[2.125rem]'>
               {resultText}
             </p>
@@ -347,7 +384,7 @@ export const ExpressionWorkspace = ({
           key={breakdownKey || 'empty-breakdown'}
           breakdown={breakdown}
           emptyDescription={
-            resultText.trim()
+            hasResult
               ? 'Abrilo para preparar un desglose completo.'
               : undefined
           }
@@ -357,6 +394,112 @@ export const ExpressionWorkspace = ({
           onOpenChange={handleBreakdownOpenChange}
         />
       </div>
+
+      {shouldShowMobileResultSheet ? (
+        <div
+          className='fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white shadow-lg lg:hidden'
+          aria-live='polite'
+        >
+          <div className='mx-auto max-w-3xl px-4 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-3'>
+            <button
+              type='button'
+              onClick={() => setIsMobileResultOpen((current) => !current)}
+              className='flex min-h-10 w-full items-center justify-between gap-3 text-left text-slate-700'
+              aria-expanded={isMobileResultOpen}
+            >
+              <span className='min-w-0'>
+                <span className='block text-xs font-black uppercase tracking-normal text-slate-400'>
+                  {isTranslating ? 'Generando' : 'Respuesta lista'}
+                </span>
+                <span className='block truncate text-base font-black text-slate-950'>
+                  {isTranslating
+                    ? 'Preparando tu respuesta en ingles...'
+                    : trimmedResultText}
+                </span>
+              </span>
+              {isMobileResultOpen ? (
+                <ChevronDown size={18} className='shrink-0 text-slate-500' />
+              ) : (
+                <ChevronUp size={18} className='shrink-0 text-slate-500' />
+              )}
+            </button>
+
+            {isMobileResultOpen ? (
+              <div className='max-h-[56dvh] overflow-y-auto pb-2 pt-4'>
+                <div className='flex min-w-0 flex-col gap-4'>
+                  {isTranslating ? (
+                    <div className='flex min-h-24 items-center justify-center gap-2 rounded-md bg-slate-50 text-sm font-bold text-slate-500'>
+                      <Loader2 size={17} className='animate-spin' />
+                      Generando respuesta...
+                    </div>
+                  ) : (
+                    <p className='max-w-full break-words text-2xl font-black leading-[1.12] text-slate-950 [overflow-wrap:anywhere]'>
+                      {resultText}
+                    </p>
+                  )}
+
+                  <div className='flex min-w-0 items-center gap-2 border-t border-slate-100 pt-3'>
+                    <button
+                      type='button'
+                      onClick={onCopyResult}
+                      disabled={!hasResult}
+                      className='inline-flex h-10 flex-1 items-center justify-center rounded-md bg-slate-950 px-3 text-sm font-black text-white transition-colors hover:bg-slate-800 disabled:bg-slate-100 disabled:text-slate-400'
+                    >
+                      {copiedResult ? 'Copiado' : 'Copiar'}
+                    </button>
+                    {canListen ? (
+                      <button
+                        type='button'
+                        onClick={onListenResult}
+                        disabled={!hasResult}
+                        className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md border transition-colors ${
+                          hasResult
+                            ? 'border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-950'
+                            : 'border-slate-100 text-slate-300'
+                        }`}
+                        title={speakingLanguage === targetLanguage ? 'Detener audio' : 'Escuchar texto'}
+                        aria-label={speakingLanguage === targetLanguage ? 'Detener audio' : 'Escuchar texto'}
+                      >
+                        {speakingLanguage === targetLanguage ? (
+                          <Square size={16} />
+                        ) : (
+                          <Volume2 size={17} />
+                        )}
+                      </button>
+                    ) : null}
+                    <button
+                      type='button'
+                      onClick={onTranslateToSpanish}
+                      disabled={!trimmedInputText || isTranslating}
+                      className={`inline-flex h-10 shrink-0 items-center justify-center rounded-md border px-3 text-sm font-black transition-colors ${
+                        trimmedInputText && !isTranslating
+                          ? 'border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-950'
+                          : 'border-slate-100 text-slate-300'
+                      }`}
+                    >
+                      ES
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : hasResult ? (
+              <div className='flex min-w-0 items-center justify-between gap-2 pb-2 pt-2'>
+                <p className='min-w-0 flex-1 truncate text-sm font-semibold text-slate-600'>
+                  {trimmedResultText}
+                </p>
+                <button
+                  type='button'
+                  onClick={onCopyResult}
+                  disabled={!hasResult}
+                  className='inline-flex h-9 shrink-0 items-center justify-center rounded-md bg-slate-950 px-3 text-sm font-black text-white transition-colors hover:bg-slate-800 disabled:bg-slate-100 disabled:text-slate-400'
+                >
+                  {copiedResult ? 'Copiado' : 'Copiar'}
+                </button>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 };

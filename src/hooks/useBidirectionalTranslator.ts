@@ -14,7 +14,11 @@ import {
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { TRANSLATION_IDLE_DELAY_MS } from '../constants';
 import { analytics } from '../services/analytics';
-import { FlowtranslateApiError, generateTranslation } from '../services/flowtranslate-api';
+import {
+  FlowtranslateApiError,
+  enrichBreakdown,
+  generateTranslation,
+} from '../services/flowtranslate-api';
 
 type TranslatorStatus =
   | 'idle'
@@ -38,6 +42,8 @@ type TranslationBlockedReason =
   | 'quota'
   | 'ambiguous'
   | 'mixed_input';
+
+type BreakdownStatus = 'idle' | 'enriching' | 'ready' | 'error';
 
 type UseBidirectionalTranslatorParams = {
   accessToken: string;
@@ -104,6 +110,9 @@ export const useBidirectionalTranslator = ({
     fallbackDetection(DEFAULT_EXPRESSION_MODE),
   );
   const [breakdown, setBreakdown] = useState<ExpressionBreakdown | null>(null);
+  const [breakdownStatus, setBreakdownStatus] =
+    useState<BreakdownStatus>('idle');
+  const [translationRecordId, setTranslationRecordId] = useState('');
   const [presetId, setPresetId] = useState<TranslationPresetId>(
     DEFAULT_TRANSLATION_PRESET_ID,
   );
@@ -116,6 +125,7 @@ export const useBidirectionalTranslator = ({
   const inputTextRef = useRef('');
   const previousAccessTokenRef = useRef(accessToken);
   const lastBlockedAnalyticsKeyRef = useRef('');
+  const translationRecordIdRef = useRef('');
   const modeRef = useRef<ExpressionMode>(DEFAULT_EXPRESSION_MODE);
   const lastModeRef = useRef<ExpressionMode>(DEFAULT_EXPRESSION_MODE);
   const presetIdRef = useRef<TranslationPresetId>(
@@ -135,6 +145,11 @@ export const useBidirectionalTranslator = ({
     modeRef.current = nextMode;
     lastModeRef.current = nextMode;
     setMode(nextMode);
+  }, []);
+
+  const updateTranslationRecordId = useCallback((nextId: string) => {
+    translationRecordIdRef.current = nextId;
+    setTranslationRecordId(nextId);
   }, []);
 
   const trackTranslationBlocked = useCallback(
@@ -165,6 +180,116 @@ export const useBidirectionalTranslator = ({
       });
     },
     [],
+  );
+
+  const enrichSavedBreakdown = useCallback(
+    async (params: {
+      recordId: string;
+      requestSequence: number;
+      mode: ExpressionMode;
+      sourceText: string;
+      translatedText: string;
+      presetId: TranslationPresetId;
+      trigger: TranslationTrigger;
+      createdAt: string;
+    }) => {
+      if (!params.recordId || !accessToken) return;
+
+      const startedAt = currentTimeMs();
+      setBreakdownStatus('enriching');
+      analytics.track('breakdown_enrichment_requested', {
+        ...translationAnalyticsProperties(
+          params.mode,
+          params.sourceText,
+          params.presetId,
+          params.trigger,
+        ),
+      });
+
+      const isStillCurrent = () =>
+        translationRecordIdRef.current === params.recordId &&
+        canApplyTranslationResponse({
+          requestSequence: params.requestSequence,
+          latestSequence: sequenceRef.current,
+          requestMode: params.mode,
+          latestMode: modeRef.current,
+          requestSourceText: params.sourceText,
+          latestSourceText: inputTextRef.current.trim(),
+          requestPresetId: params.presetId,
+          latestPresetId: presetIdRef.current,
+        });
+
+      try {
+        const response = await enrichBreakdown(
+          { translationRecordId: params.recordId },
+          accessToken,
+        );
+
+        if (!isStillCurrent()) return;
+
+        const nextBreakdown =
+          response.breakdown || response.translationRecord.breakdown || null;
+        if (!nextBreakdown) {
+          setBreakdownStatus('error');
+          return;
+        }
+
+        const responseDirection = createExpressionDirection(params.mode);
+        setBreakdown(nextBreakdown);
+        setBreakdownStatus('ready');
+        onUsage(response.usage);
+        onSavedTranslation({
+          id: params.recordId,
+          sourceLanguage:
+            response.translationRecord.sourceLanguage ||
+            responseDirection.sourceLanguage,
+          targetLanguage:
+            response.translationRecord.targetLanguage ||
+            responseDirection.targetLanguage,
+          sourceText: params.sourceText,
+          translatedText: params.translatedText,
+          mode: params.mode,
+          breakdown: nextBreakdown,
+          createdAt: response.translationRecord.createdAt || params.createdAt,
+        });
+        analytics.track('breakdown_enrichment_succeeded', {
+          ...translationAnalyticsProperties(
+            params.mode,
+            params.sourceText,
+            params.presetId,
+            params.trigger,
+          ),
+          latency_ms: elapsedMs(startedAt),
+          charged: response.usage.charged,
+          cached: Boolean(response.cached),
+          remaining_quota: response.usage.remainingThisMonth,
+        });
+      } catch (error) {
+        if (!isStillCurrent()) return;
+
+        if (error instanceof FlowtranslateApiError && error.usage) {
+          onUsage(error.usage);
+        }
+
+        setBreakdownStatus('error');
+        analytics.track('breakdown_enrichment_failed', {
+          ...translationAnalyticsProperties(
+            params.mode,
+            params.sourceText,
+            params.presetId,
+            params.trigger,
+          ),
+          latency_ms: elapsedMs(startedAt),
+          error_status:
+            error instanceof FlowtranslateApiError ? error.status : null,
+          remaining_quota:
+            error instanceof FlowtranslateApiError
+              ? error.usage?.remainingThisMonth ?? null
+              : null,
+        });
+      }
+    },
+    [accessToken, onSavedTranslation, onUsage],
   );
 
   const runTranslation = useCallback(
@@ -245,6 +370,7 @@ export const useBidirectionalTranslator = ({
       sequenceRef.current = requestSequence;
       inFlightKeyRef.current = requestKey;
       lastBlockedAnalyticsKeyRef.current = '';
+      setBreakdownStatus('idle');
       setStatus('translating');
       setMessage('Generando respuesta...');
       analytics.track('translation_submitted', {
@@ -296,8 +422,10 @@ export const useBidirectionalTranslator = ({
           result.breakdown || result.translationRecord.breakdown || null;
         const responseMode = result.mode || result.translationRecord.mode || nextMode;
         const responseDirection = createExpressionDirection(responseMode);
+        const nextRecordId = result.translationRecord.id;
 
         updateMode(responseMode);
+        updateTranslationRecordId(nextRecordId);
         setResultText(result.text);
         setBreakdown(nextBreakdown);
         lastCompletedKeyRef.current = requestKey;
@@ -353,6 +481,17 @@ export const useBidirectionalTranslator = ({
             remaining_quota: result.usage.remainingThisMonth,
           });
         }
+
+        void enrichSavedBreakdown({
+          recordId: nextRecordId,
+          requestSequence,
+          mode: responseMode,
+          sourceText: trimmedSource,
+          translatedText: result.text,
+          presetId: nextPresetId,
+          trigger,
+          createdAt: result.translationRecord.createdAt,
+        });
       } catch (error) {
         if (error instanceof FlowtranslateApiError) {
           if (error.usage) onUsage(error.usage);
@@ -411,8 +550,10 @@ export const useBidirectionalTranslator = ({
       online,
       onSavedTranslation,
       onUsage,
+      enrichSavedBreakdown,
       trackTranslationBlocked,
       updateMode,
+      updateTranslationRecordId,
     ],
   );
 
@@ -432,7 +573,9 @@ export const useBidirectionalTranslator = ({
         setMessage('');
         setHasPendingChanges(false);
         setBreakdown(null);
+        setBreakdownStatus('idle');
         setResultText('');
+        updateTranslationRecordId('');
         lastBlockedAnalyticsKeyRef.current = '';
         return;
       }
@@ -654,6 +797,8 @@ export const useBidirectionalTranslator = ({
     targetLanguage: direction.targetLanguage,
     presetId,
     breakdown,
+    breakdownStatus,
+    translationRecordId,
     status,
     message,
     hasPendingChanges,

@@ -31,6 +31,8 @@ type ExpressionWorkspaceProps = {
   sourceLanguage: LanguageCode;
   targetLanguage: LanguageCode;
   breakdown: ExpressionBreakdown | null;
+  breakdownStatus?: 'idle' | 'enriching' | 'ready' | 'error';
+  translationRecordId?: string;
   status: ExpressionWorkspaceStatus;
   canTranslate: boolean;
   translateDisabledReason: string;
@@ -111,6 +113,8 @@ export const ExpressionWorkspace = ({
   sourceLanguage,
   targetLanguage,
   breakdown,
+  breakdownStatus = 'idle',
+  translationRecordId = '',
   status,
   canTranslate,
   translateDisabledReason,
@@ -274,7 +278,11 @@ export const ExpressionWorkspace = ({
           )}
         </div>
 
-        <ExpressionBreakdownDetails breakdown={breakdown} />
+        <ExpressionBreakdownDetails
+          key={translationRecordId || resultText || 'empty-breakdown'}
+          breakdown={breakdown}
+          isEnriching={breakdownStatus === 'enriching'}
+        />
       </div>
     </section>
   );

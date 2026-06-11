@@ -59,6 +59,22 @@ export type BreakdownChatResponse = {
   usage: FlowtranslateUsage;
 };
 
+export type BreakdownEnrichmentResponse = {
+  kind: 'breakdown_enrichment';
+  breakdown: ExpressionBreakdown;
+  translationRecord: Pick<
+    TranslationRecord,
+    | 'id'
+    | 'sourceLanguage'
+    | 'targetLanguage'
+    | 'mode'
+    | 'breakdown'
+    | 'createdAt'
+  >;
+  cached?: boolean;
+  usage: FlowtranslateUsage;
+};
+
 type FlowtranslateRequest =
   | {
       kind: 'translate';
@@ -86,6 +102,10 @@ type FlowtranslateRequest =
       translationRecordId: string;
       question: string;
       history?: BreakdownChatMessage[];
+    }
+  | {
+      kind: 'breakdown_enrichment';
+      translationRecordId: string;
     };
 
 type FlowtranslateResponse =
@@ -94,6 +114,7 @@ type FlowtranslateResponse =
   | StudyArticleResponse
   | LearningInsightResponse
   | BreakdownChatResponse
+  | BreakdownEnrichmentResponse
   | {
       error: string;
       usage?: FlowtranslateUsage;
@@ -224,6 +245,20 @@ export const askBreakdownQuestion = (
       translationRecordId: params.translationRecordId,
       question: params.question,
       history: params.history,
+    },
+    accessToken,
+  );
+
+export const enrichBreakdown = (
+  params: {
+    translationRecordId: string;
+  },
+  accessToken: string,
+) =>
+  requestFlowtranslate<BreakdownEnrichmentResponse>(
+    {
+      kind: 'breakdown_enrichment',
+      translationRecordId: params.translationRecordId,
     },
     accessToken,
   );

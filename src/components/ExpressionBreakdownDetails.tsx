@@ -30,6 +30,7 @@ type ExpressionBreakdownDetailsProps = {
   defaultOpen?: boolean;
   emptyDescription?: string;
   withTopBorder?: boolean;
+  isEnriching?: boolean;
   onAskQuestion?: (
     question: string,
     history: BreakdownChatMessage[],
@@ -60,6 +61,7 @@ export const ExpressionBreakdownDetails = ({
   defaultOpen = false,
   emptyDescription = 'Genera una respuesta para ver tiempos, estructura y notas de uso.',
   withTopBorder = true,
+  isEnriching = false,
   onAskQuestion,
 }: ExpressionBreakdownDetailsProps) => {
   const [question, setQuestion] = useState('');
@@ -108,7 +110,9 @@ export const ExpressionBreakdownDetails = ({
           <ChevronDown size={16} />
           Desglose
         </summary>
-        <p className='mt-3 text-sm text-slate-500'>{emptyDescription}</p>
+        <p className='mt-3 text-sm text-slate-500'>
+          {isEnriching ? 'Completando el desglose...' : emptyDescription}
+        </p>
       </details>
     );
   }
@@ -130,7 +134,16 @@ export const ExpressionBreakdownDetails = ({
           Desglose
         </span>
         <span className='inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1 text-xs font-bold text-slate-600'>
-          {breakdown.changed ? 'Ajustado' : 'Ya suena natural'}
+          {isEnriching ? (
+            <>
+              <Loader2 size={13} className='animate-spin' />
+              Completando
+            </>
+          ) : breakdown.changed ? (
+            'Ajustado'
+          ) : (
+            'Ya suena natural'
+          )}
         </span>
       </summary>
 

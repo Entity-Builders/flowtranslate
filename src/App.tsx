@@ -792,6 +792,8 @@ function App() {
             sourceLanguage={translator.sourceLanguage}
             targetLanguage={translator.targetLanguage}
             breakdown={translator.breakdown}
+            breakdownStatus={translator.breakdownStatus}
+            translationRecordId={translator.translationRecordId}
             status={translator.status}
             canTranslate={translator.canTranslate}
             translateDisabledReason={translator.translateDisabledReason}

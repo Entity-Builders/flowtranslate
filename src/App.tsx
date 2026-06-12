@@ -163,16 +163,19 @@ function App() {
   const loadHistory = useCallback(async () => {
     if (!account.accessToken) {
       setHistory([]);
-      return;
+      return [];
     }
 
     try {
       setHistoryError('');
-      setHistory(await listTranslationHistory());
+      const nextHistory = await listTranslationHistory();
+      setHistory(nextHistory);
+      return nextHistory;
     } catch (error) {
       setHistoryError(
         error instanceof Error ? error.message : 'No pudimos cargar tu historial.',
       );
+      return [];
     }
   }, [account.accessToken]);
 
@@ -197,6 +200,7 @@ function App() {
     online,
     onUsage: handleUsage,
     onSavedTranslation: handleSavedTranslation,
+    onRefreshSavedTranslations: loadHistory,
   });
 
   useEffect(() => {

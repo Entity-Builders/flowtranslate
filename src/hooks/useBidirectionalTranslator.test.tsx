@@ -112,6 +112,7 @@ const responseFor = ({
   targetLanguage,
   createdAt = '2026-06-01T00:00:00.000Z',
   nextBreakdown = minimalBreakdown,
+  pending = false,
 }: {
   id?: string;
   text: string;
@@ -120,6 +121,7 @@ const responseFor = ({
   targetLanguage: 'es' | 'en';
   createdAt?: string;
   nextBreakdown?: ExpressionBreakdown | null;
+  pending?: boolean;
 }): TranslateResponse => ({
   kind: 'translate',
   text,
@@ -132,6 +134,7 @@ const responseFor = ({
     mode,
     breakdown: nextBreakdown,
     createdAt,
+    ...(pending ? { saved: false, pending: true } : {}),
   },
   usage,
 });
@@ -289,6 +292,60 @@ describe('useBidirectionalTranslator', () => {
     expect(generatedProperties).not.toHaveProperty('text');
     expect(generatedProperties).not.toHaveProperty('source_text');
     expect(generatedProperties).not.toHaveProperty('translated_text');
+  });
+
+  it('refreshes history after a pending translation is saved in the background', async () => {
+    vi.mocked(generateTranslation).mockResolvedValueOnce(
+      responseFor({
+        id: '',
+        text: 'hello, how are you?',
+        mode: 'translate_to_english',
+        sourceLanguage: 'es',
+        targetLanguage: 'en',
+        pending: true,
+      }),
+    );
+
+    const savedRecord = {
+      id: 'record-saved',
+      sourceLanguage: 'es' as const,
+      targetLanguage: 'en' as const,
+      sourceText: 'hola como estas',
+      translatedText: 'hello, how are you?',
+      mode: 'translate_to_english' as const,
+      breakdown: minimalBreakdown,
+      createdAt: '2026-06-01T00:00:02.000Z',
+    };
+    const onUsage = vi.fn();
+    const onSavedTranslation = vi.fn();
+    const onRefreshSavedTranslations = vi.fn().mockResolvedValue([savedRecord]);
+    const { result } = renderHook(() =>
+      useBidirectionalTranslator({
+        accessToken: 'token',
+        online: true,
+        onUsage,
+        onSavedTranslation,
+        onRefreshSavedTranslations,
+      }),
+    );
+
+    act(() => result.current.editInput('hola como estas'));
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(TRANSLATION_IDLE_DELAY_MS);
+    });
+
+    expect(result.current.resultText).toBe('hello, how are you?');
+    expect(result.current.translationRecordId).toBe('');
+    expect(onSavedTranslation).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1800);
+    });
+
+    expect(onRefreshSavedTranslations).toHaveBeenCalledTimes(1);
+    expect(result.current.translationRecordId).toBe('record-saved');
+    expect(onSavedTranslation).toHaveBeenCalledWith(savedRecord);
   });
 
   it('requests the breakdown only after the user opens Desglose', async () => {

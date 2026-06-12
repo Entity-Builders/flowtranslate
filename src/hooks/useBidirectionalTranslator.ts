@@ -54,7 +54,10 @@ type UseBidirectionalTranslatorParams = {
   online: boolean;
   onUsage: (usage: UsageSnapshot) => void;
   onSavedTranslation: (record: TranslationRecord) => void;
+  onRefreshSavedTranslations?: () => Promise<TranslationRecord[]>;
 };
+
+const PENDING_HISTORY_REFRESH_DELAY_MS = 1800;
 
 const normalizeText = (value: string) =>
   value.trim().replace(/\s+/g, ' ').toLocaleLowerCase();
@@ -119,6 +122,7 @@ export const useBidirectionalTranslator = ({
   online,
   onUsage,
   onSavedTranslation,
+  onRefreshSavedTranslations,
 }: UseBidirectionalTranslatorParams) => {
   const [inputText, setInputText] = useState('');
   const [resultText, setResultText] = useState('');
@@ -152,6 +156,7 @@ export const useBidirectionalTranslator = ({
     DEFAULT_TRANSLATION_PRESET_ID,
   );
   const timerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const pendingHistoryTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
 
   const clearScheduledTranslation = useCallback(() => {
     if (!timerRef.current) return;
@@ -160,6 +165,14 @@ export const useBidirectionalTranslator = ({
   }, []);
 
   useEffect(() => clearScheduledTranslation, [clearScheduledTranslation]);
+
+  const clearPendingHistoryRefresh = useCallback(() => {
+    if (!pendingHistoryTimerRef.current) return;
+    window.clearTimeout(pendingHistoryTimerRef.current);
+    pendingHistoryTimerRef.current = null;
+  }, []);
+
+  useEffect(() => clearPendingHistoryRefresh, [clearPendingHistoryRefresh]);
 
   const updateMode = useCallback((nextMode: ExpressionMode) => {
     modeRef.current = nextMode;
@@ -172,6 +185,96 @@ export const useBidirectionalTranslator = ({
     translationRecordCreatedAtRef.current = createdAt;
     setTranslationRecordId(nextId);
   }, []);
+
+  const schedulePendingHistoryRefresh = useCallback(
+    (params: {
+      requestSequence: number;
+      mode: ExpressionMode;
+      sourceText: string;
+      translatedText: string;
+      presetId: TranslationPresetId;
+      contextText: string;
+      trigger: TranslationTrigger;
+    }) => {
+      if (!onRefreshSavedTranslations) return;
+      clearPendingHistoryRefresh();
+
+      pendingHistoryTimerRef.current = window.setTimeout(() => {
+        pendingHistoryTimerRef.current = null;
+        void (async () => {
+          try {
+            const records = await onRefreshSavedTranslations();
+            const savedRecord = records.find((record) =>
+              normalizeText(record.sourceText) === normalizeText(params.sourceText) &&
+              normalizeText(record.translatedText) === normalizeText(params.translatedText) &&
+              (!record.mode || record.mode === params.mode)
+            );
+
+            if (!savedRecord) {
+              analytics.track('translation_pending_save_unresolved', {
+                ...translationAnalyticsProperties(
+                  params.mode,
+                  params.sourceText,
+                  params.presetId,
+                  params.trigger,
+                  params.contextText,
+                ),
+              });
+              return;
+            }
+
+            if (
+              !canApplyTranslationResponse({
+                requestSequence: params.requestSequence,
+                latestSequence: sequenceRef.current,
+                requestMode: params.mode,
+                latestMode: modeRef.current,
+                requestSourceText: params.sourceText,
+                latestSourceText: inputTextRef.current.trim(),
+                requestPresetId: params.presetId,
+                latestPresetId: presetIdRef.current,
+                requestContextText: params.contextText,
+                latestContextText: workContextTextRef.current,
+              })
+            ) {
+              return;
+            }
+
+            updateTranslationRecordId(savedRecord.id, savedRecord.createdAt);
+            setMessage('Guardado en tu historial.');
+            onSavedTranslation(savedRecord);
+            analytics.track('translation_pending_save_resolved', {
+              ...translationAnalyticsProperties(
+                params.mode,
+                params.sourceText,
+                params.presetId,
+                params.trigger,
+                params.contextText,
+              ),
+              record_id: savedRecord.id,
+            });
+          } catch (error) {
+            analytics.track('translation_pending_save_refresh_failed', {
+              ...translationAnalyticsProperties(
+                params.mode,
+                params.sourceText,
+                params.presetId,
+                params.trigger,
+                params.contextText,
+              ),
+              error_type: error instanceof Error ? error.name : 'unknown',
+            });
+          }
+        })();
+      }, PENDING_HISTORY_REFRESH_DELAY_MS);
+    },
+    [
+      clearPendingHistoryRefresh,
+      onRefreshSavedTranslations,
+      onSavedTranslation,
+      updateTranslationRecordId,
+    ],
+  );
 
   const trackTranslationBlocked = useCallback(
     (
@@ -515,6 +618,7 @@ export const useBidirectionalTranslator = ({
       sequenceRef.current = requestSequence;
       inFlightKeyRef.current = requestKey;
       lastBlockedAnalyticsKeyRef.current = '';
+      clearPendingHistoryRefresh();
       setBreakdown(null);
       setBreakdownStatus('idle');
       setStatus('translating');
@@ -614,6 +718,16 @@ export const useBidirectionalTranslator = ({
             breakdown: savedBreakdown,
             createdAt: result.translationRecord.createdAt,
           });
+        } else if (result.translationRecord.pending) {
+          schedulePendingHistoryRefresh({
+            requestSequence,
+            mode: responseMode,
+            sourceText: trimmedSource,
+            translatedText: result.text,
+            presetId: nextPresetId,
+            contextText: nextContextText,
+            trigger,
+          });
         }
         analytics.track('translation_succeeded', {
           ...translationAnalyticsProperties(
@@ -709,6 +823,8 @@ export const useBidirectionalTranslator = ({
       online,
       onSavedTranslation,
       onUsage,
+      clearPendingHistoryRefresh,
+      schedulePendingHistoryRefresh,
       trackTranslationBlocked,
       updateMode,
       updateTranslationRecordId,

@@ -45,7 +45,7 @@ const EmptyStudyArticle = () => (
     </div>
     <p className='mt-2 text-sm text-slate-500'>
       Elegi una respuesta guardada del historial para abrir un articulo basado en
-      tu propio contexto.
+      tus propios mensajes.
     </p>
   </div>
 );

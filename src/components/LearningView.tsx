@@ -194,7 +194,7 @@ export const LearningView = ({
         <div className='min-h-0 flex-1 overflow-y-auto p-2'>
           {history.length === 0 ? (
             <div className='p-4 text-sm text-slate-500'>
-              Guarda algunas respuestas reales y volve para aprender desde tu contexto.
+              Guarda algunas respuestas reales y volve para aprender desde tu historial.
             </div>
           ) : (
             history.map((record) => (
@@ -266,7 +266,7 @@ export const LearningView = ({
                 {metrics.totalRecords}
               </div>
               <p className='mt-1 text-sm text-slate-500'>
-                {metrics.uniqueContextCount}/{MAX_LEARNING_HISTORY} lugares de contexto reciente
+                {metrics.uniqueContextCount}/{MAX_LEARNING_HISTORY} respuestas recientes usadas
               </p>
             </article>
 
@@ -398,7 +398,7 @@ export const LearningView = ({
         <section className='border border-slate-200 bg-white p-4'>
           <div className='mb-3 flex items-center gap-2'>
             <Clock size={17} className='text-slate-400' />
-            <h2 className='text-base font-bold text-slate-950'>Contexto reciente</h2>
+            <h2 className='text-base font-bold text-slate-950'>Respuestas recientes</h2>
           </div>
           <div className='grid gap-3 md:grid-cols-2'>
             {metrics.recentContexts.length === 0 ? (

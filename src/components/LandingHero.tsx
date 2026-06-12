@@ -36,7 +36,7 @@ type LandingHeroProps = {
 const proofPoints = [
   'Sin login para probar',
   'Listo para copiar',
-  'Learning con historial',
+  'Detecta que necesitas',
 ];
 
 export const LandingHero = ({
@@ -49,11 +49,11 @@ export const LandingHero = ({
         Ingles para trabajo real
       </div>
       <h2 className='mt-3 max-w-3xl text-4xl font-black leading-[1.04] text-slate-950'>
-        Responde mejor en ingles, sin sonar traducido.
+        Tu respuesta en ingles, lista para mandar.
       </h2>
       <p className='mt-2 max-w-3xl text-base font-semibold leading-7 text-slate-600'>
-        Pega un chat, una idea o una respuesta en espanol. Flowtranslate te
-        devuelve una version natural en ingles para mandar.
+        Pega lo que queres decirle a un cliente, equipo o contacto de trabajo.
+        Flowtranslate te devuelve una version natural en ingles lista para copiar.
       </p>
 
       <div className='mt-3 flex flex-wrap gap-2'>

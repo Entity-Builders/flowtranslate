@@ -1,5 +1,4 @@
 import {
-  EXPRESSION_MODES,
   type ExpressionBreakdown,
   type ExpressionMode,
   type IntentDetectionResult,
@@ -59,22 +58,9 @@ type ExpressionWorkspaceProps = {
   onListenResult: () => void;
   onDictateInput: () => void;
   onTranslate: () => void;
-  onSelectMode: (mode: ExpressionMode) => void;
   onSelectPreset: (presetId: TranslationPresetId) => void;
   onRequestBreakdown: () => void;
   onTranslateToSpanish: () => void;
-};
-
-const modeDescriptions: Record<ExpressionMode, string> = {
-  translate_to_english: 'Tu idea en espanol como respuesta natural',
-  improve_english: 'Tu ingles, mas natural y claro',
-  translate_to_spanish: 'Entende un mensaje recibido',
-};
-
-const modeLabels: Record<ExpressionMode, string> = {
-  translate_to_english: 'Responder en ingles',
-  improve_english: 'Mejorar ingles',
-  translate_to_spanish: 'Entender en espanol',
 };
 
 const languageLabels: Record<LanguageCode, string> = {
@@ -86,12 +72,6 @@ const confidenceLabel: Record<IntentDetectionResult['confidence'], string> = {
   high: 'alta confianza',
   medium: 'confianza media',
   low: 'necesita confirmacion',
-};
-
-const modeTone: Record<ExpressionMode, string> = {
-  translate_to_english: 'border-emerald-200 bg-emerald-50 text-emerald-900',
-  improve_english: 'border-sky-200 bg-sky-50 text-sky-900',
-  translate_to_spanish: 'border-amber-200 bg-amber-50 text-amber-900',
 };
 
 const resultPlaceholder = (mode: ExpressionMode) => {
@@ -110,9 +90,14 @@ const detectionCopy = (
   mode: ExpressionMode,
   detection: IntentDetectionResult,
 ) => {
-  const label = modeLabels[mode];
-  if (!detection.automatic) return `Modo: ${label}`;
-  return `Detectamos ${label.toLowerCase()} con ${confidenceLabel[detection.confidence]}`;
+  if (!detection.automatic) return 'Listo para responder';
+  if (mode === 'translate_to_spanish') {
+    return `Detectamos ingles para ver en espanol con ${confidenceLabel[detection.confidence]}`;
+  }
+  if (mode === 'improve_english') {
+    return `Detectamos ingles para dejarlo mas natural con ${confidenceLabel[detection.confidence]}`;
+  }
+  return `Detectamos espanol para preparar una respuesta en ingles con ${confidenceLabel[detection.confidence]}`;
 };
 
 export const ExpressionWorkspace = ({
@@ -144,7 +129,6 @@ export const ExpressionWorkspace = ({
   onListenResult,
   onDictateInput,
   onTranslate,
-  onSelectMode,
   onSelectPreset,
   onRequestBreakdown,
   onTranslateToSpanish,
@@ -234,13 +218,13 @@ export const ExpressionWorkspace = ({
   );
 
   return (
-    <section className='grid w-full min-w-0 max-w-full grid-cols-1 gap-3 lg:flex-1 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)] lg:gap-4'>
-      <div className='flex min-h-[360px] min-w-0 max-w-full flex-col border border-slate-200 bg-white sm:min-h-[420px]'>
-        <div className='border-b border-slate-100 px-3 py-3 sm:px-5'>
+    <section className='grid w-full min-w-0 max-w-full grid-cols-1 gap-3 lg:flex-1 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]'>
+      <div className='flex min-h-[360px] min-w-0 max-w-full flex-col border border-slate-200 bg-white shadow-sm sm:min-h-[420px]'>
+        <div className='border-b border-slate-100 px-3 py-3 sm:px-4'>
           <div className='flex flex-wrap items-center justify-between gap-3'>
             <div className='min-w-0'>
-              <h2 className='text-base font-black text-slate-950'>Mensaje o idea</h2>
-              <p className='mt-1 break-words text-xs font-semibold uppercase tracking-normal text-slate-500'>
+              <h2 className='text-sm font-black text-slate-950 sm:text-base'>Mensaje</h2>
+              <p className='mt-0.5 break-words text-[11px] font-bold uppercase tracking-normal text-slate-400'>
                 Origen en {languageLabels[sourceLanguage]}
               </p>
             </div>
@@ -258,27 +242,15 @@ export const ExpressionWorkspace = ({
             />
           </div>
 
-          <div className='mt-3 grid grid-cols-3 gap-1.5 sm:mt-4 sm:gap-2'>
-            {EXPRESSION_MODES.map((item) => (
-              <button
-                key={item}
-                type='button'
-                onClick={() => onSelectMode(item)}
-                aria-pressed={mode === item}
-                className={`min-h-12 rounded-md border px-2 py-2 text-left transition-colors sm:min-h-16 sm:px-3 ${
-                  mode === item
-                    ? modeTone[item]
-                    : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'
-                }`}
-              >
-                <span className='block text-xs font-black leading-tight sm:text-sm'>
-                  {modeLabels[item]}
-                </span>
-                <span className='mt-1 hidden break-words text-xs font-semibold opacity-75 sm:block'>
-                  {modeDescriptions[item]}
-                </span>
-              </button>
-            ))}
+          <div className='mt-3 flex flex-col gap-2 rounded-md border border-slate-200 bg-white p-2 shadow-sm sm:flex-row sm:items-center sm:justify-between'>
+            <p className='px-1 text-xs font-semibold leading-5 text-slate-500'>
+              Escribi como te salga. Flowtranslate detecta si tiene que responder,
+              mejorar o traducir.
+            </p>
+            <TranslationPresetControl
+              value={presetId}
+              onChange={onSelectPreset}
+            />
           </div>
         </div>
 
@@ -293,7 +265,7 @@ export const ExpressionWorkspace = ({
             }
           }}
           placeholder='Pega un chat de trabajo o escribi la idea que queres responder en ingles...'
-          className='min-h-36 w-full min-w-0 flex-1 resize-none overflow-hidden break-words bg-transparent p-4 text-lg leading-relaxed text-slate-900 outline-none [overflow-wrap:anywhere] placeholder:text-slate-300 sm:p-5 sm:text-xl'
+          className='min-h-36 w-full min-w-0 flex-1 resize-none overflow-hidden break-words bg-transparent p-4 text-lg leading-relaxed text-slate-900 outline-none [overflow-wrap:anywhere] placeholder:text-slate-300 sm:p-4 sm:text-xl'
           spellCheck
           aria-label='Mensaje o idea'
         />
@@ -323,19 +295,15 @@ export const ExpressionWorkspace = ({
         </div>
       </div>
 
-      <div className='hidden min-h-[320px] min-w-0 max-w-full flex-col border border-slate-200 bg-white sm:min-h-[420px] lg:flex'>
-        <div className='flex flex-col gap-3 border-b border-slate-100 px-3 py-3 sm:flex-row sm:items-start sm:justify-between sm:px-5'>
+      <div className='hidden min-h-[320px] min-w-0 max-w-full flex-col border border-slate-200 bg-white shadow-sm sm:min-h-[420px] lg:flex'>
+        <div className='flex flex-col gap-3 border-b border-slate-100 px-3 py-3 sm:flex-row sm:items-start sm:justify-between sm:px-4'>
           <div className='min-w-0'>
-            <h2 className='text-base font-black text-slate-950'>Respuesta</h2>
-            <p className='mt-1 text-xs font-semibold uppercase tracking-normal text-slate-500'>
+            <h2 className='text-sm font-black text-slate-950 sm:text-base'>Respuesta</h2>
+            <p className='mt-0.5 text-[11px] font-bold uppercase tracking-normal text-slate-400'>
               Salida en {languageLabels[targetLanguage]}
             </p>
           </div>
           <div className='flex w-full min-w-0 flex-col gap-2 sm:w-auto sm:items-end'>
-            <TranslationPresetControl
-              value={presetId}
-              onChange={onSelectPreset}
-            />
             <div className='flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:justify-end'>
               <button
                 type='button'
@@ -346,10 +314,10 @@ export const ExpressionWorkspace = ({
                     ? 'border-amber-200 bg-amber-50 text-amber-900 hover:bg-amber-100'
                     : 'border-slate-100 bg-slate-50 text-slate-300'
                 }`}
-                title='Entender un mensaje en ingles'
+                title='Ver el mensaje en espanol'
               >
                 <MessageSquareText size={16} />
-                Espanol
+                Ver en espanol
               </button>
               <TranslationActions
                 text={resultText}
@@ -368,9 +336,9 @@ export const ExpressionWorkspace = ({
           </div>
         </div>
 
-        <div className='min-h-40 min-w-0 max-w-full flex-1 p-3 sm:p-5 lg:min-h-[14rem]'>
+        <div className='min-h-40 min-w-0 max-w-full flex-1 p-4 lg:min-h-[14rem]'>
           {hasResult ? (
-            <p className='max-w-full break-words text-xl font-black leading-[1.16] text-slate-950 [overflow-wrap:anywhere] sm:text-3xl xl:text-[2.125rem]'>
+            <p className='max-w-4xl break-words text-xl font-semibold leading-[1.34] text-slate-950 [overflow-wrap:anywhere] sm:text-2xl xl:text-[1.75rem]'>
               {resultText}
             </p>
           ) : (
@@ -433,7 +401,7 @@ export const ExpressionWorkspace = ({
                       Generando respuesta...
                     </div>
                   ) : (
-                    <p className='max-w-full break-words text-2xl font-black leading-[1.12] text-slate-950 [overflow-wrap:anywhere]'>
+                    <p className='max-w-full break-words text-xl font-semibold leading-[1.3] text-slate-950 [overflow-wrap:anywhere]'>
                       {resultText}
                     </p>
                   )}

@@ -635,10 +635,10 @@ function App() {
     });
   }, [account.accountKind, resultCopyCount, shouldShowAccountPrompt]);
 
-  const openAccountFromPrompt = () => {
+  const openAccountFromPrompt = (reason = 'copied_replies') => {
     analytics.track('account_connect_prompt_clicked', {
       surface: 'translate_soft_banner',
-      reason: 'copied_replies',
+      reason,
       copy_count: resultCopyCount,
       account_kind: account.accountKind,
     });
@@ -692,7 +692,7 @@ function App() {
           <div className='min-w-0'>
             <h1 className='hidden truncate text-lg font-bold leading-none sm:block'>flowtranslate</h1>
             <p className='mt-1 hidden text-xs text-slate-500 sm:block'>
-              Responde mejor en ingles, mas rapido.
+              Respuestas en ingles listas para mandar.
             </p>
           </div>
         </div>
@@ -758,7 +758,7 @@ function App() {
 
           {translator.message ? (
             <div
-              className={`border px-3 py-2 text-sm ${statusTone} ${
+              className={`w-fit max-w-full rounded-md border px-3 py-1.5 text-sm font-medium shadow-sm ${statusTone} ${
                 shouldHideTranslatorMessageOnMobile ? 'hidden lg:block' : ''
               }`}
             >
@@ -773,23 +773,23 @@ function App() {
           ) : null}
 
           {shouldShowAccountPrompt ? (
-            <div className='flex flex-col gap-3 border border-slate-200 bg-white px-3 py-3 text-sm text-slate-700 sm:flex-row sm:items-center sm:justify-between'>
+            <div className='flex flex-col gap-3 rounded-md border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 shadow-sm sm:flex-row sm:items-center sm:justify-between'>
               <div className='min-w-0'>
                 <p className='font-bold text-slate-950'>
-                  Guarda tu tono para responder mas rapido.
+                  Guarda tus respuestas y aprende con tus mensajes reales.
                 </p>
                 <p className='mt-1 leading-5 text-slate-600'>
-                  Conecta una cuenta gratis cuando quieras conservar historial,
-                  preferencias y Learning personal.
+                  Conecta una cuenta para conservar historial, reutilizar buenas
+                  respuestas y desbloquear Learning personal.
                 </p>
               </div>
               <div className='flex shrink-0 items-center gap-2'>
                 <button
                   type='button'
-                  onClick={openAccountFromPrompt}
+                  onClick={() => openAccountFromPrompt('save_history')}
                   className='inline-flex h-10 items-center justify-center rounded-md bg-slate-950 px-3 text-sm font-bold text-white hover:bg-slate-800'
                 >
-                  Guardar mi tono
+                  Guardar historial
                 </button>
                 <button
                   type='button'
@@ -848,7 +848,6 @@ function App() {
             }
             onDictateInput={dictateInput}
             onTranslate={() => void translator.translate()}
-            onSelectMode={(nextMode) => translator.selectMode(nextMode)}
             onSelectPreset={selectPreset}
             onRequestBreakdown={() => translator.requestBreakdown()}
             onTranslateToSpanish={() => void translator.translate('translate_to_spanish')}
@@ -923,7 +922,7 @@ function App() {
                   </div>
                   <p className='text-sm leading-6 text-slate-600'>
                     {account.isGuest
-                      ? 'Responde ahora sin friccion. Conecta Google para conservar tono, historial y Learning personal.'
+                      ? 'Responde ahora sin friccion. Conecta Google para conservar historial y Learning personal.'
                       : 'Tu cuenta gratis de Flowtranslate esta conectada.'}
                   </p>
                 </div>

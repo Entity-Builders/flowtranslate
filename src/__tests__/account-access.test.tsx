@@ -225,22 +225,22 @@ describe('account access UI', () => {
     render(<App />);
 
     await screen.findByText('Prueba gratis');
-    expect(screen.queryByText(/Guarda tu tono/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Guarda tus respuestas/i)).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText('Mensaje o idea'), {
       target: { value: 'me pasas el update?' },
     });
     fireEvent.click(screen.getByTitle('Generar respuesta'));
 
-    expect(
-      await screen.findByText('Hi, can you send me the update?'),
-    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getAllByText('Hi, can you send me the update?').length).toBeGreaterThan(0),
+    );
 
     const resultCopyButton = () => screen.getAllByTitle('Copiar texto')[1];
     fireEvent.click(resultCopyButton());
     fireEvent.click(resultCopyButton());
 
-    expect(await screen.findByText(/Guarda tu tono/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Guarda tus respuestas/i)).toBeInTheDocument();
     expect(analyticsTrack).toHaveBeenCalledWith(
       'account_connect_prompt_shown',
       expect.objectContaining({

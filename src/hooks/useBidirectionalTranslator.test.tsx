@@ -609,6 +609,70 @@ describe('useBidirectionalTranslator', () => {
     );
   });
 
+  it('regenerates with one-off work context without changing the visible source text', async () => {
+    vi.mocked(generateTranslation)
+      .mockResolvedValueOnce(
+        responseFor({
+          id: 'record-generic',
+          text: "Hey, I can't make it today.",
+          mode: 'translate_to_english',
+          sourceLanguage: 'es',
+          targetLanguage: 'en',
+        }),
+      )
+      .mockResolvedValueOnce(
+        responseFor({
+          id: 'record-context',
+          text: "Hi Sarah, I'm sorry, but I won't be able to make our meeting today.",
+          mode: 'translate_to_english',
+          sourceLanguage: 'es',
+          targetLanguage: 'en',
+        }),
+      );
+
+    const { result } = renderHook(() =>
+      useBidirectionalTranslator({
+        accessToken: 'token',
+        online: true,
+        onUsage: vi.fn(),
+        onSavedTranslation: vi.fn(),
+      }),
+    );
+
+    act(() => result.current.editInput('que tal hoy no puedo ir'));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(TRANSLATION_IDLE_DELAY_MS);
+    });
+
+    act(() =>
+      result.current.editWorkContext(
+        'Cliente Sarah: es una reunion de avance y quiero proponer reprogramar.',
+      ),
+    );
+    await act(async () => {
+      await result.current.applyWorkContext();
+    });
+
+    expect(result.current.inputText).toBe('que tal hoy no puedo ir');
+    expect(result.current.resultText).toContain('Sarah');
+    expect(generateTranslation).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        text: 'que tal hoy no puedo ir',
+        context:
+          'Cliente Sarah: es una reunion de avance y quiero proponer reprogramar.',
+      }),
+      'token',
+    );
+    expect(analyticsTrack).toHaveBeenCalledWith(
+      'translation_context_applied',
+      expect.objectContaining({
+        has_context: true,
+        context_chars: expect.any(Number),
+      }),
+    );
+  });
+
   it('auto-improves English after the idle delay', async () => {
     vi.mocked(generateTranslation).mockResolvedValueOnce(
       responseFor({
@@ -762,12 +826,12 @@ describe('useBidirectionalTranslator', () => {
     );
   });
 
-  it('leaves short ambiguous input manual until a mode is selected', async () => {
+  it('still generates short ambiguous input without asking for a mode', async () => {
     vi.mocked(generateTranslation).mockResolvedValueOnce(
       responseFor({
         text: 'Ok.',
-        mode: 'improve_english',
-        sourceLanguage: 'en',
+        mode: 'translate_to_english',
+        sourceLanguage: 'es',
         targetLanguage: 'en',
       }),
     );
@@ -785,30 +849,21 @@ describe('useBidirectionalTranslator', () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(TRANSLATION_IDLE_DELAY_MS);
     });
-    expect(generateTranslation).not.toHaveBeenCalled();
-    expect(analyticsTrack).toHaveBeenCalledWith(
-      'translation_blocked',
-      expect.objectContaining({
-        reason: 'ambiguous',
-        trigger: 'auto_idle',
-        detection_reason: 'ambiguous',
-        input_chars: 2,
-      }),
-    );
-
-    act(() => result.current.selectMode('improve_english'));
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(TRANSLATION_IDLE_DELAY_MS);
-    });
 
     expect(generateTranslation).toHaveBeenCalledWith(
       expect.objectContaining({
-        mode: 'improve_english',
+        mode: 'translate_to_english',
         text: 'ok',
       }),
       'token',
     );
     expect(result.current.resultText).toBe('Ok.');
+    expect(analyticsTrack).not.toHaveBeenCalledWith(
+      'translation_blocked',
+      expect.objectContaining({
+        reason: 'ambiguous',
+      }),
+    );
   });
 
   it('keeps the latest input and mode when a stale response returns late', async () => {

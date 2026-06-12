@@ -82,6 +82,7 @@ type FlowtranslateRequest =
       sourceLanguage?: LanguageCode;
       targetLanguage?: LanguageCode;
       text: string;
+      context?: string;
       clientRequestId?: string;
       presetId?: TranslationPresetId;
     }
@@ -177,6 +178,7 @@ export const generateTranslation = (
     sourceLanguage?: LanguageCode;
     targetLanguage?: LanguageCode;
     text: string;
+    context?: string;
     clientRequestId?: string;
     presetId?: TranslationPresetId;
   },
@@ -189,6 +191,7 @@ export const generateTranslation = (
       sourceLanguage: params.sourceLanguage,
       targetLanguage: params.targetLanguage,
       text: params.text,
+      context: params.context,
       clientRequestId: params.clientRequestId,
       presetId: params.presetId,
     },

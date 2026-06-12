@@ -34,7 +34,8 @@ type TranslationTrigger =
   | 'auto_idle'
   | 'manual_generate'
   | 'mode_selected'
-  | 'preset_selected';
+  | 'preset_selected'
+  | 'context_applied';
 
 type BreakdownTrigger = 'panel_opened';
 
@@ -62,7 +63,8 @@ const createRequestKey = (
   mode: ExpressionMode,
   sourceText: string,
   presetId: TranslationPresetId,
-) => [mode, presetId, normalizeText(sourceText)].join(':');
+  contextText = '',
+) => [mode, presetId, normalizeText(sourceText), normalizeText(contextText)].join(':');
 
 const currentTimeMs = () =>
   typeof performance === 'undefined' ? Date.now() : performance.now();
@@ -75,6 +77,7 @@ const translationAnalyticsProperties = (
   sourceText: string,
   presetId: TranslationPresetId,
   trigger: TranslationTrigger | BreakdownTrigger,
+  contextText = '',
 ) => {
   const direction = createExpressionDirection(mode);
 
@@ -85,6 +88,8 @@ const translationAnalyticsProperties = (
     source_language: direction.sourceLanguage,
     target_language: direction.targetLanguage,
     input_chars: sourceText.trim().length,
+    has_context: Boolean(contextText.trim()),
+    context_chars: contextText.trim().length,
   };
 };
 
@@ -130,11 +135,13 @@ export const useBidirectionalTranslator = ({
   );
   const [status, setStatus] = useState<TranslatorStatus>('idle');
   const [message, setMessage] = useState('');
+  const [workContextText, setWorkContextText] = useState('');
   const [hasPendingChanges, setHasPendingChanges] = useState(false);
   const sequenceRef = useRef(0);
   const lastCompletedKeyRef = useRef('');
   const inFlightKeyRef = useRef('');
   const inputTextRef = useRef('');
+  const workContextTextRef = useRef('');
   const previousAccessTokenRef = useRef(accessToken);
   const lastBlockedAnalyticsKeyRef = useRef('');
   const translationRecordIdRef = useRef('');
@@ -173,12 +180,19 @@ export const useBidirectionalTranslator = ({
       nextSourceText: string,
       nextPresetId: TranslationPresetId,
       trigger: TranslationTrigger,
+      contextText = '',
       properties: Record<string, unknown> = {},
     ) => {
       const trimmedSource = nextSourceText.trim();
       if (!trimmedSource) return;
 
-      const analyticsKey = [reason, nextMode, nextPresetId, trigger].join(':');
+      const analyticsKey = [
+        reason,
+        nextMode,
+        nextPresetId,
+        trigger,
+        normalizeText(contextText),
+      ].join(':');
       if (lastBlockedAnalyticsKeyRef.current === analyticsKey) return;
 
       lastBlockedAnalyticsKeyRef.current = analyticsKey;
@@ -188,6 +202,7 @@ export const useBidirectionalTranslator = ({
           trimmedSource,
           nextPresetId,
           trigger,
+          contextText,
         ),
         reason,
         ...properties,
@@ -423,6 +438,7 @@ export const useBidirectionalTranslator = ({
       nextSourceText: string,
       nextPresetId: TranslationPresetId = presetIdRef.current,
       trigger: TranslationTrigger = 'manual_generate',
+      nextContextText = workContextTextRef.current,
     ) => {
       const trimmedSource = nextSourceText.trim();
       if (!trimmedSource) {
@@ -440,6 +456,7 @@ export const useBidirectionalTranslator = ({
           trimmedSource,
           nextPresetId,
           trigger,
+          nextContextText,
         );
         setStatus('offline');
         setMessage('Estas offline. El texto queda visible, pero la IA necesita conexion.');
@@ -460,6 +477,7 @@ export const useBidirectionalTranslator = ({
           trimmedSource,
           nextPresetId,
           trigger,
+          nextContextText,
         );
         setStatus('auth');
         setMessage('Conecta tu cuenta para guardar progreso y seguir.');
@@ -470,6 +488,7 @@ export const useBidirectionalTranslator = ({
         nextMode,
         trimmedSource,
         nextPresetId,
+        nextContextText,
       );
 
       if (requestKey === lastCompletedKeyRef.current) {
@@ -479,6 +498,7 @@ export const useBidirectionalTranslator = ({
             trimmedSource,
             nextPresetId,
             trigger,
+            nextContextText,
           ),
           reuse_source: 'client_current_result',
         });
@@ -505,6 +525,7 @@ export const useBidirectionalTranslator = ({
           trimmedSource,
           nextPresetId,
           trigger,
+          nextContextText,
         ),
       });
       if (isConversationReplyMode(nextMode)) {
@@ -514,6 +535,7 @@ export const useBidirectionalTranslator = ({
             trimmedSource,
             nextPresetId,
             trigger,
+            nextContextText,
           ),
         });
       }
@@ -523,6 +545,7 @@ export const useBidirectionalTranslator = ({
           {
             mode: nextMode,
             text: trimmedSource,
+            context: nextContextText.trim() || undefined,
             presetId: nextPresetId,
             clientRequestId: `${requestSequence}`,
           },
@@ -539,6 +562,8 @@ export const useBidirectionalTranslator = ({
             latestSourceText: inputTextRef.current.trim(),
             requestPresetId: nextPresetId,
             latestPresetId: presetIdRef.current,
+            requestContextText: nextContextText,
+            latestContextText: workContextTextRef.current,
           })
         ) {
           return;
@@ -590,6 +615,7 @@ export const useBidirectionalTranslator = ({
             trimmedSource,
             nextPresetId,
             trigger,
+            nextContextText,
           ),
           output_chars: result.text.trim().length,
           latency_ms: elapsedMs(startedAt),
@@ -606,6 +632,7 @@ export const useBidirectionalTranslator = ({
               trimmedSource,
               nextPresetId,
               trigger,
+              nextContextText,
             ),
             output_chars: result.text.trim().length,
             latency_ms: elapsedMs(startedAt),
@@ -624,6 +651,7 @@ export const useBidirectionalTranslator = ({
               trimmedSource,
               nextPresetId,
               trigger,
+              nextContextText,
             ),
             latency_ms: elapsedMs(startedAt),
             error_status: error.status,
@@ -657,6 +685,7 @@ export const useBidirectionalTranslator = ({
             trimmedSource,
             nextPresetId,
             trigger,
+            nextContextText,
           ),
           latency_ms: elapsedMs(startedAt),
           error_type: 'exception',
@@ -685,7 +714,7 @@ export const useBidirectionalTranslator = ({
       nextMode: ExpressionMode,
       nextPresetId: TranslationPresetId,
       trigger: TranslationTrigger,
-      detection: IntentDetectionResult,
+      nextContextText = workContextTextRef.current,
     ) => {
       clearScheduledTranslation();
       const trimmedSource = nextSourceText.trim();
@@ -711,6 +740,7 @@ export const useBidirectionalTranslator = ({
           trimmedSource,
           nextPresetId,
           trigger,
+          nextContextText,
         );
         setStatus('offline');
         setMessage('Estas offline. El texto queda visible, pero la IA necesita conexion.');
@@ -730,6 +760,7 @@ export const useBidirectionalTranslator = ({
           trimmedSource,
           nextPresetId,
           trigger,
+          nextContextText,
         );
         setStatus('auth');
         setMessage('Conecta tu cuenta para guardar progreso y seguir.');
@@ -740,6 +771,7 @@ export const useBidirectionalTranslator = ({
         nextMode,
         trimmedSource,
         nextPresetId,
+        nextContextText,
       );
 
       if (requestKey === lastCompletedKeyRef.current) {
@@ -749,32 +781,17 @@ export const useBidirectionalTranslator = ({
         return;
       }
 
-      if (trigger === 'auto_idle' && !detection.automatic) {
-        trackTranslationBlocked(
-          detection.reason === 'mixed' ? 'mixed_input' : 'ambiguous',
-          nextMode,
-          trimmedSource,
-          nextPresetId,
-          trigger,
-          {
-            detection_reason: detection.reason,
-            detection_confidence: detection.confidence,
-          },
-        );
-        setStatus('typing');
-        setMessage(
-          detection.reason === 'ambiguous'
-            ? 'Elegi un modo para generar este texto corto.'
-            : 'Elegi un modo para este texto mezclado.',
-        );
-        return;
-      }
-
       setStatus('typing');
       setMessage('Genero despues de una pausa corta...');
       timerRef.current = window.setTimeout(() => {
         timerRef.current = null;
-        void runTranslation(nextMode, trimmedSource, nextPresetId, trigger);
+        void runTranslation(
+          nextMode,
+          trimmedSource,
+          nextPresetId,
+          trigger,
+          nextContextText,
+        );
       }, TRANSLATION_IDLE_DELAY_MS);
     },
     [
@@ -806,7 +823,7 @@ export const useBidirectionalTranslator = ({
         nextMode,
         presetIdRef.current,
         'auto_idle',
-        nextDetection,
+        workContextTextRef.current,
       );
     },
     [scheduleTranslation, updateMode],
@@ -823,7 +840,7 @@ export const useBidirectionalTranslator = ({
         nextMode,
         presetIdRef.current,
         'mode_selected',
-        nextDetection,
+        workContextTextRef.current,
       );
     },
     [scheduleTranslation, updateMode],
@@ -842,6 +859,7 @@ export const useBidirectionalTranslator = ({
         inputTextRef.current,
         nextPresetId,
         'preset_selected',
+        workContextTextRef.current,
       );
     },
     [clearScheduledTranslation, runTranslation],
@@ -860,18 +878,49 @@ export const useBidirectionalTranslator = ({
       return;
     }
 
-    const nextDetection = detectExpressionMode(
-      inputTextRef.current,
-      lastModeRef.current,
-    );
     scheduleTranslation(
       inputTextRef.current,
       modeRef.current,
       presetIdRef.current,
       'auto_idle',
-      nextDetection,
+      workContextTextRef.current,
     );
   }, [accessToken, hasPendingChanges, scheduleTranslation]);
+
+  const editWorkContext = useCallback(
+    (value: string) => {
+      sequenceRef.current += 1;
+      workContextTextRef.current = value;
+      setWorkContextText(value);
+
+      if (!inputTextRef.current.trim()) return;
+
+      setHasPendingChanges(true);
+      if (resultText.trim()) {
+        setStatus('typing');
+        setMessage('Contexto listo para aplicar.');
+      }
+    },
+    [resultText],
+  );
+
+  const applyWorkContext = useCallback(() => {
+    clearScheduledTranslation();
+    analytics.track('translation_context_applied', {
+      mode: modeRef.current,
+      preset_id: presetIdRef.current,
+      input_chars: inputTextRef.current.trim().length,
+      has_context: Boolean(workContextTextRef.current.trim()),
+      context_chars: workContextTextRef.current.trim().length,
+    });
+    return runTranslation(
+      modeRef.current,
+      inputTextRef.current,
+      presetIdRef.current,
+      'context_applied',
+      workContextTextRef.current,
+    );
+  }, [clearScheduledTranslation, runTranslation]);
 
   const translate = useCallback(
     (nextMode: ExpressionMode = modeRef.current) => {
@@ -885,6 +934,8 @@ export const useBidirectionalTranslator = ({
         nextMode,
         inputTextRef.current,
         presetIdRef.current,
+        'manual_generate',
+        workContextTextRef.current,
       );
     },
     [clearScheduledTranslation, runTranslation, updateMode],
@@ -919,6 +970,7 @@ export const useBidirectionalTranslator = ({
     sourceLanguage: direction.sourceLanguage,
     targetLanguage: direction.targetLanguage,
     presetId,
+    workContextText,
     breakdown,
     breakdownStatus,
     translationRecordId,
@@ -928,10 +980,12 @@ export const useBidirectionalTranslator = ({
     canTranslate,
     translateDisabledReason,
     translate,
+    applyWorkContext,
     requestBreakdown,
     selectPreset,
     selectMode,
     editInput,
+    editWorkContext,
     setStatus,
     setMessage,
   };

@@ -30,7 +30,10 @@ export type TranslateResponse = {
     | 'mode'
     | 'breakdown'
     | 'createdAt'
-  >;
+  > & {
+    saved?: boolean;
+    pending?: boolean;
+  };
   usage: FlowtranslateUsage;
 };
 

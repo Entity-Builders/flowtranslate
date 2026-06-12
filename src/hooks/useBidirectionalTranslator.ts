@@ -576,12 +576,14 @@ export const useBidirectionalTranslator = ({
           : null;
         const responseMode = result.mode || result.translationRecord.mode || nextMode;
         const responseDirection = createExpressionDirection(responseMode);
-        const nextRecordId = result.translationRecord.id;
+        const isSavedRecord = result.translationRecord.saved !== false &&
+          Boolean(result.translationRecord.id);
+        const nextRecordId = isSavedRecord ? result.translationRecord.id : '';
 
         updateMode(responseMode);
         updateTranslationRecordId(
           nextRecordId,
-          result.translationRecord.createdAt,
+          isSavedRecord ? result.translationRecord.createdAt : '',
         );
         setResultText(result.text);
         setBreakdown(displayBreakdown);
@@ -589,26 +591,30 @@ export const useBidirectionalTranslator = ({
         lastCompletedKeyRef.current = requestKey;
         setStatus('idle');
         setMessage(
-          result.usage.charged
+          result.translationRecord.pending
+            ? 'Respuesta lista. Guardando en tu historial...'
+            : result.usage.charged
             ? 'Guardado en tu historial.'
             : 'Reusamos una respuesta guardada.',
         );
         setHasPendingChanges(false);
         onUsage(result.usage);
-        onSavedTranslation({
-          id: result.translationRecord.id,
-          sourceLanguage:
-            result.translationRecord.sourceLanguage ||
-            responseDirection.sourceLanguage,
-          targetLanguage:
-            result.translationRecord.targetLanguage ||
-            responseDirection.targetLanguage,
-          sourceText: trimmedSource,
-          translatedText: result.text,
-          mode: responseMode,
-          breakdown: savedBreakdown,
-          createdAt: result.translationRecord.createdAt,
-        });
+        if (isSavedRecord) {
+          onSavedTranslation({
+            id: result.translationRecord.id,
+            sourceLanguage:
+              result.translationRecord.sourceLanguage ||
+              responseDirection.sourceLanguage,
+            targetLanguage:
+              result.translationRecord.targetLanguage ||
+              responseDirection.targetLanguage,
+            sourceText: trimmedSource,
+            translatedText: result.text,
+            mode: responseMode,
+            breakdown: savedBreakdown,
+            createdAt: result.translationRecord.createdAt,
+          });
+        }
         analytics.track('translation_succeeded', {
           ...translationAnalyticsProperties(
             responseMode,
@@ -621,6 +627,7 @@ export const useBidirectionalTranslator = ({
           latency_ms: elapsedMs(startedAt),
           charged: result.usage.charged,
           reused: !result.usage.charged,
+          save_pending: Boolean(result.translationRecord.pending),
           estimated_tokens: result.usage.estimatedTokens,
           used_this_month: result.usage.usedThisMonth,
           remaining_quota: result.usage.remainingThisMonth,

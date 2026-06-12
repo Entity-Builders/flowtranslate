@@ -197,7 +197,7 @@ describe('account access UI', () => {
     });
   });
 
-  it('links Google identity when the current session is a guest', async () => {
+  it('starts normal Google OAuth from a guest session instead of linking identity', async () => {
     getSession.mockResolvedValue({ data: { session: guestSession } });
 
     render(<App />);
@@ -207,13 +207,45 @@ describe('account access UI', () => {
       await screen.findByRole('button', { name: /conectar con google/i }),
     );
 
-    await waitFor(() => expect(linkIdentity).toHaveBeenCalledWith({
+    await waitFor(() => expect(signOut).toHaveBeenCalled());
+    expect(linkIdentity).not.toHaveBeenCalled();
+    expect(signInWithOAuth).toHaveBeenCalledWith({
       provider: 'google',
       options: {
         redirectTo: window.location.origin,
       },
-    }));
-    expect(screen.getAllByText(/prueba gratis/i).length).toBeGreaterThan(1);
+    });
+    expect(analyticsTrack).toHaveBeenCalledWith(
+      'auth_oauth_submitted',
+      expect.objectContaining({
+        method: 'google_oauth_from_guest',
+      }),
+    );
+  });
+
+  it('cleans up an existing Google identity link error on return', async () => {
+    window.history.pushState(
+      {},
+      '',
+      '/?error=server_error&error_code=identity_already_exists&error_description=Identity+is+already+linked+to+another+user#error=server_error&error_code=identity_already_exists',
+    );
+    getSession.mockResolvedValue({ data: { session: guestSession } });
+
+    render(<App />);
+
+    expect(
+      await screen.findByText(/ese google ya esta conectado a otra cuenta/i),
+    ).toBeInTheDocument();
+    expect(signOut).toHaveBeenCalled();
+    expect(window.location.search).toBe('');
+    expect(window.location.hash).toBe('');
+    expect(analyticsTrack).toHaveBeenCalledWith(
+      'auth_oauth_returned_error',
+      expect.objectContaining({
+        provider: 'google',
+        error_code: 'identity_already_exists',
+      }),
+    );
   });
 
   it('prompts guests to connect an account only after repeated copied replies', async () => {

@@ -245,6 +245,11 @@ function App() {
     }
   }, [account.authLoading, account.busy, translator.status]);
 
+  useEffect(() => {
+    if (!account.error || account.authLoading) return;
+    setShowAccount(true);
+  }, [account.authLoading, account.error]);
+
   const copyExpression = async (
     target: Exclude<CopiedTarget, null>,
     language: LanguageCode,

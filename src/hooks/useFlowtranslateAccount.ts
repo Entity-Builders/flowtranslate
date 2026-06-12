@@ -18,6 +18,8 @@ type AuthAnalyticsError = {
   code?: string;
 };
 
+const OAUTH_LINKED_IDENTITY_ERROR = 'identity_already_exists';
+
 const authErrorProperties = (error: AuthAnalyticsError) => ({
   error_type: error.name || 'auth_error',
   error_status: typeof error.status === 'number' ? error.status : null,
@@ -27,6 +29,32 @@ const authErrorProperties = (error: AuthAnalyticsError) => ({
 const isAnonymousSession = (session: Session | null) =>
   (session?.user as { is_anonymous?: boolean | null } | undefined)
     ?.is_anonymous === true;
+
+const readOAuthErrorFromUrl = () => {
+  const params = new URLSearchParams(window.location.search);
+  const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+  const errorCode =
+    params.get('error_code') ||
+    hashParams.get('error_code') ||
+    params.get('error') ||
+    hashParams.get('error') ||
+    '';
+  const errorDescription =
+    params.get('error_description') ||
+    hashParams.get('error_description') ||
+    '';
+
+  return { errorCode, errorDescription };
+};
+
+const clearOAuthErrorFromUrl = () => {
+  if (!window.location.search && !window.location.hash) return;
+  window.history.replaceState(
+    window.history.state,
+    document.title,
+    window.location.pathname,
+  );
+};
 
 export const useFlowtranslateAccount = () => {
   const [session, setSession] = useState<Session | null>(null);
@@ -65,6 +93,35 @@ export const useFlowtranslateAccount = () => {
       mounted = false;
       subscription.unsubscribe();
     };
+  }, []);
+
+  useEffect(() => {
+    if (!supabase) return;
+
+    const { errorCode, errorDescription } = readOAuthErrorFromUrl();
+    if (!errorCode) return;
+
+    analytics.track('auth_oauth_returned_error', {
+      provider: 'google',
+      error_code: errorCode,
+      has_error_description: Boolean(errorDescription),
+    });
+
+    clearOAuthErrorFromUrl();
+
+    if (errorCode === OAUTH_LINKED_IDENTITY_ERROR) {
+      void supabase.auth.signOut();
+      setSession(null);
+      setError(
+        'Ese Google ya esta conectado a otra cuenta. Cerramos la prueba gratis; toca Google de nuevo para entrar con esa cuenta.',
+      );
+      return;
+    }
+
+    setError(
+      errorDescription ||
+        'No pudimos terminar el inicio con Google. Proba de nuevo.',
+    );
   }, []);
 
   const requestCode = async () => {
@@ -243,7 +300,7 @@ export const useFlowtranslateAccount = () => {
       return;
     }
 
-    const method = accountKind === 'guest' ? 'google_link' : 'google_oauth';
+    const method = accountKind === 'guest' ? 'google_oauth_from_guest' : 'google_oauth';
     const redirectTo = window.location.origin;
 
     setBusy(true);
@@ -253,16 +310,15 @@ export const useFlowtranslateAccount = () => {
       account_kind: accountKind,
     });
 
-    const { error: oauthError } =
-      accountKind === 'guest'
-        ? await supabase.auth.linkIdentity({
-            provider: 'google',
-            options: { redirectTo },
-          })
-        : await supabase.auth.signInWithOAuth({
-            provider: 'google',
-            options: { redirectTo },
-          });
+    if (accountKind === 'guest') {
+      await supabase.auth.signOut();
+      setSession(null);
+    }
+
+    const { error: oauthError } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo },
+    });
 
     setBusy(false);
 
@@ -284,7 +340,7 @@ export const useFlowtranslateAccount = () => {
     });
     setMessage(
       accountKind === 'guest'
-        ? 'Termina con Google para conectar esta prueba gratis.'
+        ? 'Continua con Google para entrar con tu cuenta.'
         : 'Continua con Google para terminar el inicio de sesion.',
     );
   };

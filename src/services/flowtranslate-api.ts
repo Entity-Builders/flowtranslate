@@ -16,7 +16,10 @@ import type {
   TranslationPresetId,
   UsageSnapshot,
 } from '@eb-packages/flowtranslate-core';
-import { getFlowtranslateFunctionUrl } from '../lib/supabase';
+import {
+  getFlowtranslateFunctionUrl,
+  getFlowtranslateProCheckoutFunctionUrl,
+} from '../lib/supabase';
 
 export type FlowtranslateUsage = UsageSnapshot;
 
@@ -97,6 +100,17 @@ export type BreakdownEnrichmentResponse = {
   >;
   cached?: boolean;
   usage: FlowtranslateUsage;
+};
+
+export type FlowtranslateProCheckoutResponse = {
+  checkoutUrl: string;
+  subscriptionId: string;
+  externalReference: string;
+  provider: 'mercado_pago';
+  planId: string;
+  status: 'pending';
+  currency: string;
+  displayAmount: number;
 };
 
 type FlowtranslateRequest =
@@ -325,3 +339,42 @@ export const enrichBreakdown = (
     },
     accessToken,
   );
+
+export const startFlowtranslateProCheckout = async (accessToken: string) => {
+  const endpoint = getFlowtranslateProCheckoutFunctionUrl();
+  if (!endpoint) {
+    throw new FlowtranslateApiError(
+      'Flowtranslate Pro checkout is not configured.',
+      0,
+    );
+  }
+
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({}),
+  });
+
+  const data = (await response.json().catch(() => null)) as
+    | FlowtranslateProCheckoutResponse
+    | { error: string }
+    | null;
+
+  if (!response.ok) {
+    const message =
+      data && 'error' in data ? data.error : 'Flowtranslate checkout failed.';
+    throw new FlowtranslateApiError(message, response.status);
+  }
+
+  if (!data || 'error' in data) {
+    throw new FlowtranslateApiError(
+      'Flowtranslate checkout returned an empty response.',
+      response.status,
+    );
+  }
+
+  return data;
+};

@@ -17,11 +17,24 @@ export const supabase = isSupabaseConfigured
     })
   : null;
 
+export const getSupabaseFunctionUrl = (
+  functionName: string,
+  explicitUrl?: string,
+) => {
+  if (explicitUrl?.trim()) return explicitUrl.trim();
+  if (!supabaseUrl) return '';
+  return `${supabaseUrl.replace(/\/$/, '')}/functions/v1/${functionName}`;
+};
+
 export const getFlowtranslateFunctionUrl = () => {
   const explicitUrl = import.meta.env.VITE_FLOWTRANSLATE_API_URL?.trim();
-  if (explicitUrl) return explicitUrl;
-  if (!supabaseUrl) return '';
-  return `${supabaseUrl.replace(/\/$/, '')}/functions/v1/flowtranslate-generate`;
+  return getSupabaseFunctionUrl('flowtranslate-generate', explicitUrl);
+};
+
+export const getFlowtranslateProCheckoutFunctionUrl = () => {
+  const explicitUrl =
+    import.meta.env.VITE_FLOWTRANSLATE_PRO_CHECKOUT_API_URL?.trim();
+  return getSupabaseFunctionUrl('flowtranslate-pro-checkout', explicitUrl);
 };
 
 export type { Session };

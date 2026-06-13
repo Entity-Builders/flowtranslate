@@ -109,3 +109,16 @@ product-prefixed config instead of duplicating the provider integration.
 `apps/flowtranslate/.env.production`. Edge Function values use
 `eb-infra/supabase/functions/.env` for local function serve; production secrets
 must still be set in Supabase Cloud secrets.
+
+Use this to preview production Edge Function secret upload without printing
+values:
+
+```bash
+./scripts/sync-secrets.sh xfcvuzcxvdpzkqpnahyx \
+  --source .env.source.production \
+  --dry-run
+```
+
+`eb-infra/.env.local` is legacy compatibility for older scripts. It is not the
+source for `supabase functions serve` and should not be treated as the canonical
+production secret source.

@@ -153,4 +153,13 @@ as the committable checklist.
 Mercado Pago Access Token, webhook secret, Client Secret, card data, provider
 payloads, and user emails must never be configured in Cloudflare/Wrangler for
 the static app. Production billing secrets belong in Supabase Cloud secrets for
-the shared `eb-core` project.
+the shared `eb-core` project. Preview the server-side upload with:
+
+```bash
+./scripts/sync-secrets.sh xfcvuzcxvdpzkqpnahyx \
+  --source .env.source.production \
+  --dry-run
+```
+
+Remove `--dry-run` only when `.env.source.production` contains the intended
+production server-side values.

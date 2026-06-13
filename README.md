@@ -86,19 +86,21 @@ MERCADO_PAGO_PUBLIC_KEY=<server-side-for-v1>
 MERCADO_PAGO_WEBHOOK_SECRET=<server-side-secret>
 MERCADO_PAGO_APPLICATION_ID=<provider-app-id>
 MERCADO_PAGO_WEBHOOK_URL_TOKEN=<optional-story-1.8-fallback>
+ENTITY_BUILDERS_BILLING_WEBHOOK_URL=https://xfcvuzcxvdpzkqpnahyx.supabase.co/functions/v1/entitybuilders-billing-webhook?source_news=webhooks&provider=mercado_pago
 FLOWTRANSLATE_PRO_MERCADO_PAGO_INTERNAL_PLAN_ID=flowtranslate_pro_monthly_ar
 FLOWTRANSLATE_PRO_PRICE_AMOUNT=4999
 FLOWTRANSLATE_PRO_PRICE_CURRENCY=ARS
 FLOWTRANSLATE_PRO_CHECKOUT_RETURN_URL=https://flowtranslate.app/pro/checkout/return
-FLOWTRANSLATE_PRO_BILLING_WEBHOOK_URL=https://xfcvuzcxvdpzkqpnahyx.supabase.co/functions/v1/flowtranslate-billing-webhook?source_news=webhooks
 ```
 
 `MERCADO_PAGO_*` names are shared provider credentials for the Entity Builders
-Billing integration. `FLOWTRANSLATE_PRO_*` names are product-scoped config so a
-future Entity Builders app can add its own plan without reintegrating the
-provider from scratch. v1 does not expose `VITE_MERCADO_PAGO_*` because checkout
-will be created server-side and redirected through Mercado Pago's hosted
-`init_point`.
+Billing integration. `ENTITY_BUILDERS_BILLING_WEBHOOK_URL` is the shared
+server-side billing webhook; FlowTranslate routes through provider lookup and
+`external_reference`, not a product-specific webhook function name.
+`FLOWTRANSLATE_PRO_*` names are product-scoped config so a future Entity
+Builders app can add its own plan without reintegrating the provider from
+scratch. v1 does not expose `VITE_MERCADO_PAGO_*` because checkout will be
+created server-side and redirected through Mercado Pago's hosted `init_point`.
 
 ## Data And Runtime
 

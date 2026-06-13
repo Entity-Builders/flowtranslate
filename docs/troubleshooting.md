@@ -81,11 +81,11 @@ MERCADO_PAGO_ACCESS_TOKEN=<redacted>
 MERCADO_PAGO_PUBLIC_KEY=<redacted>
 MERCADO_PAGO_WEBHOOK_SECRET=<redacted>
 MERCADO_PAGO_APPLICATION_ID=<redacted>
+ENTITY_BUILDERS_BILLING_WEBHOOK_URL=<redacted-shared-webhook-url>
 FLOWTRANSLATE_PRO_MERCADO_PAGO_INTERNAL_PLAN_ID=flowtranslate_pro_monthly_ar
 FLOWTRANSLATE_PRO_PRICE_AMOUNT=4999
 FLOWTRANSLATE_PRO_PRICE_CURRENCY=ARS
 FLOWTRANSLATE_PRO_CHECKOUT_RETURN_URL=https://flowtranslate.app/pro/checkout/return
-FLOWTRANSLATE_PRO_BILLING_WEBHOOK_URL=https://xfcvuzcxvdpzkqpnahyx.supabase.co/functions/v1/flowtranslate-billing-webhook?source_news=webhooks
 ```
 
 Do not paste real tokens, webhook secrets, payment payloads, card data, source
@@ -94,14 +94,16 @@ or this repository.
 
 If a user paid but Pro is not active, do not grant Pro from the return URL
 alone. Check provider status and webhook processing from the server-side path.
-Story 1.8 must make the future `flowtranslate-billing-webhook` public at the
+Story 1.8 must make the future `entitybuilders-billing-webhook` public at the
 Supabase JWT layer (`verify_jwt = false`) and then validate Mercado Pago
 internally with `x-signature`, `x-request-id`, `ts`, `data.id`, HMAC SHA-256,
-and provider lookup before mutating entitlement state.
+provider lookup, and `external_reference` routing before mutating entitlement
+state.
 
 Reusable billing rule: Mercado Pago provider credentials are shared
-`MERCADO_PAGO_*` server secrets; app offers are product-scoped config such as
-`FLOWTRANSLATE_PRO_*`. Future Entity Builders apps should add their own
+`MERCADO_PAGO_*` server secrets, the billing webhook is shared as
+`ENTITY_BUILDERS_BILLING_WEBHOOK_URL`, and app offers are product-scoped config
+such as `FLOWTRANSLATE_PRO_*`. Future Entity Builders apps should add their own
 product-prefixed config instead of duplicating the provider integration.
 
 `env:sync --env local` writes app values to `apps/flowtranslate/.env.local`.

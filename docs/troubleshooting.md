@@ -66,11 +66,13 @@ have public Supabase/PostHog Vite env vars. If checkout or paid-but-not-Pro
 support later fails, verify the Edge Function environment first:
 
 ```bash
-node scripts/sync-env-source.mjs \
-  --source .env.source \
-  --apps entitybuildersFunctions \
-  --dry-run
+yarn env:sync:local --dry-run
 ```
+
+For local development, the source should be `.env.source.local`, created from
+`.env.source.local.template`. Use Mercado Pago test credentials there. For
+production, use `.env.source.production`; do not mix production provider tokens
+into the local source file.
 
 Expected server-side keys for local Edge Functions:
 
@@ -101,3 +103,9 @@ Reusable billing rule: Mercado Pago provider credentials are shared
 `MERCADO_PAGO_*` server secrets; app offers are product-scoped config such as
 `FLOWTRANSLATE_PRO_*`. Future Entity Builders apps should add their own
 product-prefixed config instead of duplicating the provider integration.
+
+`env:sync --env local` writes app values to `apps/flowtranslate/.env.local`.
+`env:sync --env production` writes app values to
+`apps/flowtranslate/.env.production`. Edge Function values use
+`eb-infra/supabase/functions/.env` for local function serve; production secrets
+must still be set in Supabase Cloud secrets.

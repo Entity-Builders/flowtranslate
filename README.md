@@ -60,10 +60,25 @@ FLOWTRANSLATE_GEMINI_MODEL=
 ```
 
 FlowTranslate Pro billing uses Mercado Pago through server-side Supabase Edge
-Functions only. Use `yarn env:sync --apps entitybuildersFunctions` to sync
-safe local values from `.env.source` into `eb-infra/supabase/functions/.env`.
+Functions only. For local development, copy `.env.source.local.template` to
+`.env.source.local`, fill local Supabase and Mercado Pago test credentials, then
+sync both the Vite app and Edge Function env:
+
+```bash
+yarn env:sync:local
+```
+
+That writes browser-safe values to `apps/flowtranslate/.env.local` and
+server-side values to `eb-infra/supabase/functions/.env`. For production,
+copy `.env.source.template` to `.env.source.production`, fill production
+values, and use:
+
+```bash
+yarn env:sync:production
+```
+
 Do not add these values to `apps/flowtranslate/.env.production` or Cloudflare
-static app env:
+static app env unless they are public `VITE_*` values:
 
 ```bash
 MERCADO_PAGO_ACCESS_TOKEN=<server-side-token>

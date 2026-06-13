@@ -20,6 +20,8 @@ import {
   getFlowtranslateFunctionUrl,
   getFlowtranslateProCheckoutFunctionUrl,
 } from '../lib/supabase';
+import { FLOWTRANSLATE_GUEST_DEVICE_HEADER } from '../constants';
+import { getOrCreateGuestDeviceId } from './guest-identity';
 
 export type FlowtranslateUsage = UsageSnapshot;
 
@@ -199,6 +201,7 @@ const requestFlowtranslate = async <TResponse extends FlowtranslateResponse>(
     headers: {
       Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
+      [FLOWTRANSLATE_GUEST_DEVICE_HEADER]: getOrCreateGuestDeviceId(),
     },
     body: JSON.stringify(payload),
   });

@@ -5,17 +5,21 @@ import {
   type LanguageCode,
   type TranslationPresetId,
   type GrammarInsight,
+  type UsageSnapshot,
 } from '@eb-packages/flowtranslate-core';
 import {
+  ArrowRight,
   CheckCircle2,
   ChevronDown,
   ChevronUp,
   Copy,
+  Coffee,
   Languages,
   Loader2,
   Mic,
   MicOff,
   Send,
+  Sparkles,
   Square,
   Volume2,
 } from 'lucide-react';
@@ -58,6 +62,9 @@ type ExpressionWorkspaceProps = {
   dictatingLanguage: LanguageCode | null;
   dictationUnavailableReason: string;
   statusText?: string;
+  quotaUsage?: UsageSnapshot | null;
+  quotaUpgradeLabel?: string;
+  quotaUpgradeBusy?: boolean;
   onInputChange: (value: string) => void;
   onCopyInput: () => void;
   onCopyResult: () => void;
@@ -69,6 +76,8 @@ type ExpressionWorkspaceProps = {
   onRequestBreakdown: () => void;
   onRequestStudy?: () => void;
   onTranslateToSpanish: () => void;
+  onQuotaUpgrade?: () => void;
+  onQuotaSupport?: () => void;
 };
 
 const responsePlaceholder = (mode: ExpressionMode) => {
@@ -106,6 +115,93 @@ const translationLoadingMessages = [
   'Ajustando tono',
   'Refinando vocabulario',
 ];
+
+const formatQuotaResetDate = (resetAt?: string) => {
+  if (!resetAt) return '';
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'long',
+    day: 'numeric',
+  }).format(new Date(resetAt));
+};
+
+const QuotaExhaustedState = ({
+  usage,
+  compact = false,
+  upgradeLabel = 'Pasar a Pro',
+  upgradeBusy = false,
+  onUpgrade,
+  onSupport,
+}: {
+  usage?: UsageSnapshot | null;
+  compact?: boolean;
+  upgradeLabel?: string;
+  upgradeBusy?: boolean;
+  onUpgrade?: () => void;
+  onSupport?: () => void;
+}) => {
+  const resetLabel = formatQuotaResetDate(usage?.resetAt);
+
+  return (
+    <div
+      className={`relative overflow-hidden rounded-lg border border-amber-200 bg-amber-50 text-amber-950 ${
+        compact ? 'p-4' : 'p-6'
+      }`}
+    >
+      <div className='absolute inset-x-0 top-0 h-1 overflow-hidden bg-amber-100'>
+        <div className='h-full w-1/2 animate-pulse bg-emerald-500' />
+      </div>
+      <div className='flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between'>
+        <div className='min-w-0'>
+          <div className='mb-4 flex items-center gap-3'>
+            <div className='relative flex h-12 w-12 shrink-0 items-center justify-center rounded-md bg-white text-amber-700 shadow-sm ring-1 ring-amber-200'>
+              <Sparkles size={22} className='motion-safe:animate-bounce' />
+            </div>
+            <div className='min-w-0'>
+              <p className='text-xs font-black uppercase tracking-normal text-amber-700'>
+                Prueba gratis completa
+              </p>
+              <h3 className='mt-1 text-2xl font-black leading-tight text-slate-950'>
+                Segui respondiendo hoy
+              </h3>
+            </div>
+          </div>
+          <p className='max-w-2xl text-sm font-semibold leading-6 text-amber-900 sm:text-base'>
+            Llegaste al limite mensual de IA para esta prueba. Tu texto sigue
+            aca; podes pasar a Pro para continuar ahora o apoyar con un cafe si
+            Flowtranslate te salvo una respuesta.
+          </p>
+          {resetLabel ? (
+            <p className='mt-3 text-xs font-bold text-amber-800'>
+              La cuota gratis se renueva el {resetLabel}.
+            </p>
+          ) : null}
+        </div>
+
+        <div className='flex shrink-0 flex-col gap-2 sm:min-w-52'>
+          <button
+            type='button'
+            onClick={onUpgrade}
+            disabled={!onUpgrade || upgradeBusy}
+            className='inline-flex h-11 items-center justify-center gap-2 rounded-md bg-slate-950 px-4 text-sm font-black text-white transition-colors hover:bg-slate-800 disabled:bg-slate-300'
+          >
+            {upgradeBusy ? <Loader2 size={16} className='animate-spin' /> : null}
+            {upgradeLabel}
+            {!upgradeBusy ? <ArrowRight size={16} /> : null}
+          </button>
+          <button
+            type='button'
+            onClick={onSupport}
+            disabled={!onSupport}
+            className='inline-flex h-10 items-center justify-center gap-2 rounded-md border border-amber-300 bg-white px-4 text-sm font-black text-amber-900 transition-colors hover:bg-amber-100 disabled:text-amber-300'
+          >
+            <Coffee size={16} />
+            Invitar un cafe
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const statusTone = (status: ExpressionWorkspaceStatus) => {
   if (status === 'error' || status === 'auth') {
@@ -161,6 +257,9 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
     dictatingLanguage,
     dictationUnavailableReason,
     statusText,
+    quotaUsage,
+    quotaUpgradeLabel,
+    quotaUpgradeBusy = false,
     onInputChange,
     onCopyResult,
     onListenInput,
@@ -171,6 +270,8 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
     onRequestBreakdown,
     onRequestStudy,
     onTranslateToSpanish,
+    onQuotaUpgrade,
+    onQuotaSupport,
   } = props;
   const isTranslating = status === 'translating';
   const [isBreakdownOpen, setIsBreakdownOpen] = useState(false);
@@ -184,12 +285,12 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
   const trimmedInputText = inputText.trim();
   const trimmedResultText = resultText.trim();
   const hasResult = Boolean(trimmedResultText);
-  const shouldShowMobileResultSheet = isTranslating || hasResult;
   const hasAttentionState =
     status === 'error' ||
     status === 'auth' ||
     status === 'quota' ||
     status === 'offline';
+  const shouldShowMobileResultSheet = isTranslating || hasResult || hasAttentionState;
   const shouldEmphasizeResponse = hasResult || isTranslating || hasAttentionState;
   const tone = statusTone(status);
   const isSpanishTranslationMode = mode === 'translate_to_spanish';
@@ -491,6 +592,14 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
             <p className='max-w-4xl break-words text-3xl font-semibold leading-[1.18] tracking-normal text-slate-950 [overflow-wrap:anywhere] xl:text-[2.45rem]'>
               {resultText}
             </p>
+          ) : status === 'quota' ? (
+            <QuotaExhaustedState
+              usage={quotaUsage}
+              upgradeLabel={quotaUpgradeLabel}
+              upgradeBusy={quotaUpgradeBusy}
+              onUpgrade={onQuotaUpgrade}
+              onSupport={onQuotaSupport}
+            />
           ) : isTranslating ? (
             <div className='space-y-5' aria-label='Preparando respuesta'>
               <div className='inline-flex items-center gap-2 rounded-md bg-slate-50 px-3 py-2 text-sm font-bold text-slate-500'>
@@ -514,7 +623,7 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
           )}
         </div>
 
-        {shouldEmphasizeResponse ? (
+        {shouldEmphasizeResponse && status !== 'quota' ? (
           <div className='mt-7 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
           <button
             type='button'
@@ -530,7 +639,7 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
           </div>
         ) : null}
 
-        {shouldEmphasizeResponse ? (
+        {shouldEmphasizeResponse && status !== 'quota' ? (
           <div className='mt-5 border-t border-slate-100 pt-1'>
           <ExpressionBreakdownDetails
             key={breakdownKey || 'empty-breakdown'}
@@ -615,12 +724,22 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
                         <div className='h-5 w-7/12 animate-pulse rounded-md bg-slate-100' />
                       </div>
                     </div>
+                  ) : status === 'quota' ? (
+                    <QuotaExhaustedState
+                      usage={quotaUsage}
+                      compact
+                      upgradeLabel={quotaUpgradeLabel}
+                      upgradeBusy={quotaUpgradeBusy}
+                      onUpgrade={onQuotaUpgrade}
+                      onSupport={onQuotaSupport}
+                    />
                   ) : (
                     <p className='max-w-full break-words text-xl font-semibold leading-[1.28] text-slate-950 [overflow-wrap:anywhere]'>
                       {resultText}
                     </p>
                   )}
 
+                  {status !== 'quota' ? (
                   <div className='flex min-w-0 items-center gap-2 border-t border-slate-100 pt-3'>
                     <button
                       type='button'
@@ -652,6 +771,7 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
                       </button>
                     ) : null}
                   </div>
+                  ) : null}
                 </div>
               </div>
             ) : hasResult ? (

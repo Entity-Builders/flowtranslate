@@ -1,6 +1,7 @@
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 import App from '../App';
+import { ExpressionWorkspace } from '../components/ExpressionWorkspace';
 import { QuotaStatus } from '../components/QuotaStatus';
 
 describe('quota and account UI', () => {
@@ -33,5 +34,69 @@ describe('quota and account UI', () => {
     expect(
       screen.getByText(/Detalle tecnico: quedan 250 de 2,000 creditos mensuales de IA/i),
     ).toBeInTheDocument();
+  });
+
+  it('offers Pro and coffee support when quota is exhausted', () => {
+    const onQuotaUpgrade = vi.fn();
+    const onQuotaSupport = vi.fn();
+
+    render(
+      <ExpressionWorkspace
+        inputText='necesito ayuda'
+        resultText=''
+        mode='translate_to_english'
+        modeDetection={{
+          mode: 'translate_to_english',
+          confidence: 'high',
+          reason: 'manual',
+          automatic: false,
+        }}
+        sourceLanguage='es'
+        targetLanguage='en'
+        presetId='natural'
+        breakdown={null}
+        status='quota'
+        canTranslate={false}
+        translateDisabledReason='Sin cuota'
+        copiedInput={false}
+        copiedResult={false}
+        canListen={false}
+        speakingLanguage={null}
+        canDictate={false}
+        dictatingLanguage={null}
+        dictationUnavailableReason='No disponible'
+        statusText='Llegaste al limite mensual'
+        quotaUsage={{
+          estimatedTokens: 0,
+          monthlyQuota: 800,
+          usedThisMonth: 800,
+          remainingThisMonth: 0,
+          charged: false,
+          resetAt: '2026-07-01T00:00:00.000Z',
+        }}
+        quotaUpgradeLabel='Pasar a Pro'
+        onInputChange={vi.fn()}
+        onCopyInput={vi.fn()}
+        onCopyResult={vi.fn()}
+        onListenInput={vi.fn()}
+        onListenResult={vi.fn()}
+        onDictateInput={vi.fn()}
+        onTranslate={vi.fn()}
+        onSelectPreset={vi.fn()}
+        onRequestBreakdown={vi.fn()}
+        onTranslateToSpanish={vi.fn()}
+        onQuotaUpgrade={onQuotaUpgrade}
+        onQuotaSupport={onQuotaSupport}
+      />,
+    );
+
+    expect(screen.getByText('Prueba gratis completa')).toBeInTheDocument();
+    expect(screen.getByText('Segui respondiendo hoy')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /pasar a pro/i }));
+    fireEvent.click(screen.getByRole('button', { name: /invitar un cafe/i }));
+
+    expect(onQuotaUpgrade).toHaveBeenCalledTimes(1);
+    expect(onQuotaSupport).toHaveBeenCalledTimes(1);
   });
 });

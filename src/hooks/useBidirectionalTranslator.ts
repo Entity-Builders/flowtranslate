@@ -807,7 +807,11 @@ export const useBidirectionalTranslator = ({
             });
           }
           setStatus(error.status === 402 ? 'quota' : error.status === 401 ? 'auth' : 'error');
-          setMessage(error.message);
+          setMessage(
+            error.status === 402
+              ? 'Llegaste al limite mensual.'
+              : error.message,
+          );
           return;
         }
 
@@ -1270,7 +1274,11 @@ export const useBidirectionalTranslator = ({
           });
         }
         setStatus(error.status === 402 ? 'quota' : error.status === 401 ? 'auth' : 'error');
-        setMessage(error.message);
+        setMessage(
+          error.status === 402
+            ? 'Llegaste al limite mensual.'
+            : error.message,
+        );
         return;
       }
 

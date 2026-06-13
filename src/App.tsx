@@ -94,6 +94,9 @@ const FLOWTRANSLATE_PRO_ANALYTICS = {
   currency: 'ARS',
   display_price: 'ARS 4.999/mes',
 };
+const FLOWTRANSLATE_COFFEE_URL =
+  import.meta.env.VITE_FLOWTRANSLATE_COFFEE_URL?.trim() ||
+  'https://www.buymeacoffee.com/juanobrach';
 
 const isStarterLearningSession = (session: LearningSession) =>
   session.id.startsWith('starter-');
@@ -1064,7 +1067,8 @@ function App() {
     (usage.remainingThisMonth <= 0 ||
       (usage.monthlyQuota > 0 &&
         usage.remainingThisMonth / usage.monthlyQuota <= 0.2));
-  const shouldShowUsageUpgradePrompt = Boolean(usagePressure);
+  const shouldShowUsageUpgradePrompt =
+    Boolean(usagePressure) && translator.status !== 'quota';
   const shouldShowSavedHistoryUpgradePrompt = shouldShowAccountPrompt;
   const shouldShowLearningUpgradePrompt =
     view === 'learning' &&
@@ -1164,6 +1168,14 @@ function App() {
     error: checkoutError?.surface === surface ? checkoutError.message : '',
   });
 
+  const openQuotaSupport = useCallback(() => {
+    analytics.track('quota_support_clicked', {
+      surface: 'usage_limit',
+      account_kind: account.accountKind,
+    });
+    window.open(FLOWTRANSLATE_COFFEE_URL, '_blank', 'noopener,noreferrer');
+  }, [account.accountKind]);
+
   const dismissCheckoutReturn = () => {
     setCheckoutReturn(null);
   };
@@ -1186,6 +1198,8 @@ function App() {
     ? 'Generando respuesta...'
     : translator.status === 'typing'
       ? 'Listo, espero una pausa'
+    : translator.status === 'quota'
+      ? 'Llegaste al limite mensual'
     : translator.hasPendingChanges
       ? 'Listo para responder'
       : translator.message || undefined;
@@ -1193,7 +1207,9 @@ function App() {
     'El dictado por microfono no esta disponible en este navegador.';
   const shouldReserveMobileResultSheet =
     view === 'translate' &&
-    (translator.status === 'translating' || Boolean(translator.resultText.trim()));
+    (translator.status === 'translating' ||
+      translator.status === 'quota' ||
+      Boolean(translator.resultText.trim()));
 
   return (
     <div className='flex h-[100dvh] min-h-0 flex-col overflow-x-hidden bg-slate-50 text-slate-950'>
@@ -1351,6 +1367,11 @@ function App() {
             dictatingLanguage={dictatingLanguage}
             dictationUnavailableReason={dictationUnavailableReason}
             statusText={expressionStatusText}
+            quotaUsage={usage}
+            quotaUpgradeLabel={
+              account.accountKind === 'permanent' ? 'Pasar a Pro' : 'Conectar cuenta'
+            }
+            quotaUpgradeBusy={checkoutStartingSurface === 'usage_limit'}
             onInputChange={(value) => translator.editInput(value)}
             onCopyInput={() =>
               void copyExpression(
@@ -1383,6 +1404,14 @@ function App() {
               }
             }}
             onTranslateToSpanish={() => void translator.translateInputToSpanish()}
+            onQuotaUpgrade={() => {
+              if (account.accountKind === 'permanent') {
+                void startProCheckout('usage_limit');
+                return;
+              }
+              connectAccountForPro('usage_limit');
+            }}
+            onQuotaSupport={openQuotaSupport}
           />
           <p className='max-w-[calc(100vw-2rem)] break-words text-xs text-slate-500 sm:max-w-full'>
             Los servicios de voz del navegador pueden procesar audio durante el

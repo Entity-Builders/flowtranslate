@@ -48,7 +48,7 @@ const billingStateCopy: Record<
   },
   pro_pending: {
     label: 'Pro pendiente',
-    detail: 'Esperando confirmacion segura de Mercado Pago.',
+    detail: 'Esperando Mercado Pago; si abandonaste, reintenta checkout.',
   },
   pro_active: {
     label: 'FlowTranslate Pro',

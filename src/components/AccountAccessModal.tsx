@@ -72,7 +72,7 @@ const billingNoticeCopy: Record<
   pro_pending: {
     label: 'Pro pendiente',
     body:
-      'Estamos esperando la confirmacion segura de Mercado Pago. Pro se activa automaticamente cuando llegue la verificacion.',
+      'Estamos esperando la confirmacion segura de Mercado Pago. Si abandonaste el checkout, podes reintentarlo desde esta cuenta.',
     toneClass: 'border-amber-200 bg-amber-50 text-amber-800',
     Icon: Clock3,
   },

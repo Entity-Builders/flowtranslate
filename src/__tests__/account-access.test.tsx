@@ -539,7 +539,7 @@ describe('account access UI', () => {
     expect(serializedCalls).not.toContain('generated_text');
   });
 
-  it('shows pending Pro entitlement state without retrying checkout', async () => {
+  it('shows pending Pro entitlement state with a checkout retry path', async () => {
     getSession.mockResolvedValue({ data: { session: permanentSession } });
     entitlementMaybeSingle.mockResolvedValue({
       data: {
@@ -562,9 +562,9 @@ describe('account access UI', () => {
 
     expect((await screen.findAllByText('Pro pendiente')).length).toBeGreaterThan(0);
     expect(
-      screen.getByText(/esperando la confirmacion segura de mercado pago/i),
+      screen.getByText(/si abandonaste el checkout, podes reintentarlo/i),
     ).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /pasar a pro/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /pasar a pro/i })).toBeInTheDocument();
   });
 
   it('shows safe checkout return success without granting Pro from URL params', async () => {

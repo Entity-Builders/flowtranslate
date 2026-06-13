@@ -3,6 +3,7 @@ import type { UsageSnapshot } from '@eb-packages/flowtranslate-core';
 import {
   CheckCircle2,
   Chrome,
+  Clock3,
   Flame,
   LogOut,
   Mail,
@@ -10,6 +11,7 @@ import {
   ShieldCheck,
   UserRound,
   X,
+  XCircle,
 } from 'lucide-react';
 import type { useFlowtranslateAccount } from '../hooks/useFlowtranslateAccount';
 import { QuotaStatus } from './QuotaStatus';
@@ -44,6 +46,78 @@ const Feedback = ({ error, message }: { error: string; message: string }) => (
     ) : null}
   </>
 );
+
+const billingNoticeCopy: Record<
+  FlowtranslateAccount['billingState']['id'],
+  {
+    label: string;
+    body: string;
+    toneClass: string;
+    Icon: typeof ShieldCheck;
+  }
+> = {
+  guest: {
+    label: 'Prueba gratis',
+    body:
+      'Responde ahora sin friccion. Conecta una cuenta para conservar historial y Learning personal.',
+    toneClass: 'border-slate-200 bg-slate-50 text-slate-700',
+    Icon: UserRound,
+  },
+  free: {
+    label: 'Cuenta gratis',
+    body: 'Tu cuenta gratis de FlowTranslate esta conectada.',
+    toneClass: 'border-slate-200 bg-slate-50 text-slate-700',
+    Icon: ShieldCheck,
+  },
+  pro_pending: {
+    label: 'Pro pendiente',
+    body:
+      'Estamos esperando la confirmacion segura de Mercado Pago. Pro se activa automaticamente cuando llegue la verificacion.',
+    toneClass: 'border-amber-200 bg-amber-50 text-amber-800',
+    Icon: Clock3,
+  },
+  pro_active: {
+    label: 'FlowTranslate Pro',
+    body:
+      'Tu Pro esta activo. Tenes mas margen de IA para respuestas, Learning e historial.',
+    toneClass: 'border-emerald-200 bg-emerald-50 text-emerald-800',
+    Icon: CheckCircle2,
+  },
+  pro_failed: {
+    label: 'Pago no confirmado',
+    body:
+      'No pudimos confirmar el pago. Podes reintentar checkout desde esta cuenta.',
+    toneClass: 'border-rose-200 bg-rose-50 text-rose-800',
+    Icon: XCircle,
+  },
+  pro_cancelled: {
+    label: 'Pro cancelado',
+    body:
+      'Tu Pro no esta activo. Podes reactivar checkout o pedir revision si Mercado Pago ya confirmo el cobro.',
+    toneClass: 'border-slate-200 bg-white text-slate-700',
+    Icon: XCircle,
+  },
+};
+
+const BillingNotice = ({ account }: { account: FlowtranslateAccount }) => {
+  const copy = billingNoticeCopy[account.billingState.id];
+  const Icon = copy.Icon;
+
+  return (
+    <div className={`flex gap-2 rounded-md border p-3 text-sm ${copy.toneClass}`}>
+      <Icon size={17} className='mt-0.5 shrink-0' />
+      <div className='min-w-0'>
+        <div className='font-black'>{copy.label}</div>
+        <p className='mt-1 leading-5'>{copy.body}</p>
+        {account.billingState.requiresSupport ? (
+          <p className='mt-1 text-xs font-semibold'>
+            Si pagaste y no aparece activo, revisamos el caso manualmente en 24-48h.
+          </p>
+        ) : null}
+      </div>
+    </div>
+  );
+};
 
 const EmailCodeForm = ({ account }: { account: FlowtranslateAccount }) => (
   <form onSubmit={account.submit} className='space-y-4 border-t border-slate-200 pt-4'>
@@ -146,30 +220,34 @@ export const AccountAccessModal = ({
         </div>
       ) : account.session ? (
         <div className='space-y-5'>
-          <div className='space-y-2'>
-            <div className='flex items-center gap-2 text-xs font-bold uppercase text-slate-400'>
-              {account.isGuest ? <UserRound size={14} /> : <ShieldCheck size={14} />}
-              {account.isGuest ? 'Prueba gratis' : 'Cuenta conectada'}
-            </div>
-            <div className='truncate text-base font-bold text-slate-950'>
-              {account.displayName}
-            </div>
-            {account.currentStreak > 0 && (
-              <div className='flex items-center gap-1.5 text-sm font-semibold text-orange-600'>
-                <Flame size={16} />
-                {account.currentStreak} dias seguidos
+          <div className='space-y-3'>
+            <div className='space-y-2'>
+              <div className='flex items-center gap-2 text-xs font-bold uppercase text-slate-400'>
+                {account.isGuest ? <UserRound size={14} /> : <ShieldCheck size={14} />}
+                {billingNoticeCopy[account.billingState.id].label}
               </div>
-            )}
-            <p className='text-sm leading-6 text-slate-600'>
-              {account.isGuest
-                ? 'Responde ahora sin friccion. Conecta una cuenta para conservar historial y Learning personal.'
-                : 'Tu cuenta gratis de Flowtranslate esta conectada.'}
-            </p>
+              <div className='truncate text-base font-bold text-slate-950'>
+                {account.displayName}
+              </div>
+              {account.currentStreak > 0 && (
+                <div className='flex items-center gap-1.5 text-sm font-semibold text-orange-600'>
+                  <Flame size={16} />
+                  {account.currentStreak} dias seguidos
+                </div>
+              )}
+            </div>
+            <BillingNotice account={account} />
           </div>
 
-          <QuotaStatus usage={usage} accountKind={account.accountKind} />
+          <QuotaStatus
+            usage={usage}
+            accountKind={account.accountKind}
+            billingState={account.billingState}
+          />
 
-          {!account.isGuest ? profileUpgradePrompt : null}
+          {!account.isGuest && account.billingState.canRetryCheckout
+            ? profileUpgradePrompt
+            : null}
 
           {!account.isGuest && (
             <div className='space-y-3 border-t border-slate-100 pt-5'>

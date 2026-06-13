@@ -5,7 +5,13 @@ import {
 } from '@eb-packages/auth';
 import { useCallback, useEffect, useState } from 'react';
 import type { Provider } from '@supabase/supabase-js';
-import type { Profile } from '@eb-packages/flowtranslate-core';
+import {
+  mapAccountKindToBillingState,
+  resolveFlowtranslateBillingState,
+  type FlowtranslateBillingState,
+  type FlowtranslateEntitlementRow,
+  type Profile,
+} from '@eb-packages/flowtranslate-core';
 import {
   isSupabaseConfigured,
   supabase,
@@ -35,12 +41,17 @@ export const useFlowtranslateAccount = () => {
     messages: FLOWTRANSLATE_AUTH_MESSAGES,
   });
   const { signInWithOAuth } = account;
+  const sessionUser = account.session?.user;
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [billingState, setBillingState] = useState<FlowtranslateBillingState>(
+    () => mapAccountKindToBillingState('none'),
+  );
+  const [billingStateLoading, setBillingStateLoading] = useState(false);
 
   useEffect(() => {
     if (!supabase) return;
 
-    if (!account.session?.user) {
+    if (!sessionUser) {
       setProfile(null);
       return;
     }
@@ -49,7 +60,7 @@ export const useFlowtranslateAccount = () => {
     supabase
       .from('profiles')
       .select('*')
-      .eq('user_id', account.session.user.id)
+      .eq('user_id', sessionUser.id)
       .maybeSingle()
       .then(({ data }) => {
         if (!mounted) return;
@@ -59,7 +70,63 @@ export const useFlowtranslateAccount = () => {
     return () => {
       mounted = false;
     };
-  }, [account.session?.user]);
+  }, [sessionUser]);
+
+  useEffect(() => {
+    if (!supabase || !sessionUser || account.accountKind !== 'permanent') {
+      setBillingState(mapAccountKindToBillingState(account.accountKind));
+      setBillingStateLoading(false);
+      return;
+    }
+
+    let mounted = true;
+    const userId = sessionUser.id;
+    setBillingStateLoading(true);
+    void (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('entitlements')
+          .select(
+            'status, account_kind, source, plan, subscription_id, active_from, active_until, last_verified_at',
+          )
+          .eq('user_id', userId)
+          .maybeSingle();
+
+        if (!mounted) return;
+
+        if (error) {
+          analytics.track('pro_entitlement_state_load_failed', {
+            account_kind: account.accountKind,
+            error_type: error.name || 'entitlement_load_error',
+            error_code: error.code || null,
+          });
+          setBillingState(mapAccountKindToBillingState(account.accountKind));
+          return;
+        }
+
+        setBillingState(
+          resolveFlowtranslateBillingState({
+            accountKind: account.accountKind,
+            entitlement: data as FlowtranslateEntitlementRow | null,
+          }),
+        );
+      } catch (error) {
+        if (!mounted) return;
+        analytics.track('pro_entitlement_state_load_failed', {
+          account_kind: account.accountKind,
+          error_type: error instanceof Error ? error.name : 'entitlement_load_error',
+          error_code: null,
+        });
+        setBillingState(mapAccountKindToBillingState(account.accountKind));
+      } finally {
+        if (mounted) setBillingStateLoading(false);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, [account.accountKind, sessionUser]);
 
   const signInWithGoogle = useCallback(
     async () => signInWithOAuth('google' as Provider),
@@ -103,6 +170,8 @@ export const useFlowtranslateAccount = () => {
   return {
     ...account,
     profile,
+    billingState,
+    billingStateLoading,
     displayName:
       account.accountKind === 'guest'
         ? 'Prueba gratis'

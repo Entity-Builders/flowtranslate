@@ -36,7 +36,10 @@ import {
 } from './components/ProUpgradePrompt';
 import { useBidirectionalTranslator } from './hooks/useBidirectionalTranslator';
 import { useFlowtranslateAccount } from './hooks/useFlowtranslateAccount';
-import { analytics } from './services/analytics';
+import {
+  analytics,
+  safeCommercialAnalyticsProperties,
+} from './services/analytics';
 import { copyText } from './services/clipboard';
 import {
   FlowtranslateApiError,
@@ -68,7 +71,10 @@ import {
   deleteTranslationRecord,
   listTranslationHistory,
 } from './services/translation-history';
-import { readCheckoutReturnFromUrl } from './services/checkout-return';
+import {
+  readCheckoutReturnFromUrl,
+  type CheckoutReturnState,
+} from './services/checkout-return';
 
 type AppView = 'translate' | 'learning';
 type CopiedTarget = 'input' | 'result' | null;
@@ -93,6 +99,13 @@ const FLOWTRANSLATE_PRO_ANALYTICS = {
   plan_id: 'flowtranslate_pro',
   currency: 'ARS',
   display_price: 'ARS 4.999/mes',
+};
+const CHECKOUT_RETURN_PAYMENT_EVENTS: Record<CheckoutReturnState, string> = {
+  success: 'payment_succeeded',
+  pending: 'payment_pending',
+  failed: 'payment_failed',
+  cancelled: 'payment_cancelled',
+  unknown: 'payment_pending',
 };
 const FLOWTRANSLATE_COFFEE_URL =
   import.meta.env.VITE_FLOWTRANSLATE_COFFEE_URL?.trim() ||
@@ -244,6 +257,8 @@ function App() {
   const renderedStudyArticleRef = useRef<string | null>(null);
   const trackedViewRef = useRef<AppView | null>(null);
   const trackedAccountPromptRef = useRef(false);
+  const trackedCheckoutReturnRef = useRef<string | null>(null);
+  const trackedEntitlementStateRef = useRef<string | null>(null);
   const autoGuestStartedRef = useRef(false);
 
   useEffect(() => subscribeToOnlineState(setOnline), []);
@@ -1068,13 +1083,50 @@ function App() {
       (usage.monthlyQuota > 0 &&
         usage.remainingThisMonth / usage.monthlyQuota <= 0.2));
   const shouldShowUsageUpgradePrompt =
-    Boolean(usagePressure) && translator.status !== 'quota';
-  const shouldShowSavedHistoryUpgradePrompt = shouldShowAccountPrompt;
+    Boolean(usagePressure) &&
+    translator.status !== 'quota' &&
+    !account.billingState.hasProAccess &&
+    !account.billingState.shouldWaitForProvider;
+  const shouldShowSavedHistoryUpgradePrompt =
+    shouldShowAccountPrompt && !account.billingState.hasProAccess;
   const shouldShowLearningUpgradePrompt =
     view === 'learning' &&
+    !account.billingState.hasProAccess &&
+    !account.billingState.shouldWaitForProvider &&
     (history.length >= LEARNING_HISTORY_PERSONALIZATION_THRESHOLD ||
       learningSessions.length > 0 ||
       savedPhrases.some((phrase) => !phrase.archivedAt));
+
+  const billingAnalyticsProperties = useCallback(
+    (extra: Record<string, unknown> = {}) =>
+      safeCommercialAnalyticsProperties({
+        account_kind: account.accountKind,
+        billing_state: account.billingState.id,
+        entitlement_source: account.billingState.source,
+        entitlement_reason: account.billingState.reason,
+        has_pro_access: account.billingState.hasProAccess,
+        can_retry_checkout: account.billingState.canRetryCheckout,
+        should_wait_for_provider: account.billingState.shouldWaitForProvider,
+        requires_support: account.billingState.requiresSupport,
+        ...FLOWTRANSLATE_PRO_ANALYTICS,
+        ...extra,
+      }),
+    [
+      account.accountKind,
+      account.billingState.canRetryCheckout,
+      account.billingState.hasProAccess,
+      account.billingState.id,
+      account.billingState.reason,
+      account.billingState.requiresSupport,
+      account.billingState.shouldWaitForProvider,
+      account.billingState.source,
+    ],
+  );
+
+  const proUpgradeAnalytics = useCallback(
+    (surface: ProUpgradeSurface) => billingAnalyticsProperties({ surface }),
+    [billingAnalyticsProperties],
+  );
 
   useEffect(() => {
     if (!shouldShowAccountPrompt) return;
@@ -1089,6 +1141,64 @@ function App() {
     });
   }, [account.accountKind, resultCopyCount, shouldShowAccountPrompt]);
 
+  useEffect(() => {
+    if (!checkoutReturn) return;
+
+    const trackingKey = [
+      checkoutReturn.state,
+      checkoutReturn.rawStatus || 'missing',
+      checkoutReturn.hasExternalReference ? 'external' : 'no_external',
+      checkoutReturn.hasProviderReference ? 'provider' : 'no_provider',
+    ].join(':');
+
+    if (trackedCheckoutReturnRef.current === trackingKey) return;
+    trackedCheckoutReturnRef.current = trackingKey;
+
+    const properties = billingAnalyticsProperties({
+      checkout_return_state: checkoutReturn.state,
+      provider_status: checkoutReturn.rawStatus || 'missing',
+      has_external_reference: checkoutReturn.hasExternalReference,
+      has_provider_reference: checkoutReturn.hasProviderReference,
+      entitlement_verified: account.billingState.hasProAccess,
+      outcome_source: 'checkout_return',
+    });
+
+    analytics.track('checkout_returned', properties);
+    analytics.track(CHECKOUT_RETURN_PAYMENT_EVENTS[checkoutReturn.state], properties);
+  }, [account.billingState.hasProAccess, billingAnalyticsProperties, checkoutReturn]);
+
+  useEffect(() => {
+    if (authLoading || account.billingStateLoading) return;
+
+    const state = account.billingState;
+    const trackingKey = [
+      account.session?.user?.id || 'no_user',
+      state.id,
+      state.source,
+      state.reason,
+      state.hasProAccess ? 'pro' : 'not_pro',
+    ].join(':');
+
+    if (trackedEntitlementStateRef.current === trackingKey) return;
+    trackedEntitlementStateRef.current = trackingKey;
+
+    const properties = billingAnalyticsProperties({
+      entitlement_state: state.id,
+      entitlement_verified: state.hasProAccess,
+    });
+
+    analytics.track('pro_entitlement_state_viewed', properties);
+    if (state.hasProAccess) {
+      analytics.track('pro_entitlement_granted', properties);
+    }
+  }, [
+    account.billingState,
+    account.billingStateLoading,
+    account.session?.user?.id,
+    authLoading,
+    billingAnalyticsProperties,
+  ]);
+
   const openAccountFromPrompt = (reason = 'copied_replies') => {
     analytics.track('account_connect_prompt_clicked', {
       surface: 'translate_soft_banner',
@@ -1098,15 +1208,6 @@ function App() {
     });
     setShowAccount(true);
   };
-
-  const proUpgradeAnalytics = useCallback(
-    (surface: ProUpgradeSurface) => ({
-      surface,
-      account_kind: account.accountKind,
-      ...FLOWTRANSLATE_PRO_ANALYTICS,
-    }),
-    [account.accountKind],
-  );
 
   const connectAccountForPro = useCallback(
     (surface: ProUpgradeSurface) => {
@@ -1149,6 +1250,20 @@ function App() {
         analytics.track('checkout_started', proUpgradeAnalytics(surface));
         window.location.assign(checkout.checkoutUrl);
       } catch (error) {
+        analytics.track(
+          'checkout_failed',
+          billingAnalyticsProperties({
+            surface,
+            error_type:
+              error instanceof FlowtranslateApiError
+                ? 'flowtranslate_api_error'
+                : error instanceof Error
+                  ? error.name || 'checkout_error'
+                  : 'checkout_error',
+            http_status:
+              error instanceof FlowtranslateApiError ? error.status : null,
+          }),
+        );
         setCheckoutError({
           surface,
           message:
@@ -1160,7 +1275,13 @@ function App() {
         setCheckoutStartingSurface(null);
       }
     },
-    [account.accessToken, account.accountKind, account.isGuest, proUpgradeAnalytics],
+    [
+      account.accessToken,
+      account.accountKind,
+      account.isGuest,
+      billingAnalyticsProperties,
+      proUpgradeAnalytics,
+    ],
   );
 
   const upgradePromptState = (surface: ProUpgradeSurface) => ({
@@ -1185,8 +1306,16 @@ function App() {
     setCheckoutReturn(null);
   };
 
-  const accountButtonLabel = account.isPermanent ? 'Perfil' : account.displayName;
-  const accountButtonTitle = account.isPermanent ? 'Perfil' : 'Cuenta';
+  const accountButtonLabel = account.billingState.hasProAccess
+    ? 'Pro'
+    : account.isPermanent
+      ? 'Perfil'
+      : account.displayName;
+  const accountButtonTitle = account.billingState.hasProAccess
+    ? 'FlowTranslate Pro'
+    : account.isPermanent
+      ? 'Perfil'
+      : 'Cuenta';
   const accountButtonIcon = account.isGuest ? (
     <UserRound size={17} />
   ) : account.session ? (
@@ -1369,7 +1498,16 @@ function App() {
             statusText={expressionStatusText}
             quotaUsage={usage}
             quotaUpgradeLabel={
-              account.accountKind === 'permanent' ? 'Pasar a Pro' : 'Conectar cuenta'
+              account.accountKind !== 'permanent'
+                ? 'Conectar cuenta'
+                : account.billingState.hasProAccess
+                  ? 'Ver Pro'
+                  : account.billingState.canRetryCheckout &&
+                      account.billingState.id !== 'free'
+                    ? 'Reintentar Pro'
+                    : account.billingState.shouldWaitForProvider
+                      ? 'Ver cuenta'
+                      : 'Pasar a Pro'
             }
             quotaUpgradeBusy={checkoutStartingSurface === 'usage_limit'}
             onInputChange={(value) => translator.editInput(value)}
@@ -1405,8 +1543,15 @@ function App() {
             }}
             onTranslateToSpanish={() => void translator.translateInputToSpanish()}
             onQuotaUpgrade={() => {
-              if (account.accountKind === 'permanent') {
+              if (
+                account.accountKind === 'permanent' &&
+                account.billingState.canRetryCheckout
+              ) {
                 void startProCheckout('usage_limit');
+                return;
+              }
+              if (account.accountKind === 'permanent') {
+                setShowAccount(true);
                 return;
               }
               connectAccountForPro('usage_limit');

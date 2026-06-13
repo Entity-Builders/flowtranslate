@@ -1,4 +1,8 @@
-import type { UsageSnapshot } from '@eb-packages/flowtranslate-core';
+import {
+  mapAccountKindToBillingState,
+  type FlowtranslateBillingState,
+  type UsageSnapshot,
+} from '@eb-packages/flowtranslate-core';
 import { Sparkles } from 'lucide-react';
 import type { FlowtranslateAccountKind } from '../hooks/useFlowtranslateAccount';
 
@@ -6,6 +10,7 @@ type QuotaStatusProps = {
   usage: UsageSnapshot | null;
   compact?: boolean;
   accountKind?: FlowtranslateAccountKind;
+  billingState?: FlowtranslateBillingState;
 };
 
 const clampPercent = (value: number) => Math.max(0, Math.min(100, value));
@@ -29,17 +34,45 @@ const getUsageLabel = (usage: UsageSnapshot | null) => {
   return 'Tenes bastante ayuda disponible';
 };
 
+const billingStateCopy: Record<
+  FlowtranslateBillingState['id'],
+  { label: string; detail: string }
+> = {
+  guest: {
+    label: 'Prueba gratis',
+    detail: 'Conecta una cuenta para guardar historial y preparar Pro.',
+  },
+  free: {
+    label: 'Cuenta gratis',
+    detail: 'Podes pasar a Pro cuando necesites mas margen mensual.',
+  },
+  pro_pending: {
+    label: 'Pro pendiente',
+    detail: 'Esperando confirmacion segura de Mercado Pago.',
+  },
+  pro_active: {
+    label: 'FlowTranslate Pro',
+    detail: 'Pro activo para mas respuestas, Learning e historial.',
+  },
+  pro_failed: {
+    label: 'Pago no confirmado',
+    detail: 'Podes reintentar checkout desde tu cuenta.',
+  },
+  pro_cancelled: {
+    label: 'Pro cancelado',
+    detail: 'Podes reactivar Pro o pedir revision si ya pagaste.',
+  },
+};
+
 export const QuotaStatus = ({
   usage,
   compact = false,
   accountKind = 'permanent',
+  billingState,
 }: QuotaStatusProps) => {
-  const planLabel =
-    accountKind === 'guest'
-      ? 'Prueba gratis'
-      : accountKind === 'permanent'
-        ? 'Cuenta gratis'
-        : 'Acceso IA';
+  const resolvedBillingState =
+    billingState || mapAccountKindToBillingState(accountKind);
+  const planCopy = billingStateCopy[resolvedBillingState.id];
   const label = getUsageLabel(usage);
   const percentRemaining = usage
     ? clampPercent(
@@ -69,7 +102,7 @@ export const QuotaStatus = ({
           <div className='truncate font-bold text-slate-950'>{label}</div>
           {!compact ? (
             <div className='mt-0.5 truncate text-xs text-slate-500'>
-              {planLabel}
+              {planCopy.label}
               {usage ? ` - se renueva ${formatResetDate(usage.resetAt)}` : ''}
             </div>
           ) : null}
@@ -94,6 +127,9 @@ export const QuotaStatus = ({
               El detalle aparece despues de tu proxima respuesta con IA.
             </div>
           )}
+          <div className='mt-1 text-xs font-semibold text-slate-500'>
+            {planCopy.detail}
+          </div>
         </div>
       ) : null}
     </div>

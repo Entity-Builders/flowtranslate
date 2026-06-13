@@ -15,12 +15,14 @@ const generateTranslation = vi.hoisted(() => vi.fn());
 const startFlowtranslateProCheckout = vi.hoisted(() => vi.fn());
 const profileMaybeSingle = vi.hoisted(() => vi.fn());
 const profileUpdate = vi.hoisted(() => vi.fn());
+const entitlementMaybeSingle = vi.hoisted(() => vi.fn());
 
 vi.mock('../services/analytics', () => ({
   analytics: {
     screen: analyticsScreen,
     track: analyticsTrack,
   },
+  safeCommercialAnalyticsProperties: (properties: Record<string, unknown>) => properties,
 }));
 
 vi.mock('../services/translation-history', () => ({
@@ -52,7 +54,7 @@ vi.mock('../lib/supabase', () => ({
   getFlowtranslateFunctionUrl: () => 'http://localhost/functions/v1/flowtranslate-generate',
   supabase: {
     from: (table: string) => {
-      if (table !== 'profiles') {
+      if (table !== 'profiles' && table !== 'entitlements') {
         throw new Error(`Unexpected table: ${table}`);
       }
 
@@ -60,7 +62,8 @@ vi.mock('../lib/supabase', () => ({
         select: () => chain,
         update: profileUpdate,
         eq: () => chain,
-        maybeSingle: profileMaybeSingle,
+        maybeSingle:
+          table === 'profiles' ? profileMaybeSingle : entitlementMaybeSingle,
       };
 
       profileUpdate.mockReturnValue(chain);
@@ -127,6 +130,7 @@ describe('account access UI', () => {
     signOut.mockResolvedValue({ error: null });
     profileUpdate.mockReturnValue(undefined);
     profileMaybeSingle.mockResolvedValue({ data: null, error: null });
+    entitlementMaybeSingle.mockResolvedValue({ data: null, error: null });
     startFlowtranslateProCheckout.mockResolvedValue({
       checkoutUrl: '#mercado-pago-checkout',
     });
@@ -472,6 +476,95 @@ describe('account access UI', () => {
         plan_id: 'flowtranslate_pro',
       }),
     );
+    const checkoutStartedCall = analyticsTrack.mock.calls.find(
+      ([event]) => event === 'checkout_started',
+    );
+    expect(JSON.stringify(checkoutStartedCall)).not.toContain('juan@example.com');
+  });
+
+  it('shows active Pro entitlement state in account and quota UI', async () => {
+    getSession.mockResolvedValue({ data: { session: permanentSession } });
+    profileMaybeSingle.mockResolvedValue({
+      data: {
+        user_id: 'permanent-user',
+        email: 'juan@example.com',
+        global_context: 'Soy PM en una agencia.',
+        current_streak: 0,
+        last_study_date: null,
+      },
+      error: null,
+    });
+    entitlementMaybeSingle.mockResolvedValue({
+      data: {
+        status: 'active',
+        account_kind: 'pro',
+        source: 'mercado_pago',
+        plan: 'pro',
+        subscription_id: 'subscription-secret',
+        active_from: '2026-06-01T00:00:00.000Z',
+        active_until: null,
+        last_verified_at: '2026-06-13T12:00:00.000Z',
+      },
+      error: null,
+    });
+
+    render(<App />);
+
+    expect(await screen.findByText('Pro')).toBeInTheDocument();
+    fireEvent.click(screen.getByTitle('FlowTranslate Pro'));
+
+    expect((await screen.findAllByText('FlowTranslate Pro')).length).toBeGreaterThan(0);
+    expect(screen.getByText(/tu pro esta activo/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /pasar a pro/i })).not.toBeInTheDocument();
+
+    await waitFor(() =>
+      expect(analyticsTrack).toHaveBeenCalledWith(
+        'pro_entitlement_granted',
+        expect.objectContaining({
+          billing_state: 'pro_active',
+          entitlement_verified: true,
+        }),
+      ),
+    );
+
+    const proCalls = analyticsTrack.mock.calls.filter(([event]) =>
+      ['pro_entitlement_state_viewed', 'pro_entitlement_granted'].includes(
+        String(event),
+      ),
+    );
+    const serializedCalls = JSON.stringify(proCalls);
+    expect(serializedCalls).not.toContain('juan@example.com');
+    expect(serializedCalls).not.toContain('subscription-secret');
+    expect(serializedCalls).not.toContain('source_text');
+    expect(serializedCalls).not.toContain('generated_text');
+  });
+
+  it('shows pending Pro entitlement state without retrying checkout', async () => {
+    getSession.mockResolvedValue({ data: { session: permanentSession } });
+    entitlementMaybeSingle.mockResolvedValue({
+      data: {
+        status: 'pending',
+        account_kind: 'pro',
+        source: 'mercado_pago',
+        plan: 'pro',
+        subscription_id: 'subscription-secret',
+        active_from: null,
+        active_until: null,
+        last_verified_at: null,
+      },
+      error: null,
+    });
+
+    render(<App />);
+
+    expect(await screen.findByText('Perfil')).toBeInTheDocument();
+    fireEvent.click(screen.getByTitle('Perfil'));
+
+    expect((await screen.findAllByText('Pro pendiente')).length).toBeGreaterThan(0);
+    expect(
+      screen.getByText(/esperando la confirmacion segura de mercado pago/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /pasar a pro/i })).not.toBeInTheDocument();
   });
 
   it('shows safe checkout return success without granting Pro from URL params', async () => {
@@ -491,6 +584,36 @@ describe('account access UI', () => {
     expect(screen.queryByText(/pay_secret/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/order_secret/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/checkout_secret/i)).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(analyticsTrack).toHaveBeenCalledWith(
+        'checkout_returned',
+        expect.objectContaining({
+          checkout_return_state: 'success',
+          provider_status: 'approved',
+          has_provider_reference: true,
+          has_external_reference: true,
+        }),
+      ),
+    );
+    expect(analyticsTrack).toHaveBeenCalledWith(
+      'payment_succeeded',
+      expect.objectContaining({
+        checkout_return_state: 'success',
+        entitlement_verified: false,
+      }),
+    );
+
+    const checkoutCalls = analyticsTrack.mock.calls.filter(([event]) =>
+      ['checkout_returned', 'payment_succeeded'].includes(String(event)),
+    );
+    const serializedCalls = JSON.stringify(checkoutCalls);
+    expect(serializedCalls).not.toContain('pay_secret');
+    expect(serializedCalls).not.toContain('order_secret');
+    expect(serializedCalls).not.toContain('checkout_secret');
+    expect(serializedCalls).not.toContain('juan@example.com');
+    expect(serializedCalls).not.toContain('source_text');
+    expect(serializedCalls).not.toContain('generated_text');
+    expect(serializedCalls).not.toContain('card_token');
   });
 
   it('shows pending, failed, and cancelled checkout return copy in Spanish', async () => {

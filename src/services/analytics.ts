@@ -30,8 +30,13 @@ export const COMMERCIAL_ANALYTICS_EVENTS = [
   'account_connect_prompt_clicked',
   'upgrade_intent_clicked',
   'checkout_started',
+  'checkout_returned',
+  'checkout_failed',
   'payment_succeeded',
+  'payment_pending',
   'payment_failed',
+  'payment_cancelled',
+  'pro_entitlement_state_viewed',
   'pro_entitlement_granted',
 ] as const;
 
@@ -40,19 +45,99 @@ export const SENSITIVE_ANALYTICS_PROPERTY_NAMES = [
   'source_text',
   'translated_text',
   'generated_text',
+  'prompt',
+  'email',
+  'payer_email',
+  'code',
+  'otp',
+  'verification_code',
+  'card',
+  'card_token',
+  'cvv',
+  'cvc',
+  'token',
+  'access_token',
+  'refresh_token',
+  'payment_method',
+  'payment_id',
+  'merchant_order_id',
+  'preapproval_id',
+  'preference_id',
+  'external_reference',
+  'subscription_id',
+  'provider_subscription_id',
+  'provider_customer_id',
+  'provider_payload',
+  'checkout_url',
+  'credential',
+] as const;
+
+const EXACT_SENSITIVE_ANALYTICS_PROPERTY_NAMES = new Set([
+  'text',
   'email',
   'code',
   'otp',
   'card',
-  'payment_method',
+  'cvv',
+  'cvc',
+  'token',
+  'credential',
+]);
+
+const EMAIL_VALUE_PATTERN = /[^\s@]+@[^\s@]+\.[^\s@]+/;
+const SENSITIVE_VALUE_FRAGMENTS = [
+  'access_token',
+  'bearer ',
+  'card_token',
+  'checkout_secret',
+  'external_reference',
+  'merchant_order_id',
+  'order_secret',
+  'pay_secret',
+  'payment_id',
+  'refresh_token',
+  'secret',
 ] as const;
+
+const isUnsafeCommercialAnalyticsPropertyName = (key: string) => {
+  const lowerKey = key.toLocaleLowerCase();
+  if (EXACT_SENSITIVE_ANALYTICS_PROPERTY_NAMES.has(lowerKey)) return true;
+
+  return SENSITIVE_ANALYTICS_PROPERTY_NAMES.some((sensitiveKey) => {
+    if (EXACT_SENSITIVE_ANALYTICS_PROPERTY_NAMES.has(sensitiveKey)) {
+      return false;
+    }
+    return lowerKey.includes(sensitiveKey);
+  });
+};
+
+const isUnsafeCommercialAnalyticsValue = (value: unknown) => {
+  if (typeof value !== 'string') return false;
+
+  const lowerValue = value.toLocaleLowerCase();
+  return (
+    EMAIL_VALUE_PATTERN.test(value) ||
+    SENSITIVE_VALUE_FRAGMENTS.some((fragment) => lowerValue.includes(fragment))
+  );
+};
 
 export const hasUnsafeCommercialAnalyticsProperty = (
   properties: Record<string, unknown>,
 ) =>
-  Object.keys(properties).some((key) =>
-    SENSITIVE_ANALYTICS_PROPERTY_NAMES.some((sensitiveKey) =>
-      key.toLocaleLowerCase().includes(sensitiveKey),
+  Object.entries(properties).some(
+    ([key, value]) =>
+      isUnsafeCommercialAnalyticsPropertyName(key) ||
+      isUnsafeCommercialAnalyticsValue(value),
+  );
+
+export const safeCommercialAnalyticsProperties = (
+  properties: Record<string, unknown>,
+) =>
+  Object.fromEntries(
+    Object.entries(properties).filter(
+      ([key, value]) =>
+        !isUnsafeCommercialAnalyticsPropertyName(key) &&
+        !isUnsafeCommercialAnalyticsValue(value),
     ),
   );
 

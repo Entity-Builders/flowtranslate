@@ -3,6 +3,7 @@ import {
   COMMERCIAL_ANALYTICS_EVENTS,
   getLaunchAnalyticsProperties,
   hasUnsafeCommercialAnalyticsProperty,
+  safeCommercialAnalyticsProperties,
 } from './analytics';
 
 describe('Flowtranslate analytics', () => {
@@ -37,7 +38,13 @@ describe('Flowtranslate analytics', () => {
         'account_connect_prompt_shown',
         'upgrade_intent_clicked',
         'checkout_started',
+        'checkout_returned',
+        'checkout_failed',
         'payment_succeeded',
+        'payment_pending',
+        'payment_failed',
+        'payment_cancelled',
+        'pro_entitlement_state_viewed',
         'pro_entitlement_granted',
       ]),
     );
@@ -56,5 +63,45 @@ describe('Flowtranslate analytics', () => {
         preset_id: 'professional',
       }),
     ).toBe(false);
+    expect(
+      hasUnsafeCommercialAnalyticsProperty({
+        text_length: 24,
+      }),
+    ).toBe(false);
+  });
+
+  it('sanitizes commercial payment analytics before tracking', () => {
+    const properties = safeCommercialAnalyticsProperties({
+      provider: 'mercado_pago',
+      plan_id: 'flowtranslate_pro',
+      currency: 'ARS',
+      display_price: 'ARS 4.999/mes',
+      account_kind: 'permanent',
+      billing_state: 'pro_pending',
+      source_text: 'hola, necesito ayuda',
+      generated_text: 'Hi, I need help',
+      email: 'juan@example.com',
+      payer_email: 'juan@example.com',
+      card_token_id: 'card_token_secret',
+      payment_id: 'pay_secret',
+      merchant_order_id: 'order_secret',
+      external_reference: 'entitybuilders:flowtranslate:pro:checkout_secret',
+      provider_payload: { raw: true },
+      note: 'juan@example.com',
+    });
+
+    expect(properties).toEqual({
+      provider: 'mercado_pago',
+      plan_id: 'flowtranslate_pro',
+      currency: 'ARS',
+      display_price: 'ARS 4.999/mes',
+      account_kind: 'permanent',
+      billing_state: 'pro_pending',
+    });
+    expect(JSON.stringify(properties)).not.toContain('juan@example.com');
+    expect(JSON.stringify(properties)).not.toContain('hola');
+    expect(JSON.stringify(properties)).not.toContain('Hi, I need help');
+    expect(JSON.stringify(properties)).not.toContain('card_token_secret');
+    expect(JSON.stringify(properties)).not.toContain('pay_secret');
   });
 });

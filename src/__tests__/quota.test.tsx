@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+import { resolveFlowtranslateBillingState } from '@eb-packages/flowtranslate-core';
 import App from '../App';
 import { ExpressionWorkspace } from '../components/ExpressionWorkspace';
 import { QuotaStatus } from '../components/QuotaStatus';
@@ -34,6 +35,35 @@ describe('quota and account UI', () => {
     expect(
       screen.getByText(/Detalle tecnico: quedan 250 de 2,000 creditos mensuales de IA/i),
     ).toBeInTheDocument();
+  });
+
+  it('describes active Pro state in quota UI', () => {
+    render(
+      <QuotaStatus
+        accountKind='permanent'
+        billingState={resolveFlowtranslateBillingState({
+          accountKind: 'permanent',
+          entitlement: {
+            status: 'active',
+            account_kind: 'pro',
+            source: 'mercado_pago',
+            plan: 'pro',
+            last_verified_at: '2026-06-13T12:00:00.000Z',
+          },
+        })}
+        usage={{
+          estimatedTokens: 24,
+          monthlyQuota: 20000,
+          usedThisMonth: 1000,
+          remainingThisMonth: 19000,
+          charged: true,
+          resetAt: '2026-07-01T00:00:00.000Z',
+        }}
+      />,
+    );
+
+    expect(screen.getByText(/FlowTranslate Pro/)).toBeInTheDocument();
+    expect(screen.getByText(/pro activo para mas respuestas/i)).toBeInTheDocument();
   });
 
   it('offers Pro and coffee support when quota is exhausted', () => {

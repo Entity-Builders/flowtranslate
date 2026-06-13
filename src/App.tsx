@@ -1,23 +1,32 @@
 import type {
   BreakdownChatMessage,
-  LearningInsight,
+  LearningAttempt,
+  LearningSession,
   LanguageCode,
+  SavedPhrase,
   StudyArticle,
   TranslationRecord,
   TranslationPresetId,
   UsageSnapshot,
 } from '@eb-packages/flowtranslate-core';
 import {
+  STARTER_LEARNING_SITUATIONS,
+  getLearningSituationById,
+} from '@eb-packages/flowtranslate-core';
+import {
   BookOpen,
   Chrome,
+  CheckCircle2,
   Languages,
   LogOut,
   Mail,
+  Save,
   Settings,
   ShieldCheck,
   UserRound,
   WifiOff,
   X,
+  Flame,
 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import './App.css';
@@ -32,9 +41,18 @@ import { copyText } from './services/clipboard';
 import {
   FlowtranslateApiError,
   askBreakdownQuestion,
-  generateLearningInsight,
+  generateLearningSession,
   generateStudyArticle,
+  submitLearningAttempt,
 } from './services/flowtranslate-api';
+import {
+  archiveSavedPhrase,
+  completeLearningSession,
+  listLearningSessions,
+  listSavedPhrases,
+  saveLearningPhrase,
+  type SaveLearningPhraseInput,
+} from './services/learning-progress';
 import { isOnline, subscribeToOnlineState } from './services/pwa';
 import {
   canUseSpeechRecognition,
@@ -69,6 +87,92 @@ const guestLearningMessage =
   'Conecta una cuenta gratis para desbloquear Learning personal y conservar tu progreso.';
 const ACCOUNT_PROMPT_COPY_THRESHOLD = 2;
 
+const isStarterLearningSession = (session: LearningSession) =>
+  session.id.startsWith('starter-');
+
+const buildStarterLearningSession = (situationId?: string): LearningSession => {
+  const situation =
+    (situationId ? getLearningSituationById(situationId) : null) ||
+    STARTER_LEARNING_SITUATIONS[0];
+  const anchorPhrase =
+    situation.samplePhrases[0] || 'Thanks for the update.';
+  const softerAlternative =
+    situation.samplePhrases[1] || 'I appreciate the context.';
+
+  return {
+    id: `starter-${situation.id}`,
+    situationId: situation.id,
+    catalogVersion: situation.catalogVersion,
+    status: 'active',
+    content: {
+      situationTitle: situation.title,
+      anchorPhrase,
+      whyItWorks: situation.description,
+      grammarNotes: [
+        {
+          label: 'Situacion',
+          text: situation.outcome,
+          note: 'Aprendelo como una escena de trabajo, no como una regla suelta.',
+        },
+        {
+          label: 'Chunk reusable',
+          text: anchorPhrase,
+          note: 'Esta parte se puede copiar y adaptar en mensajes parecidos.',
+        },
+      ],
+      bestOption: {
+        prompt: 'Cual version suena mas natural para este contexto?',
+        choices: [
+          {
+            id: 'preferred',
+            text: anchorPhrase,
+            preferred: true,
+            feedback:
+              'Esta opcion mantiene claridad, tono profesional y proximo paso.',
+          },
+          {
+            id: 'flat',
+            text: softerAlternative,
+            preferred: false,
+            feedback:
+              'Puede servir, pero todavia necesita el contexto y la accion concreta.',
+          },
+        ],
+      },
+      rewritePrompt: `Escribi una respuesta corta para: ${situation.outcome}`,
+      suggestedPhrases: situation.samplePhrases,
+    },
+    sourceRecordIds: [],
+    createdAt: new Date().toISOString(),
+  };
+};
+
+const upsertLearningSession = (
+  sessions: LearningSession[],
+  session: LearningSession,
+) => [session, ...sessions.filter((item) => item.id !== session.id)].slice(0, 20);
+
+const findReusableLearningSession = (
+  sessions: LearningSession[],
+  situationId: string,
+) => {
+  const matchingSessions = sessions
+    .filter(
+      (session) =>
+        session.situationId === situationId && session.status !== 'archived',
+    )
+    .sort((first, second) => {
+      const firstTimestamp = Date.parse(first.completedAt || first.createdAt);
+      const secondTimestamp = Date.parse(second.completedAt || second.createdAt);
+      return (
+        (Number.isNaN(secondTimestamp) ? 0 : secondTimestamp) -
+        (Number.isNaN(firstTimestamp) ? 0 : firstTimestamp)
+      );
+    });
+
+  return matchingSessions[0] || null;
+};
+
 function App() {
   const account = useFlowtranslateAccount();
   const {
@@ -85,10 +189,19 @@ function App() {
   const [usage, setUsage] = useState<UsageSnapshot | null>(null);
   const [history, setHistory] = useState<TranslationRecord[]>([]);
   const [historyError, setHistoryError] = useState('');
-  const [learningInsight, setLearningInsight] =
-    useState<LearningInsight | null>(null);
-  const [insightLoading, setInsightLoading] = useState(false);
-  const [insightError, setInsightError] = useState('');
+  const [learningSessions, setLearningSessions] = useState<LearningSession[]>([]);
+  const [savedPhrases, setSavedPhrases] = useState<SavedPhrase[]>([]);
+  const [activeLearningSession, setActiveLearningSession] =
+    useState<LearningSession | null>(null);
+  const [learningProgressLoading, setLearningProgressLoading] = useState(false);
+  const [learningProgressError, setLearningProgressError] = useState('');
+  const [learningSessionLoading, setLearningSessionLoading] = useState(false);
+  const [learningSessionError, setLearningSessionError] = useState('');
+  const [learningAttemptLoading, setLearningAttemptLoading] = useState(false);
+  const [learningAttemptError, setLearningAttemptError] = useState('');
+  const [latestLearningAttempt, setLatestLearningAttempt] =
+    useState<LearningAttempt | null>(null);
+  const [selectedBestOptionId, setSelectedBestOptionId] = useState('');
   const [studyArticle, setStudyArticle] = useState<StudyArticle | null>(null);
   const [studyLoading, setStudyLoading] = useState(false);
   const [studyError, setStudyError] = useState('');
@@ -105,6 +218,9 @@ function App() {
   const [voiceMessage, setVoiceMessage] = useState('');
   const [resultCopyCount, setResultCopyCount] = useState(0);
   const [accountPromptDismissed, setAccountPromptDismissed] = useState(false);
+  const [profileContextDraft, setProfileContextDraft] = useState('');
+  const [profileContextSaving, setProfileContextSaving] = useState(false);
+  const [profileContextMessage, setProfileContextMessage] = useState('');
   const dictationRef = useRef<DictationSession | null>(null);
   const renderedStudyArticleRef = useRef<string | null>(null);
   const trackedViewRef = useRef<AppView | null>(null);
@@ -122,6 +238,23 @@ function App() {
       dictationRef.current?.abort();
     };
   }, []);
+
+  useEffect(() => {
+    if (!showAccount) return;
+    setProfileContextDraft(account.globalContext);
+    setProfileContextMessage('');
+  }, [account.globalContext, showAccount]);
+
+  const saveProfileContext = async () => {
+    setProfileContextSaving(true);
+    setProfileContextMessage('');
+    try {
+      const saved = await account.updateGlobalContext(profileContextDraft);
+      setProfileContextMessage(saved ? 'Perfil guardado.' : '');
+    } finally {
+      setProfileContextSaving(false);
+    }
+  };
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.activeView, view);
@@ -181,6 +314,44 @@ function App() {
   useEffect(() => {
     void loadHistory();
   }, [loadHistory]);
+
+  const loadLearningProgress = useCallback(async () => {
+    if (!account.accessToken || account.isGuest) {
+      setLearningSessions([]);
+      setSavedPhrases([]);
+      setLearningProgressLoading(false);
+      return;
+    }
+
+    try {
+      setLearningProgressLoading(true);
+      setLearningProgressError('');
+      const [nextSessions, nextPhrases] = await Promise.all([
+        listLearningSessions(),
+        listSavedPhrases(),
+      ]);
+
+      setLearningSessions(nextSessions);
+      setSavedPhrases(nextPhrases);
+      setActiveLearningSession((current) => {
+        if (!current) return current;
+        return nextSessions.find((session) => session.id === current.id) || current;
+      });
+    } catch (error) {
+      setLearningProgressError(
+        error instanceof Error
+          ? error.message
+          : 'No pudimos cargar tu progreso de Learning.',
+      );
+    } finally {
+      setLearningProgressLoading(false);
+    }
+  }, [account.accessToken, account.isGuest]);
+
+  useEffect(() => {
+    if (view !== 'learning') return;
+    void loadLearningProgress();
+  }, [loadLearningProgress, view]);
 
   const handleUsage = useCallback((nextUsage: UsageSnapshot) => {
     setUsage(nextUsage);
@@ -367,88 +538,6 @@ function App() {
     analytics.track('translation_dictation_started', { language });
   };
 
-  const loadLearningInsight = useCallback(
-    async (forceRefresh = false, silent = false) => {
-      setInsightError('');
-
-      if (!online) {
-        if (!silent) setInsightError('Estas offline. Learning necesita conexion.');
-        return;
-      }
-
-      if (!account.accessToken) {
-        if (!silent) {
-          setShowAccount(true);
-          setInsightError('Conecta tu cuenta para generar Learning desde tu historial.');
-        }
-        return;
-      }
-
-      if (account.isGuest) {
-        if (!silent) {
-          setShowAccount(true);
-          setInsightError(guestLearningMessage);
-          analytics.track('account_connect_prompt_shown', {
-            surface: 'learning',
-            reason: 'learning_guest',
-            account_kind: account.accountKind,
-            history_count: history.length,
-          });
-          analytics.track('learning_guest_blocked', {
-            surface: 'insight',
-          });
-        }
-        return;
-      }
-
-      setInsightLoading(true);
-      analytics.track('learning_insight_submitted', {
-        history_count: history.length,
-        force_refresh: forceRefresh,
-      });
-
-      try {
-        const result = await generateLearningInsight(
-          { forceRefresh },
-          account.accessToken,
-        );
-        setLearningInsight(result.insight);
-        setUsage(result.usage);
-        analytics.track('learning_insight_succeeded', {
-          cached: result.cached,
-          writing_count: result.insight.writingItems.length,
-          conversation_count: result.insight.conversationItems.length,
-        });
-      } catch (error) {
-        if (error instanceof FlowtranslateApiError) {
-          if (error.usage) setUsage(error.usage);
-          setInsightError(error.message);
-        } else {
-          setInsightError(
-            error instanceof Error ? error.message : 'No pudimos generar Learning.',
-          );
-        }
-        analytics.track('learning_insight_failed', { error_type: 'exception' });
-      } finally {
-        setInsightLoading(false);
-      }
-    },
-    [
-      account.accessToken,
-      account.accountKind,
-      account.isGuest,
-      history.length,
-      online,
-    ],
-  );
-
-  useEffect(() => {
-    if (view !== 'learning' || !account.accessToken || account.isGuest || !online) {
-      return;
-    }
-    void loadLearningInsight(false, true);
-  }, [account.accessToken, account.isGuest, loadLearningInsight, online, view]);
-
   const openStudyArticle = async (record: TranslationRecord) => {
     setStudyError('');
     setSelectedStudyRecordId(record.id);
@@ -592,11 +681,344 @@ function App() {
     ],
   );
 
+  const startLearningSession = useCallback(
+    async (situationId?: string) => {
+      const targetSituationId = situationId || STARTER_LEARNING_SITUATIONS[0].id;
+
+      setLearningSessionError('');
+      setLearningAttemptError('');
+      setLatestLearningAttempt(null);
+      setSelectedBestOptionId('');
+
+      const reusableSession = findReusableLearningSession(
+        learningSessions,
+        targetSituationId,
+      );
+
+      if (reusableSession) {
+        setActiveLearningSession(reusableSession);
+        analytics.track('learning_session_reused', {
+          situation_id: reusableSession.situationId,
+          session_id: reusableSession.id,
+          status: reusableSession.status,
+          account_kind: account.accountKind,
+          source: 'client_state',
+        });
+        return;
+      }
+
+      if (!account.accessToken || account.isGuest) {
+        const starterSession = buildStarterLearningSession(targetSituationId);
+        setActiveLearningSession(starterSession);
+        setLearningSessions((current) =>
+          upsertLearningSession(current, starterSession),
+        );
+        analytics.track('learning_session_started', {
+          situation_id: starterSession.situationId,
+          account_kind: account.accountKind,
+          history_count: history.length,
+          personalized: false,
+          preview: true,
+        });
+        return;
+      }
+
+      if (!online) {
+        setLearningSessionError('Estas offline. La practica personalizada necesita conexion.');
+        return;
+      }
+
+      setLearningSessionLoading(true);
+      analytics.track('learning_session_start_submitted', {
+        situation_id: targetSituationId,
+        history_count: history.length,
+        account_kind: account.accountKind,
+      });
+
+      try {
+        const result = await generateLearningSession(
+          { situationId: targetSituationId },
+          account.accessToken,
+        );
+        setUsage(result.usage);
+        setActiveLearningSession(result.session);
+        setLearningSessions((current) => upsertLearningSession(current, result.session));
+        analytics.track('learning_session_started', {
+          situation_id: result.session.situationId,
+          account_kind: account.accountKind,
+          history_count: history.length,
+          personalized: result.generatedFrom !== 'starter',
+          cached: result.cached,
+          generated_from: result.generatedFrom || null,
+          source_record_count: result.session.sourceRecordIds.length,
+        });
+      } catch (error) {
+        if (error instanceof FlowtranslateApiError && error.usage) {
+          setUsage(error.usage);
+        }
+        setLearningSessionError(
+          error instanceof Error
+            ? error.message
+            : 'No pudimos crear la practica.',
+        );
+        analytics.track('learning_session_start_failed', {
+          error_type: 'exception',
+        });
+      } finally {
+        setLearningSessionLoading(false);
+      }
+    },
+    [
+      account.accessToken,
+      account.accountKind,
+      account.isGuest,
+      history.length,
+      learningSessions,
+      online,
+    ],
+  );
+
+  const resumeLearningSession = useCallback((session: LearningSession) => {
+    setActiveLearningSession(session);
+    setLearningSessionError('');
+    setLearningAttemptError('');
+    setLatestLearningAttempt(null);
+    setSelectedBestOptionId('');
+    analytics.track('learning_session_resumed', {
+      situation_id: session.situationId,
+      status: session.status,
+    });
+  }, []);
+
+  const leaveLearningSession = useCallback(() => {
+    setActiveLearningSession(null);
+    setLearningAttemptError('');
+    setLatestLearningAttempt(null);
+    setSelectedBestOptionId('');
+  }, []);
+
+  const chooseLearningBestOption = useCallback(
+    (choiceId: string) => {
+      if (!activeLearningSession) return;
+
+      const choice = activeLearningSession.content.bestOption.choices.find(
+        (item) => item.id === choiceId,
+      );
+      setSelectedBestOptionId(choiceId);
+      analytics.track('learning_best_option_answered', {
+        situation_id: activeLearningSession.situationId,
+        choice_id: choiceId,
+        preferred: choice?.preferred ?? null,
+      });
+    },
+    [activeLearningSession],
+  );
+
+  const submitLearningRewrite = useCallback(
+    async (attemptText: string) => {
+      const trimmedAttempt = attemptText.trim();
+      if (!trimmedAttempt || !activeLearningSession) return;
+
+      setLearningAttemptError('');
+
+      if (
+        !account.accessToken ||
+        account.isGuest ||
+        isStarterLearningSession(activeLearningSession)
+      ) {
+        setShowAccount(true);
+        setLearningAttemptError(
+          'Conecta una cuenta gratis para recibir feedback personalizado y guardar intentos.',
+        );
+        analytics.track('account_connect_prompt_shown', {
+          surface: 'learning_rewrite',
+          reason: 'learning_guest',
+          account_kind: account.accountKind,
+          history_count: history.length,
+        });
+        analytics.track('learning_guest_blocked', {
+          surface: 'rewrite_feedback',
+        });
+        return;
+      }
+
+      if (!online) {
+        setLearningAttemptError('Estas offline. El feedback necesita conexion.');
+        return;
+      }
+
+      setLearningAttemptLoading(true);
+      analytics.track('learning_rewrite_feedback_submitted', {
+        situation_id: activeLearningSession.situationId,
+        attempt_length: trimmedAttempt.length,
+      });
+
+      try {
+        const result = await submitLearningAttempt(
+          {
+            sessionId: activeLearningSession.id,
+            attemptText: trimmedAttempt,
+          },
+          account.accessToken,
+        );
+        setUsage(result.usage);
+        setLatestLearningAttempt(result.attempt);
+        analytics.track('learning_rewrite_feedback_succeeded', {
+          situation_id: activeLearningSession.situationId,
+          generated_from: result.generatedFrom || null,
+          naturalness: result.attempt.feedback.naturalness,
+        });
+      } catch (error) {
+        if (error instanceof FlowtranslateApiError && error.usage) {
+          setUsage(error.usage);
+        }
+        setLearningAttemptError(
+          error instanceof Error
+            ? error.message
+            : 'No pudimos revisar tu intento.',
+        );
+        analytics.track('learning_rewrite_feedback_failed', {
+          error_type: 'exception',
+        });
+      } finally {
+        setLearningAttemptLoading(false);
+      }
+    },
+    [
+      account.accessToken,
+      account.accountKind,
+      account.isGuest,
+      activeLearningSession,
+      history.length,
+      online,
+    ],
+  );
+
+  const savePhraseFromLearning = useCallback(
+    async (input: SaveLearningPhraseInput) => {
+      const trimmedText = input.text.trim();
+      if (!trimmedText) return;
+
+      if (!account.accessToken || account.isGuest) {
+        setShowAccount(true);
+        setLearningSessionError(guestLearningMessage);
+        analytics.track('account_connect_prompt_shown', {
+          surface: 'learning_phrase_save',
+          reason: 'learning_guest',
+          account_kind: account.accountKind,
+          history_count: history.length,
+        });
+        analytics.track('learning_guest_blocked', {
+          surface: 'phrase_save',
+        });
+        return;
+      }
+
+      try {
+        setLearningSessionError('');
+        const saved = await saveLearningPhrase({
+          ...input,
+          text: trimmedText,
+        });
+        if (saved) {
+          setSavedPhrases((current) => [
+            saved,
+            ...current.filter((phrase) => phrase.id !== saved.id),
+          ]);
+        }
+        analytics.track('learning_phrase_saved', {
+          situation_id: input.situationId || null,
+          session_id: input.sessionId || null,
+          phrase_length: trimmedText.length,
+        });
+      } catch (error) {
+        setLearningSessionError(
+          error instanceof Error
+            ? error.message
+            : 'No pudimos guardar esa frase.',
+        );
+      }
+    },
+    [account.accessToken, account.accountKind, account.isGuest, history.length],
+  );
+
+  const archivePhraseFromLearning = useCallback(async (id: string) => {
+    try {
+      await archiveSavedPhrase(id);
+      setSavedPhrases((current) => current.filter((phrase) => phrase.id !== id));
+      analytics.track('learning_phrase_archived');
+    } catch (error) {
+      setLearningProgressError(
+        error instanceof Error
+          ? error.message
+          : 'No pudimos archivar esa frase.',
+      );
+    }
+  }, []);
+
+  const completeActiveLearningSession = useCallback(async () => {
+    if (!activeLearningSession) return;
+
+    const completedSession: LearningSession = {
+      ...activeLearningSession,
+      status: 'completed',
+      completedAt: new Date().toISOString(),
+    };
+
+    try {
+      if (
+        account.accessToken &&
+        !account.isGuest &&
+        !isStarterLearningSession(activeLearningSession)
+      ) {
+        await completeLearningSession(activeLearningSession.id);
+      }
+
+      setActiveLearningSession(completedSession);
+      setLearningSessions((current) =>
+        upsertLearningSession(current, completedSession),
+      );
+      analytics.track('learning_session_completed', {
+        situation_id: completedSession.situationId,
+        session_id: completedSession.id,
+        account_kind: account.accountKind,
+        saved_phrase_count: savedPhrases.length,
+        had_rewrite_feedback: Boolean(latestLearningAttempt),
+      });
+    } catch (error) {
+      setLearningSessionError(
+        error instanceof Error
+          ? error.message
+          : 'No pudimos marcar la practica como completa.',
+      );
+    }
+  }, [
+    account.accessToken,
+    account.accountKind,
+    account.isGuest,
+    activeLearningSession,
+    latestLearningAttempt,
+    savedPhrases.length,
+  ]);
+
+  const useLearningPhraseInResponder = useCallback(
+    (text: string) => {
+      translator.editInput(text);
+      setView('translate');
+      analytics.track('learning_phrase_used_in_responder', {
+        text_length: text.trim().length,
+      });
+    },
+    [translator],
+  );
+
   const deleteHistoryItem = async (id: string) => {
     try {
       await deleteTranslationRecord(id);
       setHistory((current) => current.filter((item) => item.id !== id));
-      setLearningInsight(null);
+      setLearningSessions((current) =>
+        current.filter((session) => !session.sourceRecordIds.includes(id)),
+      );
       if (selectedStudyRecordId === id) closeStudyArticle();
       analytics.track('translation_history_deleted', { count: 1 });
     } catch (error) {
@@ -608,7 +1030,8 @@ function App() {
     try {
       await clearTranslationHistory();
       setHistory([]);
-      setLearningInsight(null);
+      setLearningSessions([]);
+      setActiveLearningSession(null);
       closeStudyArticle();
       analytics.track('translation_history_cleared');
     } catch (error) {
@@ -644,7 +1067,8 @@ function App() {
     setShowAccount(true);
   };
 
-  const accountButtonLabel = account.displayName;
+  const accountButtonLabel = account.isPermanent ? 'Perfil' : account.displayName;
+  const accountButtonTitle = account.isPermanent ? 'Perfil' : 'Cuenta';
   const accountButtonIcon = account.isGuest ? (
     <UserRound size={17} />
   ) : account.session ? (
@@ -712,7 +1136,7 @@ function App() {
             type='button'
             onClick={() => setShowAccount(true)}
             className='inline-flex h-10 w-10 shrink-0 items-center justify-center gap-2 rounded-md text-sm font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-950 sm:w-auto sm:max-w-44 sm:px-3'
-            title='Cuenta'
+            title={accountButtonTitle}
           >
             {accountButtonIcon}
             <span className='hidden truncate sm:inline'>{accountButtonLabel}</span>
@@ -780,6 +1204,7 @@ function App() {
             presetId={translator.presetId}
             breakdown={translator.breakdown}
             breakdownStatus={translator.breakdownStatus}
+            grammarInsight={translator.grammarInsight}
             translationRecordId={translator.translationRecordId}
             status={translator.status}
             canTranslate={translator.canTranslate}
@@ -817,7 +1242,13 @@ function App() {
             onTranslate={() => void translator.translate()}
             onSelectPreset={selectPreset}
             onRequestBreakdown={() => translator.requestBreakdown()}
-            onTranslateToSpanish={() => void translator.translate('translate_to_spanish')}
+            onRequestStudy={() => {
+              if (translator.translationRecordId) {
+                const record = history.find(r => r.id === translator.translationRecordId);
+                if (record) void openStudyArticle(record);
+              }
+            }}
+            onTranslateToSpanish={() => void translator.translateInputToSpanish()}
           />
           <p className='max-w-[calc(100vw-2rem)] break-words text-xs text-slate-500 sm:max-w-full'>
             Los servicios de voz del navegador pueden procesar audio durante el
@@ -833,14 +1264,32 @@ function App() {
           ) : null}
           <LearningView
             history={history}
-            learningInsight={learningInsight}
-            insightLoading={insightLoading}
-            insightError={insightError}
+            accountKind={account.accountKind}
+            starterSituations={STARTER_LEARNING_SITUATIONS}
+            learningSessions={learningSessions}
+            savedPhrases={savedPhrases}
+            activeSession={activeLearningSession}
+            progressLoading={learningProgressLoading}
+            progressError={learningProgressError}
+            sessionLoading={learningSessionLoading}
+            sessionError={learningSessionError}
+            selectedBestOptionId={selectedBestOptionId}
+            attemptLoading={learningAttemptLoading}
+            attemptError={learningAttemptError}
+            latestAttempt={latestLearningAttempt}
             studyArticle={studyArticle}
             studyLoading={studyLoading}
             studyError={studyError}
             selectedStudyRecordId={selectedStudyRecordId}
-            onRefreshInsight={() => void loadLearningInsight(true)}
+            onStartSession={(situationId) => void startLearningSession(situationId)}
+            onResumeSession={resumeLearningSession}
+            onLeaveSession={leaveLearningSession}
+            onSelectBestOption={chooseLearningBestOption}
+            onSubmitAttempt={(attemptText) => void submitLearningRewrite(attemptText)}
+            onSavePhrase={(input) => void savePhraseFromLearning(input)}
+            onArchivePhrase={(id) => void archivePhraseFromLearning(id)}
+            onCompleteSession={() => void completeActiveLearningSession()}
+            onUsePhraseInResponder={useLearningPhraseInResponder}
             onOpenStudy={(record) => void openStudyArticle(record)}
             onCloseStudy={closeStudyArticle}
             onListenPhrase={(language, text) => listenPanel(language, text)}
@@ -887,6 +1336,12 @@ function App() {
                   <div className='truncate text-base font-bold text-slate-950'>
                     {account.displayName}
                   </div>
+                  {account.currentStreak > 0 && (
+                    <div className='flex items-center gap-1.5 text-sm font-semibold text-orange-600'>
+                      <Flame size={16} />
+                      {account.currentStreak} dias seguidos
+                    </div>
+                  )}
                   <p className='text-sm leading-6 text-slate-600'>
                     {account.isGuest
                       ? 'Responde ahora sin friccion. Conecta Google para conservar historial y Learning personal.'
@@ -895,6 +1350,57 @@ function App() {
                 </div>
 
                 <QuotaStatus usage={usage} accountKind={account.accountKind} />
+
+                {!account.isGuest && (
+                  <div className='space-y-3 border-t border-slate-100 pt-5'>
+                    <div className='space-y-1'>
+                      <div className='flex items-center gap-2 text-sm font-black text-slate-900'>
+                        <UserRound size={16} />
+                        Perfil profesional
+                      </div>
+                      <p className='text-xs leading-5 text-slate-500'>
+                        Contale a Flowtranslate quien sos, con quien hablas o en
+                        que contexto trabajas. Se usa como contexto permanente
+                        para ajustar vocabulario y tono.
+                      </p>
+                    </div>
+                    <label className='block'>
+                      <span className='mb-2 block text-xs font-bold uppercase text-slate-400'>
+                        Contexto permanente
+                      </span>
+                      <textarea
+                        value={profileContextDraft}
+                        onChange={(event) => {
+                          setProfileContextDraft(event.target.value);
+                          setProfileContextMessage('');
+                        }}
+                        placeholder='Ej: Soy PM en una agencia de software y suelo escribirle a clientes y equipos tecnicos.'
+                        className='min-h-24 w-full resize-none rounded-md border border-slate-200 px-3 py-2 text-sm leading-5 outline-none transition-colors focus:border-slate-500'
+                      />
+                    </label>
+                    <div className='flex items-center justify-between gap-3'>
+                      <span className='min-w-0 text-xs font-semibold text-slate-500'>
+                        {profileContextMessage}
+                      </span>
+                      <button
+                        type='button'
+                        onClick={() => void saveProfileContext()}
+                        disabled={
+                          profileContextSaving ||
+                          profileContextDraft.trim() === account.globalContext.trim()
+                        }
+                        className='inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-md bg-slate-950 px-3 text-sm font-bold text-white hover:bg-slate-800 disabled:bg-slate-100 disabled:text-slate-400'
+                      >
+                        {profileContextSaving ? (
+                          <CheckCircle2 size={16} />
+                        ) : (
+                          <Save size={16} />
+                        )}
+                        {profileContextSaving ? 'Guardando' : 'Guardar perfil'}
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {account.error ? (
                   <div className='border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700'>

@@ -64,6 +64,40 @@ describe('translator UI', () => {
     );
   });
 
+  it('shows Spanish zero-state suggestions that fill Spanish prompts', () => {
+    render(<App />);
+
+    const input = screen.getByLabelText('Mensaje o idea');
+
+    expect(
+      screen.getByRole('button', { name: /pedir un update/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /let me double check/i }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /avisar una demora/i }));
+
+    expect(input).toHaveValue(
+      'Decile que el reporte se demora hasta manana, pero que ya estamos revisando los datos.',
+    );
+    expect(
+      screen.queryByRole('button', { name: /avisar una demora/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('presents brief as a tone instead of a more-short command', () => {
+    render(<App />);
+
+    fireEvent.change(screen.getByLabelText('Mensaje o idea'), {
+      target: { value: 'Decile que el reporte se demora hasta manana.' },
+    });
+
+    const toneSelect = screen.getByLabelText('Tono de respuesta');
+    expect(toneSelect).toHaveTextContent('Breve');
+    expect(toneSelect).not.toHaveTextContent('Mas corto');
+  });
+
   it('tracks app view changes for Translate and Learning', () => {
     render(<App />);
 
@@ -88,7 +122,7 @@ describe('translator UI', () => {
     );
   });
 
-  it('detects English as improvement while keeping the Spanish action available', () => {
+  it('detects English as improvement while keeping a clear Spanish translation action available', () => {
     render(<App />);
 
     fireEvent.change(screen.getByLabelText('Mensaje o idea'), {
@@ -98,7 +132,12 @@ describe('translator UI', () => {
     expect(
       screen.queryByRole('button', { name: /mejorar ingles/i }),
     ).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /^Espanol$/i })).toBeEnabled();
+    expect(
+      screen.getByRole('button', { name: /pasar a espanol/i }),
+    ).toBeEnabled();
+    expect(
+      screen.queryByRole('button', { name: /^Espanol$/i }),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole('button', { name: /copiar respuesta/i }),
     ).not.toBeInTheDocument();

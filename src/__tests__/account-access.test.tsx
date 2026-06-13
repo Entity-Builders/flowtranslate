@@ -12,6 +12,8 @@ const linkIdentity = vi.hoisted(() => vi.fn());
 const verifyOtp = vi.hoisted(() => vi.fn());
 const signOut = vi.hoisted(() => vi.fn());
 const generateTranslation = vi.hoisted(() => vi.fn());
+const profileMaybeSingle = vi.hoisted(() => vi.fn());
+const profileUpdate = vi.hoisted(() => vi.fn());
 
 vi.mock('../services/analytics', () => ({
   analytics: {
@@ -47,6 +49,22 @@ vi.mock('../lib/supabase', () => ({
   isSupabaseConfigured: true,
   getFlowtranslateFunctionUrl: () => 'http://localhost/functions/v1/flowtranslate-generate',
   supabase: {
+    from: (table: string) => {
+      if (table !== 'profiles') {
+        throw new Error(`Unexpected table: ${table}`);
+      }
+
+      const chain = {
+        select: () => chain,
+        update: profileUpdate,
+        eq: () => chain,
+        maybeSingle: profileMaybeSingle,
+      };
+
+      profileUpdate.mockReturnValue(chain);
+
+      return chain;
+    },
     auth: {
       getSession,
       onAuthStateChange,
@@ -74,6 +92,18 @@ const guestSession = {
   },
 };
 
+const permanentSession = {
+  access_token: 'permanent-token',
+  refresh_token: 'permanent-refresh',
+  expires_in: 3600,
+  token_type: 'bearer',
+  user: {
+    id: 'permanent-user',
+    email: 'juan@example.com',
+    is_anonymous: false,
+  },
+};
+
 describe('account access UI', () => {
   beforeEach(() => {
     localStorage.clear();
@@ -92,6 +122,8 @@ describe('account access UI', () => {
     linkIdentity.mockResolvedValue({ error: null });
     verifyOtp.mockResolvedValue({ error: null });
     signOut.mockResolvedValue({ error: null });
+    profileUpdate.mockReturnValue(undefined);
+    profileMaybeSingle.mockResolvedValue({ data: null, error: null });
     generateTranslation.mockResolvedValue({
       kind: 'translate',
       text: 'Hi, can you send me the update?',
@@ -221,6 +253,59 @@ describe('account access UI', () => {
         method: 'google_oauth_from_guest',
       }),
     );
+  });
+
+  it('shows a permanent profile editor and saves context explicitly', async () => {
+    getSession.mockResolvedValue({ data: { session: permanentSession } });
+    profileMaybeSingle
+      .mockResolvedValueOnce({
+        data: {
+          user_id: 'permanent-user',
+          email: 'juan@example.com',
+          global_context: 'Soy PM en una agencia.',
+          current_streak: 0,
+          last_study_date: null,
+        },
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: {
+          user_id: 'permanent-user',
+          email: 'juan@example.com',
+          global_context: 'Soy PM en una agencia de software.',
+          current_streak: 0,
+          last_study_date: null,
+        },
+        error: null,
+      });
+
+    render(<App />);
+
+    expect(await screen.findByText('Perfil')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTitle('Perfil'));
+
+    expect(
+      await screen.findByText(/perfil profesional/i),
+    ).toBeInTheDocument();
+
+    const profileField = screen.getByLabelText(/contexto permanente/i);
+    expect(profileField).toHaveValue('Soy PM en una agencia.');
+
+    fireEvent.change(profileField, {
+      target: { value: 'Soy PM en una agencia de software.' },
+    });
+
+    expect(profileUpdate).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: /guardar perfil/i }));
+
+    await waitFor(() =>
+      expect(profileUpdate).toHaveBeenCalledWith({
+        global_context: 'Soy PM en una agencia de software.',
+      }),
+    );
+    expect(await screen.findByText(/perfil guardado/i)).toBeInTheDocument();
   });
 
   it('cleans up an existing Google identity link error on return', async () => {

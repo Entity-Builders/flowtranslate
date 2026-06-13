@@ -836,7 +836,7 @@ describe('useBidirectionalTranslator', () => {
     expect(result.current.resultText).toBe('hello, how are you?');
   });
 
-  it('uses the Spanish understanding action for incoming English', async () => {
+  it('passes incoming English back into the Spanish composer', async () => {
     vi.mocked(generateTranslation).mockResolvedValueOnce(
       responseFor({
         text: 'Necesito ayuda.',
@@ -858,15 +858,19 @@ describe('useBidirectionalTranslator', () => {
     act(() => result.current.editInput('I need help'));
 
     await act(async () => {
-      await result.current.translate('translate_to_spanish');
+      await result.current.translateInputToSpanish();
     });
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(TRANSLATION_IDLE_DELAY_MS);
     });
 
-    expect(result.current.mode).toBe('translate_to_spanish');
-    expect(result.current.resultText).toBe('Necesito ayuda.');
+    expect(result.current.inputText).toBe('Necesito ayuda.');
+    expect(result.current.mode).toBe('translate_to_english');
+    expect(result.current.sourceLanguage).toBe('es');
+    expect(result.current.targetLanguage).toBe('en');
+    expect(result.current.resultText).toBe('');
+    expect(result.current.status).toBe('typing');
     expect(generateTranslation).toHaveBeenCalledTimes(1);
     expect(generateTranslation).toHaveBeenCalledWith(
       expect.objectContaining({

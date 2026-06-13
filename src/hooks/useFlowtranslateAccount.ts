@@ -4,6 +4,7 @@ import {
   supabase,
   type Session,
 } from '../lib/supabase';
+import type { Profile } from '@eb-packages/flowtranslate-core';
 import { analytics } from '../services/analytics';
 
 export type FlowtranslateAccountKind = 'none' | 'guest' | 'permanent';
@@ -58,6 +59,7 @@ const clearOAuthErrorFromUrl = () => {
 
 export const useFlowtranslateAccount = () => {
   const [session, setSession] = useState<Session | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
@@ -94,6 +96,30 @@ export const useFlowtranslateAccount = () => {
       subscription.unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    if (!supabase) return;
+
+    if (!session?.user) {
+      setProfile(null);
+      return;
+    }
+
+    let mounted = true;
+    supabase
+      .from('profiles')
+      .select('*')
+      .eq('user_id', session.user.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!mounted) return;
+        setProfile(data as Profile);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [session?.user]);
 
   useEffect(() => {
     if (!supabase) return;
@@ -358,8 +384,50 @@ export const useFlowtranslateAccount = () => {
     setError('');
   };
 
+  const updateGlobalContext = async (context: string) => {
+    setError('');
+    setMessage('');
+
+    if (!session?.user || !supabase) {
+      setError('Necesitas una cuenta conectada para guardar tu perfil.');
+      return false;
+    }
+
+    const cleanContext = context.trim() || null;
+    setBusy(true);
+    const { data, error: updateError } = await supabase
+      .from('profiles')
+      .update({ global_context: cleanContext })
+      .eq('user_id', session.user.id)
+      .select()
+      .maybeSingle();
+    setBusy(false);
+
+    if (updateError) {
+      analytics.track('profile_context_update_failed', {
+        account_kind: accountKind,
+        error_type: updateError.name || 'profile_update_error',
+        error_code: updateError.code || null,
+      });
+      setError('No pudimos guardar tu perfil. Proba de nuevo.');
+      return false;
+    }
+
+    if (data && !updateError) {
+      setProfile(data as Profile);
+    }
+
+    analytics.track('profile_context_updated', {
+      account_kind: accountKind,
+      has_context: Boolean(cleanContext),
+      context_chars: cleanContext?.length || 0,
+    });
+    return true;
+  };
+
   return {
     session,
+    profile,
     accessToken: session?.access_token || '',
     userEmail: session?.user.email || '',
     displayName:
@@ -369,6 +437,9 @@ export const useFlowtranslateAccount = () => {
     isPermanent: accountKind === 'permanent',
     authLoading,
     isSupabaseConfigured,
+    currentStreak: profile?.current_streak || 0,
+    globalContext: profile?.global_context || '',
+    updateGlobalContext,
     email,
     setEmail,
     code,

@@ -1,5 +1,7 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { StudyArticle } from '@eb-packages/flowtranslate-core';
+import { STARTER_LEARNING_SITUATIONS } from '@eb-packages/flowtranslate-core';
+import type { ComponentProps } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import App from '../App';
 import { ExpressionBreakdownDetails } from '../components/ExpressionBreakdownDetails';
@@ -7,20 +9,228 @@ import { ExpressionWorkspace } from '../components/ExpressionWorkspace';
 import { LearningView } from '../components/LearningView';
 import { StudyArticleView } from '../components/StudyArticleView';
 
+const renderLearningView = (
+  props: Partial<ComponentProps<typeof LearningView>> = {},
+) => {
+  const defaultProps: ComponentProps<typeof LearningView> = {
+    history: [],
+    accountKind: 'permanent',
+    starterSituations: STARTER_LEARNING_SITUATIONS,
+    learningSessions: [],
+    savedPhrases: [],
+    activeSession: null,
+    progressLoading: false,
+    progressError: '',
+    sessionLoading: false,
+    sessionError: '',
+    selectedBestOptionId: '',
+    attemptLoading: false,
+    attemptError: '',
+    latestAttempt: null,
+    studyArticle: null,
+    studyLoading: false,
+    studyError: '',
+    selectedStudyRecordId: null,
+    onStartSession: () => undefined,
+    onResumeSession: () => undefined,
+    onLeaveSession: () => undefined,
+    onSelectBestOption: () => undefined,
+    onSubmitAttempt: () => undefined,
+    onSavePhrase: () => undefined,
+    onArchivePhrase: () => undefined,
+    onCompleteSession: () => undefined,
+    onUsePhraseInResponder: () => undefined,
+    onOpenStudy: () => undefined,
+    onCloseStudy: () => undefined,
+    onDelete: () => undefined,
+    onClear: () => undefined,
+  };
+
+  return render(<LearningView {...defaultProps} {...props} />);
+};
+
 describe('learning UI', () => {
   it('keeps Learning in a separate view with empty history state', () => {
     render(<App />);
 
     fireEvent.click(screen.getByRole('button', { name: /aprender/i }));
 
-    expect(screen.getByRole('heading', { name: 'Historial' })).toBeInTheDocument();
-    expect(screen.getAllByText(/Tus respuestas guardadas van a aparecer aca/i).length).toBeGreaterThan(0);
-    expect(screen.getByRole('heading', { name: 'Panel de Learning' })).toBeInTheDocument();
+    expect(screen.getByText('Hoy en tu ingles')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Avisar una demora/i })).toBeInTheDocument();
     expect(
-      screen.getByRole('heading', { name: 'Ingles util desde tu historial' }),
-    ).toBeInTheDocument();
+      screen.getAllByRole('button', { name: /Empezar practica/i }).length,
+    ).toBeGreaterThan(0);
+    expect(screen.getAllByText('Frases guardadas').length).toBeGreaterThan(0);
+    expect(screen.getByText('Fuentes recientes')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Panel de Learning' })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Recommended exercises' })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Practice' })).not.toBeInTheDocument();
+  });
+
+  it('shows a continue action when the recommended practice already exists', () => {
+    renderLearningView({
+      learningSessions: [
+        {
+          id: 'session-1',
+          situationId: 'delay-update',
+          catalogVersion: 'flowtranslate:learning-situations:v1',
+          status: 'active',
+          sourceRecordIds: [],
+          createdAt: '2026-06-05T12:00:00.000Z',
+          content: {
+            situationTitle: 'Avisar una demora sin sonar defensivo',
+            anchorPhrase: 'The report is taking a bit longer than expected.',
+            whyItWorks: 'Shows ownership without sounding defensive.',
+            grammarNotes: [],
+            bestOption: {
+              prompt: 'Which option sounds best?',
+              choices: [],
+            },
+            rewritePrompt: 'Tell the client the report will be ready tomorrow.',
+            suggestedPhrases: [],
+          },
+        },
+      ],
+    });
+
+    expect(
+      screen.getByRole('button', { name: /Continuar practica/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByRole('button', { name: /Empezar practica/i }).length,
+    ).toBeGreaterThan(0);
+  });
+
+  it('shows completed recommended practice as review instead of continue', () => {
+    renderLearningView({
+      learningSessions: [
+        {
+          id: 'old-active-session',
+          situationId: 'delay-update',
+          catalogVersion: 'flowtranslate:learning-situations:v1',
+          status: 'active',
+          sourceRecordIds: [],
+          createdAt: '2026-06-05T12:00:00.000Z',
+          content: {
+            situationTitle: 'Avisar una demora sin sonar defensivo',
+            anchorPhrase: 'The report is taking a bit longer than expected.',
+            whyItWorks: 'Shows ownership without sounding defensive.',
+            grammarNotes: [],
+            bestOption: {
+              prompt: 'Which option sounds best?',
+              choices: [],
+            },
+            rewritePrompt: 'Tell the client the report will be ready tomorrow.',
+            suggestedPhrases: [],
+          },
+        },
+        {
+          id: 'completed-session',
+          situationId: 'delay-update',
+          catalogVersion: 'flowtranslate:learning-situations:v1',
+          status: 'completed',
+          sourceRecordIds: [],
+          createdAt: '2026-06-05T12:30:00.000Z',
+          completedAt: '2026-06-05T12:40:00.000Z',
+          content: {
+            situationTitle: 'Avisar una demora sin sonar defensivo',
+            anchorPhrase: 'The report is taking a bit longer than expected.',
+            whyItWorks: 'Shows ownership without sounding defensive.',
+            grammarNotes: [],
+            bestOption: {
+              prompt: 'Which option sounds best?',
+              choices: [],
+            },
+            rewritePrompt: 'Tell the client the report will be ready tomorrow.',
+            suggestedPhrases: [],
+          },
+        },
+      ],
+    });
+
+    expect(
+      screen.getByRole('button', { name: /Repasar practica/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /Continuar practica/i }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText('Tus practicas')).not.toBeInTheDocument();
+  });
+
+  it('keeps practice cards unique and labels completed sessions as review', () => {
+    renderLearningView({
+      learningSessions: [
+        {
+          id: 'recommended-completed-session',
+          situationId: 'delay-update',
+          catalogVersion: 'flowtranslate:learning-situations:v1',
+          status: 'completed',
+          sourceRecordIds: [],
+          createdAt: '2026-06-05T12:00:00.000Z',
+          completedAt: '2026-06-05T12:20:00.000Z',
+          content: {
+            situationTitle: 'Avisar una demora sin sonar defensivo',
+            anchorPhrase: 'The report is taking a bit longer than expected.',
+            whyItWorks: 'Shows ownership without sounding defensive.',
+            grammarNotes: [],
+            bestOption: {
+              prompt: 'Which option sounds best?',
+              choices: [],
+            },
+            rewritePrompt: 'Tell the client the report will be ready tomorrow.',
+            suggestedPhrases: [],
+          },
+        },
+        {
+          id: 'follow-up-old-active',
+          situationId: 'follow-up',
+          catalogVersion: 'flowtranslate:learning-situations:v1',
+          status: 'active',
+          sourceRecordIds: [],
+          createdAt: '2026-06-05T12:10:00.000Z',
+          content: {
+            situationTitle: 'Hacer seguimiento sin presionar',
+            anchorPhrase: 'Just checking in on this.',
+            whyItWorks: 'Keeps the follow-up light.',
+            grammarNotes: [],
+            bestOption: {
+              prompt: 'Which option sounds best?',
+              choices: [],
+            },
+            rewritePrompt: 'Follow up on a proposal.',
+            suggestedPhrases: [],
+          },
+        },
+        {
+          id: 'follow-up-completed',
+          situationId: 'follow-up',
+          catalogVersion: 'flowtranslate:learning-situations:v1',
+          status: 'completed',
+          sourceRecordIds: [],
+          createdAt: '2026-06-05T12:30:00.000Z',
+          completedAt: '2026-06-05T12:45:00.000Z',
+          content: {
+            situationTitle: 'Hacer seguimiento sin presionar',
+            anchorPhrase: 'Just checking in on this.',
+            whyItWorks: 'Keeps the follow-up light.',
+            grammarNotes: [],
+            bestOption: {
+              prompt: 'Which option sounds best?',
+              choices: [],
+            },
+            rewritePrompt: 'Follow up on a proposal.',
+            suggestedPhrases: [],
+          },
+        },
+      ],
+    });
+
+    expect(screen.getByText('Tus practicas')).toBeInTheDocument();
+    expect(
+      screen.getAllByText('Hacer seguimiento sin presionar'),
+    ).toHaveLength(1);
+    expect(screen.getByText('Completada')).toBeInTheDocument();
+    expect(screen.getByText('Repasar')).toBeInTheDocument();
   });
 
   it('opens a selected history conversation as a dedicated study surface', () => {
@@ -35,13 +245,9 @@ describe('learning UI', () => {
       },
     ];
 
-    render(
-      <LearningView
-        history={history}
-        learningInsight={null}
-        insightLoading={false}
-        insightError=''
-        studyArticle={{
+    renderLearningView({
+      history,
+      studyArticle: {
           translationRecordId: 'record-1',
           sourceLanguage: 'es',
           targetLanguage: 'en',
@@ -65,22 +271,14 @@ describe('learning UI', () => {
             '## Common mistakes',
             '- Ellos van comer.',
           ].join('\n'),
-        }}
-        studyLoading={false}
-        studyError=''
-        selectedStudyRecordId='record-1'
-        onRefreshInsight={() => undefined}
-        onOpenStudy={() => undefined}
-        onCloseStudy={() => undefined}
-        onDelete={() => undefined}
-        onClear={() => undefined}
-      />,
-    );
+      },
+      selectedStudyRecordId: 'record-1',
+    });
 
     expect(screen.getByRole('heading', { name: 'Articulo de estudio' })).toBeInTheDocument();
     expect(screen.getByText('Leccion: Talking about Plans')).toBeInTheDocument();
     expect(screen.getByText(history[0].sourceText)).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Panel de Learning' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: /Hoy en tu ingles/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Historial' })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Practice' })).not.toBeInTheDocument();
   });
@@ -131,23 +329,11 @@ describe('learning UI', () => {
       },
     ];
 
-    render(
-      <LearningView
-        history={history}
-        learningInsight={null}
-        insightLoading={false}
-        insightError=''
-        studyArticle={null}
-        studyLoading
-        studyError=''
-        selectedStudyRecordId='record-1'
-        onRefreshInsight={() => undefined}
-        onOpenStudy={() => undefined}
-        onCloseStudy={() => undefined}
-        onDelete={() => undefined}
-        onClear={() => undefined}
-      />,
-    );
+    renderLearningView({
+      history,
+      studyLoading: true,
+      selectedStudyRecordId: 'record-1',
+    });
 
     expect(screen.getByText('Desglose')).toBeInTheDocument();
     expect(screen.getByText('Ajustado')).toBeInTheDocument();
@@ -364,6 +550,135 @@ describe('learning UI', () => {
     );
   });
 
+  it('does not repeat the mobile result text when the result sheet is open or collapsed', async () => {
+    const noop = () => undefined;
+    const resultText =
+      'Thanks for reaching out. Your proposal sounds really interesting.';
+
+    render(
+      <ExpressionWorkspace
+        inputText='Gracias por escribir, me interesa la propuesta.'
+        resultText={resultText}
+        mode='translate_to_english'
+        modeDetection={{
+          mode: 'translate_to_english',
+          confidence: 'high',
+          reason: 'spanish',
+          automatic: true,
+        }}
+        sourceLanguage='es'
+        targetLanguage='en'
+        presetId='natural'
+        breakdown={null}
+        breakdownStatus='idle'
+        translationRecordId='record-1'
+        status='idle'
+        canTranslate
+        translateDisabledReason=''
+        copiedInput={false}
+        copiedResult={false}
+        canListen={false}
+        speakingLanguage={null}
+        canDictate={false}
+        dictatingLanguage={null}
+        dictationUnavailableReason='No disponible'
+        onInputChange={noop}
+        onCopyInput={noop}
+        onCopyResult={noop}
+        onListenInput={noop}
+        onListenResult={noop}
+        onDictateInput={noop}
+        onTranslate={noop}
+        onSelectPreset={noop}
+        onRequestBreakdown={noop}
+        onTranslateToSpanish={noop}
+      />,
+    );
+
+    const mobileSheet = document.querySelector('[aria-live="polite"]');
+    expect(mobileSheet).toBeTruthy();
+
+    await waitFor(() =>
+      expect(
+        within(mobileSheet as HTMLElement).getByText('Respuesta en ingles'),
+      ).toBeInTheDocument(),
+    );
+    expect(
+      within(mobileSheet as HTMLElement).getAllByText(resultText),
+    ).toHaveLength(1);
+
+    fireEvent.click(
+      within(mobileSheet as HTMLElement).getByRole('button', {
+        name: /listo para mandar/i,
+      }),
+    );
+
+    expect(
+      within(mobileSheet as HTMLElement).getAllByText(resultText),
+    ).toHaveLength(1);
+    expect(
+      within(mobileSheet as HTMLElement).queryByRole('button', { name: /^ES$/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('does not show redundant Spanish shortcuts when the response is already in Spanish', async () => {
+    const noop = () => undefined;
+
+    render(
+      <ExpressionWorkspace
+        inputText='Thanks for reaching out. Your proposal sounds interesting.'
+        resultText='Gracias por ponerte en contacto. Tu propuesta suena interesante.'
+        mode='translate_to_spanish'
+        modeDetection={{
+          mode: 'translate_to_spanish',
+          confidence: 'high',
+          reason: 'english',
+          automatic: false,
+        }}
+        sourceLanguage='en'
+        targetLanguage='es'
+        presetId='natural'
+        breakdown={null}
+        breakdownStatus='idle'
+        translationRecordId='record-1'
+        status='idle'
+        canTranslate
+        translateDisabledReason=''
+        copiedInput={false}
+        copiedResult={false}
+        canListen={false}
+        speakingLanguage={null}
+        canDictate={false}
+        dictatingLanguage={null}
+        dictationUnavailableReason='No disponible'
+        onInputChange={noop}
+        onCopyInput={noop}
+        onCopyResult={noop}
+        onListenInput={noop}
+        onListenResult={noop}
+        onDictateInput={noop}
+        onTranslate={noop}
+        onSelectPreset={noop}
+        onRequestBreakdown={noop}
+        onTranslateToSpanish={noop}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(screen.getAllByText('Respuesta en espanol').length).toBeGreaterThan(0),
+    );
+    expect(
+      screen.queryByRole('button', { name: /^Espanol$/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /^ES$/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /pasar a espanol/i }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Traducir' })).toBeInTheDocument();
+  });
+
   it('keeps the workspace Desglose open when enriched content arrives', () => {
     const richBreakdown = {
       changed: true,
@@ -469,24 +784,11 @@ describe('learning UI', () => {
       'Si dices "I need help with this", agregas contexto y sigue sonando natural.',
     );
 
-    render(
-      <LearningView
-        history={history}
-        learningInsight={null}
-        insightLoading={false}
-        insightError=''
-        studyArticle={null}
-        studyLoading={false}
-        studyError=''
-        selectedStudyRecordId='record-1'
-        onRefreshInsight={() => undefined}
-        onOpenStudy={() => undefined}
-        onCloseStudy={() => undefined}
-        onAskBreakdownQuestion={askBreakdownQuestion}
-        onDelete={() => undefined}
-        onClear={() => undefined}
-      />,
-    );
+    renderLearningView({
+      history,
+      selectedStudyRecordId: 'record-1',
+      onAskBreakdownQuestion: askBreakdownQuestion,
+    });
 
     fireEvent.change(screen.getByLabelText('Preguntar sobre este desglose'), {
       target: { value: 'What if I said "I need help with this"?' },
@@ -505,51 +807,95 @@ describe('learning UI', () => {
     );
   });
 
-  it('renders cached learning insights in writing and conversation groups', () => {
-    render(
-      <LearningView
-        history={[]}
-        learningInsight={{
-          insightVersion: 'insight-v1',
-          historySnapshotHash: 'hash',
-          generatedAt: '2026-06-05T12:00:00.000Z',
-          summary: 'You are working on direct, practical English.',
-          sourceRecordIds: ['record-1'],
-          writingItems: [
+  it('renders a focused learning session with feedback and actions', () => {
+    const onSelectBestOption = vi.fn();
+    const onSubmitAttempt = vi.fn();
+    const onCompleteSession = vi.fn();
+    const session = {
+      id: 'session-1',
+      situationId: 'delay-update',
+      catalogVersion: 'flowtranslate:learning-situations:v1',
+      status: 'active' as const,
+      sourceRecordIds: [],
+      createdAt: '2026-06-05T12:00:00.000Z',
+      content: {
+        situationTitle: 'Avisar una demora sin sonar defensivo',
+        anchorPhrase: 'The report is taking a bit longer than expected.',
+        whyItWorks: 'Shows ownership without sounding defensive.',
+        grammarNotes: [
+          {
+            label: 'Present continuous',
+            text: 'is taking',
+            note: 'Marca algo que sigue en proceso.',
+          },
+        ],
+        bestOption: {
+          prompt: 'Which option sounds best?',
+          choices: [
             {
-              title: 'Next time say',
-              expression: 'I need help with this task.',
-              explanation: 'A clean way to ask for support.',
-              example: 'I need help with this task before Friday.',
+              id: 'preferred',
+              text: 'The report is taking a bit longer than expected.',
+              preferred: true,
+              feedback: 'Clear and calm.',
+            },
+            {
+              id: 'rough',
+              text: 'The report is delayed.',
+              preferred: false,
+              feedback: 'A bit flat.',
             },
           ],
-          conversationItems: [
-            {
-              title: 'Conversation phrase',
-              expression: 'Can you follow up?',
-              explanation: 'Useful when someone asks for next steps.',
-            },
-          ],
-        }}
-        insightLoading={false}
-        insightError=''
-        studyArticle={null}
-        studyLoading={false}
-        studyError=''
-        selectedStudyRecordId={null}
-        onRefreshInsight={() => undefined}
-        onOpenStudy={() => undefined}
-        onCloseStudy={() => undefined}
-        onDelete={() => undefined}
-        onClear={() => undefined}
-      />,
-    );
+        },
+        rewritePrompt: 'Tell the client the report will be ready tomorrow.',
+        suggestedPhrases: ['I will send you a clean version tomorrow.'],
+      },
+    };
 
-    expect(screen.getByRole('heading', { name: 'Ingles util desde tu historial' })).toBeInTheDocument();
-    expect(screen.getByText('Desde lo que escribis')).toBeInTheDocument();
-    expect(screen.getByText('Desde conversaciones')).toBeInTheDocument();
-    expect(screen.getByText('I need help with this task.')).toBeInTheDocument();
-    expect(screen.getByText('Can you follow up?')).toBeInTheDocument();
+    renderLearningView({
+      activeSession: session,
+      selectedBestOptionId: 'preferred',
+      latestAttempt: {
+        id: 'attempt-1',
+        sessionId: 'session-1',
+        userAnswer: 'I will send the report tomorrow.',
+        createdAt: '2026-06-05T12:05:00.000Z',
+        feedback: {
+          naturalness: 'close',
+          summary: 'Good, just soften it a bit.',
+          improvedVersion: 'I will send you a clean version tomorrow.',
+          notes: [
+            {
+              label: 'Chunk',
+              text: 'clean version',
+              note: 'Sounds more useful than just report.',
+            },
+          ],
+        },
+      },
+      onSelectBestOption,
+      onSubmitAttempt,
+      onCompleteSession,
+    });
+
+    expect(screen.getByText('Practica enfocada')).toBeInTheDocument();
+    expect(screen.getByText('Present continuous')).toBeInTheDocument();
+    expect(screen.getByText('Clear and calm.')).toBeInTheDocument();
+    expect(screen.getByText('Version mejorada')).toBeInTheDocument();
+    expect(
+      screen.getAllByText('I will send you a clean version tomorrow.').length,
+    ).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole('button', { name: /The report is delayed/i }));
+    expect(onSelectBestOption).toHaveBeenCalledWith('rough');
+
+    fireEvent.change(screen.getByLabelText('Tu version en ingles'), {
+      target: { value: 'I will send it tomorrow.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Revisar mi version/i }));
+    expect(onSubmitAttempt).toHaveBeenCalledWith('I will send it tomorrow.');
+
+    fireEvent.click(screen.getByRole('button', { name: /Completar practica/i }));
+    expect(onCompleteSession).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole('heading', { name: 'Practice' })).not.toBeInTheDocument();
   });
 

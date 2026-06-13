@@ -2,9 +2,12 @@ import type {
   ExpressionBreakdown,
   ExpressionMode,
   BreakdownChatMessage,
+  GrammarInsight,
   LanguageCode,
   LearningInsight,
   LearningInsightResponseMetadata,
+  LearningAttempt,
+  LearningSession,
   PracticeSet,
   PracticeType,
   StudyArticle,
@@ -22,6 +25,7 @@ export type TranslateResponse = {
   text: string;
   mode: ExpressionMode;
   breakdown?: ExpressionBreakdown | null;
+  grammarInsight?: GrammarInsight | null;
   translationRecord: Pick<
     TranslationRecord,
     | 'id'
@@ -29,6 +33,7 @@ export type TranslateResponse = {
     | 'targetLanguage'
     | 'mode'
     | 'breakdown'
+    | 'grammarInsight'
     | 'createdAt'
   > & {
     saved?: boolean;
@@ -56,6 +61,21 @@ export type LearningInsightResponse = {
   usage: FlowtranslateUsage;
 } & LearningInsightResponseMetadata;
 
+export type LearningSessionResponse = {
+  kind: 'learning_session';
+  session: LearningSession;
+  cached: boolean;
+  generatedFrom?: 'gemini' | 'fallback' | 'starter';
+  usage: FlowtranslateUsage;
+};
+
+export type LearningAttemptFeedbackResponse = {
+  kind: 'learning_attempt_feedback';
+  attempt: LearningAttempt;
+  generatedFrom?: 'gemini' | 'fallback';
+  usage: FlowtranslateUsage;
+};
+
 export type BreakdownChatResponse = {
   kind: 'breakdown_chat';
   answer: string;
@@ -72,6 +92,7 @@ export type BreakdownEnrichmentResponse = {
     | 'targetLanguage'
     | 'mode'
     | 'breakdown'
+    | 'grammarInsight'
     | 'createdAt'
   >;
   cached?: boolean;
@@ -102,6 +123,15 @@ type FlowtranslateRequest =
       forceRefresh?: boolean;
     }
   | {
+      kind: 'learning_session';
+      situationId?: string;
+    }
+  | {
+      kind: 'learning_attempt_feedback';
+      sessionId: string;
+      attemptText: string;
+    }
+  | {
       kind: 'breakdown_chat';
       translationRecordId: string;
       question: string;
@@ -117,6 +147,8 @@ type FlowtranslateResponse =
   | PracticeResponse
   | StudyArticleResponse
   | LearningInsightResponse
+  | LearningSessionResponse
+  | LearningAttemptFeedbackResponse
   | BreakdownChatResponse
   | BreakdownEnrichmentResponse
   | {
@@ -221,6 +253,31 @@ export const generatePractice = (
     {
       kind: 'practice',
       practiceTypes: params.practiceTypes,
+    },
+    accessToken,
+  );
+
+export const generateLearningSession = (
+  params: { situationId?: string },
+  accessToken: string,
+) =>
+  requestFlowtranslate<LearningSessionResponse>(
+    {
+      kind: 'learning_session',
+      situationId: params.situationId,
+    },
+    accessToken,
+  );
+
+export const submitLearningAttempt = (
+  params: { sessionId: string; attemptText: string },
+  accessToken: string,
+) =>
+  requestFlowtranslate<LearningAttemptFeedbackResponse>(
+    {
+      kind: 'learning_attempt_feedback',
+      sessionId: params.sessionId,
+      attemptText: params.attemptText,
     },
     accessToken,
   );

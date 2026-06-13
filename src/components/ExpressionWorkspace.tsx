@@ -4,14 +4,15 @@ import {
   type IntentDetectionResult,
   type LanguageCode,
   type TranslationPresetId,
+  type GrammarInsight,
 } from '@eb-packages/flowtranslate-core';
 import {
   CheckCircle2,
   ChevronDown,
   ChevronUp,
   Copy,
+  Languages,
   Loader2,
-  MessageSquareText,
   Mic,
   MicOff,
   Send,
@@ -21,6 +22,8 @@ import {
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ExpressionBreakdownDetails } from './ExpressionBreakdownDetails';
 import { TranslationPresetControl } from './TranslationPresetControl';
+import { SuggestionChips, type SuggestionChip } from './SuggestionChips';
+import { GrammarInsightCard } from './GrammarInsightCard';
 
 type ExpressionWorkspaceStatus =
   | 'idle'
@@ -42,6 +45,7 @@ type ExpressionWorkspaceProps = {
   presetId: TranslationPresetId;
   breakdown: ExpressionBreakdown | null;
   breakdownStatus?: 'idle' | 'enriching' | 'ready' | 'error';
+  grammarInsight?: GrammarInsight | null;
   translationRecordId?: string;
   status: ExpressionWorkspaceStatus;
   canTranslate: boolean;
@@ -63,6 +67,7 @@ type ExpressionWorkspaceProps = {
   onTranslate: () => void;
   onSelectPreset: (presetId: TranslationPresetId) => void;
   onRequestBreakdown: () => void;
+  onRequestStudy?: () => void;
   onTranslateToSpanish: () => void;
 };
 
@@ -77,6 +82,24 @@ const responsePlaceholder = (mode: ExpressionMode) => {
 
   return 'Tu respuesta en ingles va a aparecer aca, lista para copiar.';
 };
+
+const zeroStateSuggestions = [
+  {
+    label: 'Pedir un update',
+    prompt:
+      'Decile que queria saber si hay novedades y que quedo atento a cualquier update.',
+  },
+  {
+    label: 'Avisar una demora',
+    prompt:
+      'Decile que el reporte se demora hasta manana, pero que ya estamos revisando los datos.',
+  },
+  {
+    label: 'Coordinar llamada',
+    prompt:
+      'Decile que podemos coordinar una llamada corta la semana que viene para revisar el tema.',
+  },
+] satisfies SuggestionChip[];
 
 const statusTone = (status: ExpressionWorkspaceStatus) => {
   if (status === 'error' || status === 'auth') {
@@ -120,6 +143,7 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
     presetId,
     breakdown,
     breakdownStatus = 'idle',
+    grammarInsight,
     translationRecordId = '',
     status,
     canTranslate,
@@ -139,6 +163,7 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
     onTranslate,
     onSelectPreset,
     onRequestBreakdown,
+    onRequestStudy,
     onTranslateToSpanish,
   } = props;
   const isTranslating = status === 'translating';
@@ -160,6 +185,16 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
     status === 'offline';
   const shouldEmphasizeResponse = hasResult || isTranslating || hasAttentionState;
   const tone = statusTone(status);
+  const isSpanishTranslationMode = mode === 'translate_to_spanish';
+  const canOfferTranslateToSpanish =
+    Boolean(trimmedInputText) &&
+    sourceLanguage === 'en' &&
+    !isSpanishTranslationMode;
+  const primaryActionLabel = isTranslating
+    ? 'Generando'
+    : isSpanishTranslationMode
+      ? 'Traducir'
+      : 'Responder';
   const readyText = isTranslating
     ? 'Preparando respuesta'
     : hasAttentionState
@@ -168,6 +203,13 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
         ? statusText || 'Listo para mandar'
         : 'Listo para mandar';
   const responseLanguageLabel = targetLanguage === 'en' ? 'ingles' : 'espanol';
+
+  const handleSuggestionSelect = (suggestion: string) => {
+    onInputChange(suggestion);
+    setTimeout(() => {
+      onTranslate();
+    }, 50);
+  };
 
   useEffect(() => {
     if (!trimmedResultText) {
@@ -316,7 +358,7 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
               onChange={onSelectPreset}
             />
 
-            {trimmedInputText ? (
+            {canOfferTranslateToSpanish ? (
               <button
                 type='button'
                 onClick={onTranslateToSpanish}
@@ -326,10 +368,11 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
                     ? 'text-slate-500 hover:bg-slate-100 hover:text-slate-950'
                     : 'text-slate-300'
                 }`}
-                title='Ver en espanol'
+                aria-label='Pasar a espanol'
+                title='Pasar a espanol'
               >
-                <MessageSquareText size={16} />
-                Espanol
+                <Languages size={16} />
+                Pasar a espanol
               </button>
             ) : null}
           </div>
@@ -343,17 +386,31 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
                 ? 'bg-slate-950 text-white hover:bg-slate-800'
                 : 'bg-slate-100 text-slate-400'
             }`}
-            title={canTranslate ? 'Generar respuesta' : translateDisabledReason}
+            title={
+              canTranslate
+                ? isSpanishTranslationMode
+                  ? 'Generar en espanol'
+                  : 'Generar respuesta'
+                : translateDisabledReason
+            }
           >
             {isTranslating ? (
               <Loader2 size={17} className='animate-spin' />
             ) : (
               <Send size={17} />
             )}
-            {isTranslating ? 'Generando' : 'Responder'}
+            {primaryActionLabel}
           </button>
         </div>
       </div>
+
+      {!inputText.trim() && (
+        <SuggestionChips
+          suggestions={zeroStateSuggestions}
+          onSelect={handleSuggestionSelect}
+          disabled={isTranslating}
+        />
+      )}
 
       <div
         className={`hidden rounded-lg lg:block ${
@@ -400,20 +457,6 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
                   Audio
                 </button>
               ) : null}
-              <button
-                type='button'
-                onClick={onTranslateToSpanish}
-                disabled={!trimmedInputText || isTranslating}
-                className={`inline-flex h-10 items-center gap-2 rounded-md px-3 text-sm font-bold transition-colors ${
-                  trimmedInputText && !isTranslating
-                    ? 'text-slate-500 hover:bg-slate-100 hover:text-slate-950'
-                    : 'text-slate-300'
-                }`}
-                title='Ver en espanol'
-              >
-                <MessageSquareText size={16} />
-                Espanol
-              </button>
             </div>
           </div>
         ) : null}
@@ -425,8 +468,8 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
             </p>
           ) : isTranslating ? (
             <div className='inline-flex items-center gap-2 rounded-md bg-slate-50 px-3 py-2 text-sm font-bold text-slate-500'>
-              <Loader2 size={16} className='animate-spin' />
-              Generando una respuesta lista para mandar...
+              <Loader2 size={16} className='animate-spin text-blue-500' />
+              <span className='animate-pulse'>Generando una respuesta lista para mandar...</span>
             </div>
           ) : hasAttentionState ? (
             <div className={`inline-flex rounded-md px-3 py-2 text-sm font-bold ring-1 ${tone.surface}`}>
@@ -473,6 +516,15 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
           />
           </div>
         ) : null}
+
+        {grammarInsight && hasResult && !isTranslating && (
+          <GrammarInsightCard
+            tense={grammarInsight.tense}
+            structure={grammarInsight.structure}
+            observation={grammarInsight.observation}
+            onStudyClick={onRequestStudy}
+          />
+        )}
       </div>
 
       {shouldShowMobileResultSheet ? (
@@ -496,11 +548,15 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
                   )}
                   {isTranslating ? 'Preparando' : hasResult ? 'Listo para mandar' : readyText}
                 </span>
-                <span className='mt-0.5 block truncate text-base font-black text-slate-950'>
-                  {isTranslating
-                    ? 'Preparando tu respuesta en ingles...'
-                    : trimmedResultText}
-                </span>
+                {hasResult ? (
+                  <span className='mt-0.5 block text-sm font-bold text-slate-500'>
+                    Respuesta en {responseLanguageLabel}
+                  </span>
+                ) : (
+                  <span className='mt-0.5 block truncate text-base font-black text-slate-950'>
+                    {isTranslating ? 'Preparando tu respuesta en ingles...' : readyText}
+                  </span>
+                )}
               </span>
               {isMobileResultOpen ? (
                 <ChevronDown size={18} className='shrink-0 text-slate-500' />
@@ -514,8 +570,8 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
                 <div className='flex min-w-0 flex-col gap-4'>
                   {isTranslating ? (
                     <div className='flex min-h-24 items-center justify-center gap-2 rounded-md bg-slate-50 text-sm font-bold text-slate-500'>
-                      <Loader2 size={17} className='animate-spin' />
-                      Generando respuesta...
+                      <Loader2 size={18} className='animate-spin text-blue-500' />
+                      <span className='animate-pulse'>Pensando y buscando la mejor expresion...</span>
                     </div>
                   ) : (
                     <p className='max-w-full break-words text-xl font-semibold leading-[1.28] text-slate-950 [overflow-wrap:anywhere]'>
@@ -523,12 +579,12 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
                     </p>
                   )}
 
-                  <div className='grid min-w-0 grid-cols-[1fr_auto_auto] items-center gap-2 border-t border-slate-100 pt-3'>
+                  <div className='flex min-w-0 items-center gap-2 border-t border-slate-100 pt-3'>
                     <button
                       type='button'
                       onClick={onCopyResult}
                       disabled={!hasResult}
-                      className='inline-flex h-10 items-center justify-center gap-2 rounded-md bg-emerald-600 px-3 text-sm font-black text-white transition-colors hover:bg-emerald-500 disabled:bg-slate-100 disabled:text-slate-400'
+                      className='inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-md bg-emerald-600 px-3 text-sm font-black text-white transition-colors hover:bg-emerald-500 disabled:bg-slate-100 disabled:text-slate-400'
                     >
                       <Copy size={16} />
                       {copiedResult ? 'Copiado' : 'Copiar'}
@@ -553,18 +609,6 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
                         )}
                       </button>
                     ) : null}
-                    <button
-                      type='button'
-                      onClick={onTranslateToSpanish}
-                      disabled={!trimmedInputText || isTranslating}
-                      className={`inline-flex h-10 shrink-0 items-center justify-center rounded-md px-3 text-sm font-black transition-colors ${
-                        trimmedInputText && !isTranslating
-                          ? 'text-slate-500 hover:bg-slate-100 hover:text-slate-950'
-                          : 'text-slate-300'
-                      }`}
-                    >
-                      ES
-                    </button>
                   </div>
                 </div>
               </div>
@@ -583,6 +627,17 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
                 </button>
               </div>
             ) : null}
+
+            {isMobileResultOpen && grammarInsight && hasResult && !isTranslating && (
+              <div className='px-4 pb-4'>
+                <GrammarInsightCard
+                  tense={grammarInsight.tense}
+                  structure={grammarInsight.structure}
+                  observation={grammarInsight.observation}
+                  onStudyClick={onRequestStudy}
+                />
+              </div>
+            )}
           </div>
         </div>
       ) : null}

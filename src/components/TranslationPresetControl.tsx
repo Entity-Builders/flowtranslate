@@ -16,7 +16,7 @@ const presetLabels: Record<TranslationPresetId, string> = {
   concise: 'Claro',
   warm: 'Amable',
   direct: 'Directo',
-  shorten: 'Mas corto',
+  shorten: 'Breve',
 };
 
 export const TranslationPresetControl = ({

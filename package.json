@@ -23,6 +23,7 @@
   },
   "dependencies": {
     "@eb-packages/analytics": "1.0.0",
+    "@eb-packages/billing-core": "workspace:*",
     "@eb-packages/flowtranslate-core": "workspace:*",
     "@supabase/supabase-js": "^2.97.0",
     "lucide-react": "^0.564.0",

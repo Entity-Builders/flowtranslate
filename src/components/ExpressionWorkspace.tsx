@@ -101,6 +101,12 @@ const zeroStateSuggestions = [
   },
 ] satisfies SuggestionChip[];
 
+const translationLoadingMessages = [
+  'Analizando contexto',
+  'Ajustando tono',
+  'Refinando vocabulario',
+];
+
 const statusTone = (status: ExpressionWorkspaceStatus) => {
   if (status === 'error' || status === 'auth') {
     return {
@@ -169,6 +175,7 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
   const isTranslating = status === 'translating';
   const [isBreakdownOpen, setIsBreakdownOpen] = useState(false);
   const [isMobileResultOpen, setIsMobileResultOpen] = useState(false);
+  const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
   const inputTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const previousBreakdownKeyRef = useRef('');
   const previousResultTextRef = useRef('');
@@ -195,8 +202,11 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
     : isSpanishTranslationMode
       ? 'Traducir'
       : 'Responder';
+  const loadingStatusText =
+    translationLoadingMessages[loadingMessageIndex] ||
+    translationLoadingMessages[0];
   const readyText = isTranslating
-    ? 'Preparando respuesta'
+    ? loadingStatusText
     : hasAttentionState
       ? statusText || 'Revisa el estado para continuar'
       : hasResult
@@ -227,6 +237,21 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
   useEffect(() => {
     if (status === 'typing') setIsMobileResultOpen(false);
   }, [status]);
+
+  useEffect(() => {
+    if (!isTranslating) {
+      setLoadingMessageIndex(0);
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      setLoadingMessageIndex((current) =>
+        (current + 1) % translationLoadingMessages.length,
+      );
+    }, 1200);
+
+    return () => window.clearInterval(intervalId);
+  }, [isTranslating]);
 
   useEffect(() => {
     const inputElement = inputTextareaRef.current;
@@ -467,9 +492,16 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
               {resultText}
             </p>
           ) : isTranslating ? (
-            <div className='inline-flex items-center gap-2 rounded-md bg-slate-50 px-3 py-2 text-sm font-bold text-slate-500'>
-              <Loader2 size={16} className='animate-spin text-blue-500' />
-              <span className='animate-pulse'>Generando una respuesta lista para mandar...</span>
+            <div className='space-y-5' aria-label='Preparando respuesta'>
+              <div className='inline-flex items-center gap-2 rounded-md bg-slate-50 px-3 py-2 text-sm font-bold text-slate-500'>
+                <Loader2 size={16} className='animate-spin text-emerald-600' />
+                <span>{loadingStatusText}</span>
+              </div>
+              <div className='max-w-3xl space-y-3' aria-hidden='true'>
+                <div className='h-8 w-11/12 animate-pulse rounded-md bg-slate-100' />
+                <div className='h-8 w-9/12 animate-pulse rounded-md bg-slate-100' />
+                <div className='h-8 w-7/12 animate-pulse rounded-md bg-slate-100' />
+              </div>
             </div>
           ) : hasAttentionState ? (
             <div className={`inline-flex rounded-md px-3 py-2 text-sm font-bold ring-1 ${tone.surface}`}>
@@ -554,7 +586,7 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
                   </span>
                 ) : (
                   <span className='mt-0.5 block truncate text-base font-black text-slate-950'>
-                    {isTranslating ? 'Preparando tu respuesta en ingles...' : readyText}
+                    {readyText}
                   </span>
                 )}
               </span>
@@ -569,9 +601,19 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
               <div className='max-h-[58dvh] overflow-y-auto pb-2 pt-4'>
                 <div className='flex min-w-0 flex-col gap-4'>
                   {isTranslating ? (
-                    <div className='flex min-h-24 items-center justify-center gap-2 rounded-md bg-slate-50 text-sm font-bold text-slate-500'>
-                      <Loader2 size={18} className='animate-spin text-blue-500' />
-                      <span className='animate-pulse'>Pensando y buscando la mejor expresion...</span>
+                    <div
+                      className='min-h-28 rounded-md bg-slate-50 p-4'
+                      aria-label='Preparando respuesta'
+                    >
+                      <div className='flex items-center gap-2 text-sm font-bold text-slate-500'>
+                        <Loader2 size={18} className='animate-spin text-emerald-600' />
+                        <span>{loadingStatusText}</span>
+                      </div>
+                      <div className='mt-5 space-y-2' aria-hidden='true'>
+                        <div className='h-5 w-full animate-pulse rounded-md bg-slate-100' />
+                        <div className='h-5 w-10/12 animate-pulse rounded-md bg-slate-100' />
+                        <div className='h-5 w-7/12 animate-pulse rounded-md bg-slate-100' />
+                      </div>
                     </div>
                   ) : (
                     <p className='max-w-full break-words text-xl font-semibold leading-[1.28] text-slate-950 [overflow-wrap:anywhere]'>

@@ -621,6 +621,53 @@ describe('learning UI', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('shows active loading copy and skeletons while translating', () => {
+    const noop = () => undefined;
+
+    render(
+      <ExpressionWorkspace
+        inputText='Decile que necesito revisar esto.'
+        resultText=''
+        mode='translate_to_english'
+        modeDetection={{
+          mode: 'translate_to_english',
+          confidence: 'high',
+          reason: 'spanish',
+          automatic: true,
+        }}
+        sourceLanguage='es'
+        targetLanguage='en'
+        presetId='natural'
+        breakdown={null}
+        breakdownStatus='idle'
+        translationRecordId=''
+        status='translating'
+        canTranslate={false}
+        translateDisabledReason='Generacion en curso.'
+        copiedInput={false}
+        copiedResult={false}
+        canListen={false}
+        speakingLanguage={null}
+        canDictate={false}
+        dictatingLanguage={null}
+        dictationUnavailableReason='No disponible'
+        onInputChange={noop}
+        onCopyInput={noop}
+        onCopyResult={noop}
+        onListenInput={noop}
+        onListenResult={noop}
+        onDictateInput={noop}
+        onTranslate={noop}
+        onSelectPreset={noop}
+        onRequestBreakdown={noop}
+        onTranslateToSpanish={noop}
+      />,
+    );
+
+    expect(screen.getAllByLabelText('Preparando respuesta').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Analizando contexto').length).toBeGreaterThan(0);
+  });
+
   it('does not show redundant Spanish shortcuts when the response is already in Spanish', async () => {
     const noop = () => undefined;
 

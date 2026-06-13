@@ -10,6 +10,7 @@ import type {
   UsageSnapshot,
 } from '@eb-packages/flowtranslate-core';
 import {
+  LEARNING_HISTORY_PERSONALIZATION_THRESHOLD,
   STARTER_LEARNING_SITUATIONS,
   getLearningSituationById,
 } from '@eb-packages/flowtranslate-core';
@@ -34,6 +35,10 @@ import { CheckoutReturnStatus } from './components/CheckoutReturnStatus';
 import { ExpressionWorkspace } from './components/ExpressionWorkspace';
 import { STORAGE_KEYS } from './constants';
 import { LearningView } from './components/LearningView';
+import {
+  ProUpgradePrompt,
+  type ProUpgradeSurface,
+} from './components/ProUpgradePrompt';
 import { QuotaStatus } from './components/QuotaStatus';
 import { useBidirectionalTranslator } from './hooks/useBidirectionalTranslator';
 import { useFlowtranslateAccount } from './hooks/useFlowtranslateAccount';
@@ -44,6 +49,7 @@ import {
   askBreakdownQuestion,
   generateLearningSession,
   generateStudyArticle,
+  startFlowtranslateProCheckout,
   submitLearningAttempt,
 } from './services/flowtranslate-api';
 import {
@@ -88,6 +94,12 @@ const appendRecognizedText = (currentText: string, transcript: string) => {
 const guestLearningMessage =
   'Conecta una cuenta gratis para desbloquear Learning personal y conservar tu progreso.';
 const ACCOUNT_PROMPT_COPY_THRESHOLD = 2;
+const FLOWTRANSLATE_PRO_ANALYTICS = {
+  provider: 'mercado_pago',
+  plan_id: 'flowtranslate_pro',
+  currency: 'ARS',
+  display_price: 'ARS 4.999/mes',
+};
 
 const isStarterLearningSession = (session: LearningSession) =>
   session.id.startsWith('starter-');
@@ -226,6 +238,12 @@ function App() {
   const [profileContextDraft, setProfileContextDraft] = useState('');
   const [profileContextSaving, setProfileContextSaving] = useState(false);
   const [profileContextMessage, setProfileContextMessage] = useState('');
+  const [checkoutStartingSurface, setCheckoutStartingSurface] =
+    useState<ProUpgradeSurface | null>(null);
+  const [checkoutError, setCheckoutError] = useState<{
+    surface: ProUpgradeSurface;
+    message: string;
+  } | null>(null);
   const dictationRef = useRef<DictationSession | null>(null);
   const renderedStudyArticleRef = useRef<string | null>(null);
   const trackedViewRef = useRef<AppView | null>(null);
@@ -1048,6 +1066,18 @@ function App() {
     account.isGuest &&
     !accountPromptDismissed &&
     resultCopyCount >= ACCOUNT_PROMPT_COPY_THRESHOLD;
+  const usagePressure =
+    usage &&
+    (usage.remainingThisMonth <= 0 ||
+      (usage.monthlyQuota > 0 &&
+        usage.remainingThisMonth / usage.monthlyQuota <= 0.2));
+  const shouldShowUsageUpgradePrompt = Boolean(usagePressure);
+  const shouldShowSavedHistoryUpgradePrompt = shouldShowAccountPrompt;
+  const shouldShowLearningUpgradePrompt =
+    view === 'learning' &&
+    (history.length >= LEARNING_HISTORY_PERSONALIZATION_THRESHOLD ||
+      learningSessions.length > 0 ||
+      savedPhrases.some((phrase) => !phrase.archivedAt));
 
   useEffect(() => {
     if (!shouldShowAccountPrompt) return;
@@ -1071,6 +1101,75 @@ function App() {
     });
     setShowAccount(true);
   };
+
+  const proUpgradeAnalytics = useCallback(
+    (surface: ProUpgradeSurface) => ({
+      surface,
+      account_kind: account.accountKind,
+      ...FLOWTRANSLATE_PRO_ANALYTICS,
+    }),
+    [account.accountKind],
+  );
+
+  const connectAccountForPro = useCallback(
+    (surface: ProUpgradeSurface) => {
+      setCheckoutError(null);
+      analytics.track('upgrade_intent_clicked', {
+        ...proUpgradeAnalytics(surface),
+        requires_account: true,
+      });
+      analytics.track('account_connect_prompt_clicked', {
+        surface,
+        reason: 'pro_upgrade_requires_account',
+        account_kind: account.accountKind,
+      });
+      setShowAccount(true);
+    },
+    [account.accountKind, proUpgradeAnalytics],
+  );
+
+  const startProCheckout = useCallback(
+    async (surface: ProUpgradeSurface) => {
+      setCheckoutError(null);
+      analytics.track('upgrade_intent_clicked', {
+        ...proUpgradeAnalytics(surface),
+        requires_account: !account.accessToken || account.isGuest,
+      });
+
+      if (!account.accessToken || account.isGuest) {
+        analytics.track('account_connect_prompt_shown', {
+          surface,
+          reason: 'pro_checkout_requires_account',
+          account_kind: account.accountKind,
+        });
+        setShowAccount(true);
+        return;
+      }
+
+      setCheckoutStartingSurface(surface);
+      try {
+        const checkout = await startFlowtranslateProCheckout(account.accessToken);
+        analytics.track('checkout_started', proUpgradeAnalytics(surface));
+        window.location.assign(checkout.checkoutUrl);
+      } catch (error) {
+        setCheckoutError({
+          surface,
+          message:
+            error instanceof Error
+              ? error.message
+              : 'No pudimos iniciar Mercado Pago. Proba de nuevo.',
+        });
+      } finally {
+        setCheckoutStartingSurface(null);
+      }
+    },
+    [account.accessToken, account.accountKind, account.isGuest, proUpgradeAnalytics],
+  );
+
+  const upgradePromptState = (surface: ProUpgradeSurface) => ({
+    busy: checkoutStartingSurface === surface,
+    error: checkoutError?.surface === surface ? checkoutError.message : '',
+  });
 
   const dismissCheckoutReturn = () => {
     setCheckoutReturn(null);
@@ -1216,6 +1315,26 @@ function App() {
             </div>
           ) : null}
 
+          {shouldShowSavedHistoryUpgradePrompt ? (
+            <ProUpgradePrompt
+              surface='saved_history'
+              accountKind={account.accountKind}
+              onStartCheckout={(surface) => void startProCheckout(surface)}
+              onConnectAccount={connectAccountForPro}
+              {...upgradePromptState('saved_history')}
+            />
+          ) : null}
+
+          {shouldShowUsageUpgradePrompt ? (
+            <ProUpgradePrompt
+              surface='usage_limit'
+              accountKind={account.accountKind}
+              onStartCheckout={(surface) => void startProCheckout(surface)}
+              onConnectAccount={connectAccountForPro}
+              {...upgradePromptState('usage_limit')}
+            />
+          ) : null}
+
           <ExpressionWorkspace
             inputText={translator.inputText}
             resultText={translator.resultText}
@@ -1318,6 +1437,18 @@ function App() {
             onAskBreakdownQuestion={askAboutBreakdown}
             onDelete={(id) => void deleteHistoryItem(id)}
             onClear={() => void clearHistory()}
+            upgradePrompt={
+              shouldShowLearningUpgradePrompt ? (
+                <ProUpgradePrompt
+                  surface='learning'
+                  accountKind={account.accountKind}
+                  compact
+                  onStartCheckout={(surface) => void startProCheckout(surface)}
+                  onConnectAccount={connectAccountForPro}
+                  {...upgradePromptState('learning')}
+                />
+              ) : null
+            }
           />
         </>
       )}
@@ -1372,6 +1503,17 @@ function App() {
                 </div>
 
                 <QuotaStatus usage={usage} accountKind={account.accountKind} />
+
+                {!account.isGuest ? (
+                  <ProUpgradePrompt
+                    surface='profile_preferences'
+                    accountKind={account.accountKind}
+                    compact
+                    onStartCheckout={(surface) => void startProCheckout(surface)}
+                    onConnectAccount={connectAccountForPro}
+                    {...upgradePromptState('profile_preferences')}
+                  />
+                ) : null}
 
                 {!account.isGuest && (
                   <div className='space-y-3 border-t border-slate-100 pt-5'>

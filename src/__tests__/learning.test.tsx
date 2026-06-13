@@ -31,6 +31,7 @@ const renderLearningView = (
     studyLoading: false,
     studyError: '',
     selectedStudyRecordId: null,
+    upgradePrompt: null,
     onStartSession: () => undefined,
     onResumeSession: () => undefined,
     onLeaveSession: () => undefined,
@@ -65,6 +66,20 @@ describe('learning UI', () => {
     expect(screen.queryByRole('heading', { name: 'Panel de Learning' })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Recommended exercises' })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Practice' })).not.toBeInTheDocument();
+  });
+
+  it('renders a contextual Pro prompt in the Learning progress area', () => {
+    renderLearningView({
+      upgradePrompt: (
+        <div>
+          FlowTranslate Pro suma mas sesiones de Learning y frases guardadas.
+        </div>
+      ),
+    });
+
+    expect(
+      screen.getByText(/FlowTranslate Pro suma mas sesiones de Learning/i),
+    ).toBeInTheDocument();
   });
 
   it('shows a continue action when the recommended practice already exists', () => {

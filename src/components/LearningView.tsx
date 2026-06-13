@@ -31,7 +31,7 @@ import {
   Sparkles,
   Trash2,
 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { MAX_LEARNING_HISTORY } from '../constants';
 import type { SaveLearningPhraseInput } from '../services/learning-progress';
 import { StudyArticleView } from './StudyArticleView';
@@ -74,6 +74,7 @@ type LearningViewProps = {
     question: string,
     history: BreakdownChatMessage[],
   ) => Promise<string>;
+  upgradePrompt?: ReactNode;
   onDelete: (id: string) => void;
   onClear: () => void;
 };
@@ -527,6 +528,7 @@ export const LearningView = ({
   onCloseStudy,
   onListenPhrase,
   onAskBreakdownQuestion,
+  upgradePrompt,
   onDelete,
   onClear,
 }: LearningViewProps) => {
@@ -718,6 +720,7 @@ export const LearningView = ({
                 Con algunas respuestas mas, la recomendacion empieza a salir de tus propios mensajes.
               </p>
             ) : null}
+            {upgradePrompt ? <div className='mt-5'>{upgradePrompt}</div> : null}
           </aside>
         </section>
 

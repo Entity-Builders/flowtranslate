@@ -12,6 +12,7 @@ const linkIdentity = vi.hoisted(() => vi.fn());
 const verifyOtp = vi.hoisted(() => vi.fn());
 const signOut = vi.hoisted(() => vi.fn());
 const generateTranslation = vi.hoisted(() => vi.fn());
+const startFlowtranslateProCheckout = vi.hoisted(() => vi.fn());
 const profileMaybeSingle = vi.hoisted(() => vi.fn());
 const profileUpdate = vi.hoisted(() => vi.fn());
 
@@ -40,6 +41,7 @@ vi.mock('../services/flowtranslate-api', () => ({
     }
   },
   generateTranslation,
+  startFlowtranslateProCheckout,
   generateLearningInsight: vi.fn(),
   generateStudyArticle: vi.fn(),
   askBreakdownQuestion: vi.fn(),
@@ -125,6 +127,9 @@ describe('account access UI', () => {
     signOut.mockResolvedValue({ error: null });
     profileUpdate.mockReturnValue(undefined);
     profileMaybeSingle.mockResolvedValue({ data: null, error: null });
+    startFlowtranslateProCheckout.mockResolvedValue({
+      checkoutUrl: '#mercado-pago-checkout',
+    });
     generateTranslation.mockResolvedValue({
       kind: 'translate',
       text: 'Hi, can you send me the update?',
@@ -364,6 +369,86 @@ describe('account access UI', () => {
       expect.objectContaining({
         surface: 'translate_soft_banner',
         reason: 'copied_replies',
+      }),
+    );
+  });
+
+  it('gates contextual Pro checkout behind a permanent account for guests', async () => {
+    signInAnonymously.mockResolvedValueOnce({
+      data: { session: guestSession },
+      error: null,
+    });
+
+    render(<App />);
+
+    await screen.findByText('Prueba gratis');
+
+    fireEvent.change(screen.getByLabelText('Mensaje o idea'), {
+      target: { value: 'me pasas el update?' },
+    });
+    fireEvent.click(screen.getByTitle('Generar respuesta'));
+
+    await waitFor(() =>
+      expect(screen.getAllByText('Hi, can you send me the update?').length).toBeGreaterThan(0),
+    );
+
+    const resultCopyButton = () => screen.getByTitle('Copiar respuesta');
+    fireEvent.click(resultCopyButton());
+    fireEvent.click(resultCopyButton());
+
+    expect(
+      await screen.findByText(/FlowTranslate Pro desbloquea mas uso/i),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /conectar cuenta/i }));
+
+    expect(startFlowtranslateProCheckout).not.toHaveBeenCalled();
+    expect(await screen.findByRole('heading', { name: 'Cuenta' })).toBeInTheDocument();
+    expect(analyticsTrack).toHaveBeenCalledWith(
+      'upgrade_intent_clicked',
+      expect.objectContaining({
+        surface: 'saved_history',
+        account_kind: 'guest',
+      }),
+    );
+  });
+
+  it('starts provider checkout from a permanent account Pro CTA', async () => {
+    getSession.mockResolvedValue({ data: { session: permanentSession } });
+    profileMaybeSingle.mockResolvedValue({
+      data: {
+        user_id: 'permanent-user',
+        email: 'juan@example.com',
+        global_context: 'Soy PM en una agencia.',
+        current_streak: 0,
+        last_study_date: null,
+      },
+      error: null,
+    });
+
+    render(<App />);
+
+    expect(await screen.findByText('Perfil')).toBeInTheDocument();
+    fireEvent.click(screen.getByTitle('Perfil'));
+
+    expect(
+      (await screen.findAllByText(/preferencias reutilizables/i)).length,
+    ).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole('button', { name: /pasar a pro/i }));
+
+    await waitFor(() =>
+      expect(startFlowtranslateProCheckout).toHaveBeenCalledWith('permanent-token'),
+    );
+    await waitFor(() =>
+      expect(window.location.hash).toBe('#mercado-pago-checkout'),
+    );
+    expect(analyticsTrack).toHaveBeenCalledWith(
+      'checkout_started',
+      expect.objectContaining({
+        surface: 'profile_preferences',
+        provider: 'mercado_pago',
+        plan_id: 'flowtranslate_pro',
       }),
     );
   });

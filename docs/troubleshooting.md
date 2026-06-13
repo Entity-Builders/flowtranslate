@@ -100,6 +100,11 @@ internally with `x-signature`, `x-request-id`, `ts`, `data.id`, HMAC SHA-256,
 provider lookup, and `external_reference` routing before mutating entitlement
 state.
 
+For operator-only paid-but-not-Pro reconciliation, use
+`apps/flowtranslate/docs/pro-reconciliation.md` and the support SQL templates in
+`eb-infra/supabase/support/flowtranslate-pro-reconciliation.sql`. Do not expose
+those templates in the app or use them from browser code.
+
 Reusable billing rule: Mercado Pago provider credentials are shared
 `MERCADO_PAGO_*` server secrets, the billing webhook is shared as
 `ENTITY_BUILDERS_BILLING_WEBHOOK_URL`, and app offers are product-scoped config

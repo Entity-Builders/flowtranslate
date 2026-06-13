@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import './App.css';
+import { CheckoutReturnStatus } from './components/CheckoutReturnStatus';
 import { ExpressionWorkspace } from './components/ExpressionWorkspace';
 import { STORAGE_KEYS } from './constants';
 import { LearningView } from './components/LearningView';
@@ -67,6 +68,7 @@ import {
   deleteTranslationRecord,
   listTranslationHistory,
 } from './services/translation-history';
+import { readCheckoutReturnFromUrl } from './services/checkout-return';
 
 type AppView = 'translate' | 'learning';
 type CopiedTarget = 'input' | 'result' | null;
@@ -186,6 +188,9 @@ function App() {
   const [showAccount, setShowAccount] = useState(false);
   const [showEmailSignIn, setShowEmailSignIn] = useState(false);
   const [online, setOnline] = useState(isOnline);
+  const [checkoutReturn, setCheckoutReturn] = useState(() =>
+    readCheckoutReturnFromUrl(window.location)
+  );
   const [usage, setUsage] = useState<UsageSnapshot | null>(null);
   const [history, setHistory] = useState<TranslationRecord[]>([]);
   const [historyError, setHistoryError] = useState('');
@@ -1067,6 +1072,15 @@ function App() {
     setShowAccount(true);
   };
 
+  const dismissCheckoutReturn = () => {
+    setCheckoutReturn(null);
+  };
+
+  const returnToResponderFromCheckout = () => {
+    setView('translate');
+    setCheckoutReturn(null);
+  };
+
   const accountButtonLabel = account.isPermanent ? 'Perfil' : account.displayName;
   const accountButtonTitle = account.isPermanent ? 'Perfil' : 'Cuenta';
   const accountButtonIcon = account.isGuest ? (
@@ -1149,6 +1163,14 @@ function App() {
           <WifiOff size={16} />
           Estas offline. Podes ver la app, pero las nuevas respuestas con IA quedan pausadas.
         </div>
+      ) : null}
+
+      {checkoutReturn ? (
+        <CheckoutReturnStatus
+          info={checkoutReturn}
+          onDismiss={dismissCheckoutReturn}
+          onReturnToResponder={returnToResponderFromCheckout}
+        />
       ) : null}
 
       {view === 'translate' ? (

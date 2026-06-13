@@ -107,6 +107,7 @@ const permanentSession = {
 describe('account access UI', () => {
   beforeEach(() => {
     localStorage.clear();
+    window.history.replaceState({}, '', '/');
     vi.clearAllMocks();
     getSession.mockResolvedValue({ data: { session: null } });
     onAuthStateChange.mockReturnValue({
@@ -365,5 +366,48 @@ describe('account access UI', () => {
         reason: 'copied_replies',
       }),
     );
+  });
+
+  it('shows safe checkout return success without granting Pro from URL params', async () => {
+    window.history.pushState(
+      {},
+      '',
+      '/pro/checkout/return?status=approved&payment_id=pay_secret&merchant_order_id=order_secret&external_reference=entitybuilders:flowtranslate:pro:checkout_secret',
+    );
+    getSession.mockResolvedValue({ data: { session: permanentSession } });
+
+    render(<App />);
+
+    expect(await screen.findByText(/volviste de mercado pago/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/pro se activa cuando mercado pago confirma/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/pay_secret/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/order_secret/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/checkout_secret/i)).not.toBeInTheDocument();
+  });
+
+  it('shows pending, failed, and cancelled checkout return copy in Spanish', async () => {
+    const cases = [
+      [
+        '/pro/checkout/return?status=pending',
+        /estamos esperando la confirmacion de mercado pago/i,
+      ],
+      [
+        '/pro/checkout/return?status=rejected',
+        /no pudimos confirmar el pago/i,
+      ],
+      [
+        '/pro/checkout/return?status=cancelled',
+        /el checkout fue cancelado/i,
+      ],
+    ] as const;
+
+    for (const [url, copy] of cases) {
+      window.history.replaceState({}, '', url);
+      const { unmount } = render(<App />);
+      expect(await screen.findByText(copy)).toBeInTheDocument();
+      unmount();
+    }
   });
 });

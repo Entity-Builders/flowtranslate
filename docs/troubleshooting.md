@@ -45,6 +45,22 @@ VITE_SUPABASE_URL=http://127.0.0.1:54321
 VITE_SUPABASE_ANON_KEY=<local-anon-key>
 ```
 
+### Local OTP Login
+
+Email code login is the reliable localhost path. Google OAuth may be configured
+for local testing, but it is not required to verify permanent-account behavior.
+
+The local Supabase config enables anonymous sign-ins, manual identity linking,
+and Inbucket email capture. After requesting a code in FlowTranslate, open:
+
+```bash
+http://127.0.0.1:54324
+```
+
+Use the latest auth email to copy the six-digit code back into the account
+surface. If Google OAuth fails locally, the current guest trial should remain
+usable and the email code path should still be available.
+
 The Edge Function environment requires:
 
 ```bash

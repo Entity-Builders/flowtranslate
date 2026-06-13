@@ -177,7 +177,7 @@ describe('account access UI', () => {
     expect(screen.queryByRole('heading', { name: 'Cuenta' })).not.toBeInTheDocument();
   });
 
-  it('offers Google, guest trial, and progressive email code sign-in', async () => {
+  it('offers Google, guest trial, and email code sign-in as a visible fallback', async () => {
     render(<App />);
 
     await waitFor(() => expect(signInAnonymously).toHaveBeenCalledTimes(1));
@@ -189,10 +189,6 @@ describe('account access UI', () => {
     expect(
       screen.getByRole('button', { name: /iniciar prueba gratis/i }),
     ).toBeInTheDocument();
-    expect(screen.queryByLabelText(/codigo/i)).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: /usar codigo por email/i }));
-
     expect(screen.getByLabelText(/email/i)).toBeInTheDocument();
     expect(screen.queryByLabelText(/codigo/i)).not.toBeInTheDocument();
 
@@ -235,7 +231,7 @@ describe('account access UI', () => {
     });
   });
 
-  it('starts normal Google OAuth from a guest session instead of linking identity', async () => {
+  it('links Google OAuth from a guest session without signing out first', async () => {
     getSession.mockResolvedValue({ data: { session: guestSession } });
 
     render(<App />);
@@ -245,20 +241,45 @@ describe('account access UI', () => {
       await screen.findByRole('button', { name: /conectar con google/i }),
     );
 
-    await waitFor(() => expect(signOut).toHaveBeenCalled());
-    expect(linkIdentity).not.toHaveBeenCalled();
-    expect(signInWithOAuth).toHaveBeenCalledWith({
+    await waitFor(() => expect(linkIdentity).toHaveBeenCalledWith({
       provider: 'google',
       options: {
         redirectTo: window.location.origin,
       },
-    });
+    }));
+    expect(signOut).not.toHaveBeenCalled();
+    expect(signInWithOAuth).not.toHaveBeenCalled();
     expect(analyticsTrack).toHaveBeenCalledWith(
       'auth_oauth_submitted',
       expect.objectContaining({
         method: 'google_oauth_from_guest',
       }),
     );
+  });
+
+  it('keeps email code available while a guest connects an account', async () => {
+    getSession.mockResolvedValue({ data: { session: guestSession } });
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByTitle('Cuenta'));
+
+    expect(
+      await screen.findByRole('button', { name: /conectar con google/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText(/email/i)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/email/i), {
+      target: { value: 'juan@example.com' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /enviar codigo/i }));
+
+    await waitFor(() => expect(signInWithOtp).toHaveBeenCalledWith({
+      email: 'juan@example.com',
+      options: {
+        emailRedirectTo: window.location.origin,
+      },
+    }));
   });
 
   it('shows a permanent profile editor and saves context explicitly', async () => {
@@ -327,7 +348,7 @@ describe('account access UI', () => {
     expect(
       await screen.findByText(/ese google ya esta conectado a otra cuenta/i),
     ).toBeInTheDocument();
-    expect(signOut).toHaveBeenCalled();
+    expect(signOut).not.toHaveBeenCalled();
     expect(window.location.search).toBe('');
     expect(window.location.hash).toBe('');
     expect(analyticsTrack).toHaveBeenCalledWith(

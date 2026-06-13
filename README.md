@@ -47,6 +47,31 @@ VITE_SUPABASE_URL=http://127.0.0.1:54321
 VITE_SUPABASE_ANON_KEY=<local-anon-key>
 ```
 
+### Local Auth And OTP
+
+The local Supabase stack supports both anonymous guest sessions and email
+OTP/code login. Google OAuth is optional for local development; use email code
+login when Google is not configured.
+
+Auth is configured in `eb-infra/supabase/config.toml` with:
+
+- `enable_anonymous_sign_ins = true`
+- `enable_manual_linking = true`
+- local redirect allow-list entries for `http://localhost:5173` and
+  `http://127.0.0.1:5173`
+- Inbucket enabled on `http://127.0.0.1:54324`
+
+To test OTP locally:
+
+1. Start infra with `yarn infra:start`.
+2. Start FlowTranslate with `yarn start:flowtranslate`.
+3. Open the account surface and submit an email under `Codigo por email`.
+4. Open Inbucket at `http://127.0.0.1:54324`.
+5. Copy the six-digit code from the latest auth email into FlowTranslate.
+
+The account UI should keep the anonymous guest trial usable if Google OAuth is
+missing or a provider link attempt fails.
+
 Function environment lives in `eb-infra/supabase/functions/.env`:
 
 ```bash

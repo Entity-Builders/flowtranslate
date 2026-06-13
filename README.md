@@ -59,6 +59,32 @@ FLOWTRANSLATE_PRACTICE_MODEL=gemini-2.5-flash
 FLOWTRANSLATE_GEMINI_MODEL=
 ```
 
+FlowTranslate Pro billing uses Mercado Pago through server-side Supabase Edge
+Functions only. Use `yarn env:sync --apps entitybuildersFunctions` to sync
+safe local values from `.env.source` into `eb-infra/supabase/functions/.env`.
+Do not add these values to `apps/flowtranslate/.env.production` or Cloudflare
+static app env:
+
+```bash
+MERCADO_PAGO_ACCESS_TOKEN=<server-side-token>
+MERCADO_PAGO_PUBLIC_KEY=<server-side-for-v1>
+MERCADO_PAGO_WEBHOOK_SECRET=<server-side-secret>
+MERCADO_PAGO_APPLICATION_ID=<provider-app-id>
+MERCADO_PAGO_WEBHOOK_URL_TOKEN=<optional-story-1.8-fallback>
+FLOWTRANSLATE_PRO_MERCADO_PAGO_INTERNAL_PLAN_ID=flowtranslate_pro_monthly_ar
+FLOWTRANSLATE_PRO_PRICE_AMOUNT=4999
+FLOWTRANSLATE_PRO_PRICE_CURRENCY=ARS
+FLOWTRANSLATE_PRO_CHECKOUT_RETURN_URL=https://flowtranslate.app/pro/checkout/return
+FLOWTRANSLATE_PRO_BILLING_WEBHOOK_URL=https://xfcvuzcxvdpzkqpnahyx.supabase.co/functions/v1/flowtranslate-billing-webhook?source_news=webhooks
+```
+
+`MERCADO_PAGO_*` names are shared provider credentials for the Entity Builders
+Billing integration. `FLOWTRANSLATE_PRO_*` names are product-scoped config so a
+future Entity Builders app can add its own plan without reintegrating the
+provider from scratch. v1 does not expose `VITE_MERCADO_PAGO_*` because checkout
+will be created server-side and redirected through Mercado Pago's hosted
+`init_point`.
+
 ## Data And Runtime
 
 Flowtranslate vNext stores durable app data in the dedicated
@@ -108,3 +134,8 @@ The Wrangler config lives at `apps/flowtranslate/wrangler.jsonc` and deploys
 `dist/` to `flowtranslate.app`. Before deploying, provide production values via
 the shell or `apps/flowtranslate/.env.production`; use `.env.production.template`
 as the committable checklist.
+
+Mercado Pago Access Token, webhook secret, Client Secret, card data, provider
+payloads, and user emails must never be configured in Cloudflare/Wrangler for
+the static app. Production billing secrets belong in Supabase Cloud secrets for
+the shared `eb-core` project.

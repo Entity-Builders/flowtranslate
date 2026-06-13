@@ -23,43 +23,44 @@ describe('translator UI', () => {
 
     expect(
       screen.getByRole('heading', {
-        name: /responde mejor en ingles, sin sonar traducido/i,
+        name: /escribi como te salga/i,
       }),
     ).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Mensaje o idea' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Respuesta' })).toBeInTheDocument();
     expect(screen.getByLabelText('Mensaje o idea')).toBeInTheDocument();
     expect(screen.getByLabelText('Tono de respuesta')).toBeInTheDocument();
     expect(
-      screen.getByRole('button', { name: /responder en ingles/i }),
-    ).toHaveAttribute('aria-pressed', 'true');
+      screen.queryByRole('button', { name: /copiar respuesta/i }),
+    ).not.toBeInTheDocument();
     expect(
-      screen.getByRole('button', { name: /mejorar ingles/i }),
-    ).toBeInTheDocument();
+      screen.queryByRole('button', { name: /responder en ingles/i }),
+    ).not.toBeInTheDocument();
     expect(
-      screen.getByRole('button', { name: /entender en espanol/i }),
-    ).toBeInTheDocument();
+      screen.queryByRole('button', { name: /mejorar ingles/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /entender en espanol/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /responder a un cliente/i }),
+    ).not.toBeInTheDocument();
   });
 
-  it('lets visitors start from a work example before signing in', () => {
+  it('starts visitors in the direct composer instead of example prompts', () => {
     render(<App />);
 
-    fireEvent.click(screen.getByRole('button', { name: /responder a un cliente/i }));
-
-    expect(screen.getByLabelText('Mensaje o idea')).toHaveValue(
-      'Decile a un cliente que el reporte se demora hasta manana, pero que ya estamos revisando los datos y le vamos a mandar una version clara apenas este lista.',
-    );
+    expect(screen.getByLabelText('Mensaje o idea')).toHaveValue('');
     expect(
-      screen.queryByRole('heading', {
-        name: /responde mejor en ingles, sin sonar traducido/i,
-      }),
+      screen.getByPlaceholderText(/pega un chat de trabajo/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/sin login para probar/i),
     ).not.toBeInTheDocument();
-    expect(analyticsTrack).toHaveBeenCalledWith(
+    expect(
+      screen.queryByRole('button', { name: /contestar linkedin/i }),
+    ).not.toBeInTheDocument();
+    expect(analyticsTrack).not.toHaveBeenCalledWith(
       'landing_example_selected',
-      expect.objectContaining({
-        example_id: 'client-delay',
-        account_kind: 'none',
-      }),
+      expect.anything(),
     );
   });
 
@@ -95,9 +96,11 @@ describe('translator UI', () => {
     });
 
     expect(
-      screen.getByRole('button', { name: /mejorar ingles/i }),
-    ).toHaveAttribute('aria-pressed', 'true');
+      screen.queryByRole('button', { name: /mejorar ingles/i }),
+    ).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Espanol$/i })).toBeEnabled();
-    expect(screen.getAllByRole('button', { name: /copiar texto/i }).length).toBe(2);
+    expect(
+      screen.queryByRole('button', { name: /copiar respuesta/i }),
+    ).not.toBeInTheDocument();
   });
 });

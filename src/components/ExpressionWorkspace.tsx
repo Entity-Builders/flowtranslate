@@ -6,17 +6,20 @@ import {
   type TranslationPresetId,
 } from '@eb-packages/flowtranslate-core';
 import {
+  CheckCircle2,
   ChevronDown,
   ChevronUp,
+  Copy,
   Loader2,
   MessageSquareText,
-  Sparkles,
+  Mic,
+  MicOff,
+  Send,
   Square,
   Volume2,
 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ExpressionBreakdownDetails } from './ExpressionBreakdownDetails';
-import { TranslationActions } from './TranslationActions';
 import { TranslationPresetControl } from './TranslationPresetControl';
 
 type ExpressionWorkspaceStatus =
@@ -63,76 +66,81 @@ type ExpressionWorkspaceProps = {
   onTranslateToSpanish: () => void;
 };
 
-const languageLabels: Record<LanguageCode, string> = {
-  es: 'Espanol',
-  en: 'Ingles',
-};
-
-const confidenceLabel: Record<IntentDetectionResult['confidence'], string> = {
-  high: 'alta confianza',
-  medium: 'confianza media',
-  low: 'necesita confirmacion',
-};
-
-const resultPlaceholder = (mode: ExpressionMode) => {
+const responsePlaceholder = (mode: ExpressionMode) => {
   if (mode === 'translate_to_spanish') {
-    return 'Vas a ver el mensaje en espanol claro, con una respuesta que puedas preparar despues.';
+    return 'Tu version en espanol va a aparecer aca, clara y facil de entender.';
   }
 
   if (mode === 'improve_english') {
-    return 'Vas a recibir una version mas natural, clara y lista para copiar.';
+    return 'Tu ingles mejorado va a aparecer aca, listo para copiar.';
   }
 
-  return 'Vas a recibir una respuesta en ingles lista para copiar, con tono natural y desglose opcional.';
+  return 'Tu respuesta en ingles va a aparecer aca, lista para copiar.';
 };
 
-const detectionCopy = (
-  mode: ExpressionMode,
-  detection: IntentDetectionResult,
-) => {
-  if (!detection.automatic) return 'Listo para responder';
-  if (mode === 'translate_to_spanish') {
-    return `Detectamos ingles para ver en espanol con ${confidenceLabel[detection.confidence]}`;
+const statusTone = (status: ExpressionWorkspaceStatus) => {
+  if (status === 'error' || status === 'auth') {
+    return {
+      dot: 'text-rose-600',
+      text: 'text-rose-700',
+      surface: 'bg-rose-50 text-rose-700 ring-rose-100',
+    };
   }
-  if (mode === 'improve_english') {
-    return `Detectamos ingles para dejarlo mas natural con ${confidenceLabel[detection.confidence]}`;
+
+  if (status === 'quota') {
+    return {
+      dot: 'text-amber-600',
+      text: 'text-amber-800',
+      surface: 'bg-amber-50 text-amber-800 ring-amber-100',
+    };
   }
-  return `Detectamos espanol para preparar una respuesta en ingles con ${confidenceLabel[detection.confidence]}`;
+
+  if (status === 'offline') {
+    return {
+      dot: 'text-slate-500',
+      text: 'text-slate-600',
+      surface: 'bg-slate-100 text-slate-700 ring-slate-200',
+    };
+  }
+
+  return {
+    dot: 'text-emerald-600',
+    text: 'text-emerald-700',
+    surface: 'bg-emerald-50 text-emerald-700 ring-emerald-100',
+  };
 };
 
-export const ExpressionWorkspace = ({
-  inputText,
-  resultText,
-  mode,
-  modeDetection,
-  sourceLanguage,
-  targetLanguage,
-  presetId,
-  breakdown,
-  breakdownStatus = 'idle',
-  translationRecordId = '',
-  status,
-  canTranslate,
-  translateDisabledReason,
-  copiedInput,
-  copiedResult,
-  canListen,
-  speakingLanguage,
-  canDictate,
-  dictatingLanguage,
-  dictationUnavailableReason,
-  statusText,
-  onInputChange,
-  onCopyInput,
-  onCopyResult,
-  onListenInput,
-  onListenResult,
-  onDictateInput,
-  onTranslate,
-  onSelectPreset,
-  onRequestBreakdown,
-  onTranslateToSpanish,
-}: ExpressionWorkspaceProps) => {
+export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
+  const {
+    inputText,
+    resultText,
+    mode,
+    sourceLanguage,
+    targetLanguage,
+    presetId,
+    breakdown,
+    breakdownStatus = 'idle',
+    translationRecordId = '',
+    status,
+    canTranslate,
+    translateDisabledReason,
+    copiedResult,
+    canListen,
+    speakingLanguage,
+    canDictate,
+    dictatingLanguage,
+    dictationUnavailableReason,
+    statusText,
+    onInputChange,
+    onCopyResult,
+    onListenInput,
+    onListenResult,
+    onDictateInput,
+    onTranslate,
+    onSelectPreset,
+    onRequestBreakdown,
+    onTranslateToSpanish,
+  } = props;
   const isTranslating = status === 'translating';
   const [isBreakdownOpen, setIsBreakdownOpen] = useState(false);
   const [isMobileResultOpen, setIsMobileResultOpen] = useState(false);
@@ -145,6 +153,21 @@ export const ExpressionWorkspace = ({
   const trimmedResultText = resultText.trim();
   const hasResult = Boolean(trimmedResultText);
   const shouldShowMobileResultSheet = isTranslating || hasResult;
+  const hasAttentionState =
+    status === 'error' ||
+    status === 'auth' ||
+    status === 'quota' ||
+    status === 'offline';
+  const shouldEmphasizeResponse = hasResult || isTranslating || hasAttentionState;
+  const tone = statusTone(status);
+  const readyText = isTranslating
+    ? 'Preparando respuesta'
+    : hasAttentionState
+      ? statusText || 'Revisa el estado para continuar'
+      : hasResult
+        ? statusText || 'Listo para mandar'
+        : 'Listo para mandar';
+  const responseLanguageLabel = targetLanguage === 'en' ? 'ingles' : 'espanol';
 
   useEffect(() => {
     if (!trimmedResultText) {
@@ -168,7 +191,7 @@ export const ExpressionWorkspace = ({
     if (!inputElement) return;
 
     inputElement.style.minHeight = '0px';
-    inputElement.style.minHeight = `${Math.max(144, inputElement.scrollHeight)}px`;
+    inputElement.style.minHeight = `${Math.max(132, inputElement.scrollHeight)}px`;
   }, [inputText]);
 
   useEffect(() => {
@@ -218,42 +241,14 @@ export const ExpressionWorkspace = ({
   );
 
   return (
-    <section className='grid w-full min-w-0 max-w-full grid-cols-1 gap-3 lg:flex-1 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]'>
-      <div className='flex min-h-[360px] min-w-0 max-w-full flex-col border border-slate-200 bg-white shadow-sm sm:min-h-[420px]'>
-        <div className='border-b border-slate-100 px-3 py-3 sm:px-4'>
-          <div className='flex flex-wrap items-center justify-between gap-3'>
-            <div className='min-w-0'>
-              <h2 className='text-sm font-black text-slate-950 sm:text-base'>Mensaje</h2>
-              <p className='mt-0.5 break-words text-[11px] font-bold uppercase tracking-normal text-slate-400'>
-                Origen en {languageLabels[sourceLanguage]}
-              </p>
-            </div>
-            <TranslationActions
-              text={inputText}
-              copied={copiedInput}
-              canListen={canListen}
-              isSpeaking={speakingLanguage === sourceLanguage}
-              canDictate={canDictate}
-              isDictating={dictatingLanguage === sourceLanguage}
-              dictationUnavailableReason={dictationUnavailableReason}
-              onCopy={onCopyInput}
-              onListen={onListenInput}
-              onDictate={onDictateInput}
-            />
-          </div>
+    <section className='mx-auto flex w-full max-w-5xl flex-1 flex-col gap-5 py-2 sm:gap-6 sm:py-5'>
+      <div className='px-1 sm:px-2'>
+        <h2 className='text-3xl font-black leading-tight tracking-normal text-slate-950 sm:text-4xl'>
+          Escribi como te salga.
+        </h2>
+      </div>
 
-          <div className='mt-3 flex flex-col gap-2 rounded-md border border-slate-200 bg-white p-2 shadow-sm sm:flex-row sm:items-center sm:justify-between'>
-            <p className='px-1 text-xs font-semibold leading-5 text-slate-500'>
-              Escribi como te salga. Flowtranslate detecta si tiene que responder,
-              mejorar o traducir.
-            </p>
-            <TranslationPresetControl
-              value={presetId}
-              onChange={onSelectPreset}
-            />
-          </div>
-        </div>
-
+      <div className='overflow-hidden rounded-lg bg-white shadow-[0_18px_70px_rgba(15,23,42,0.08)] ring-1 ring-slate-200/80'>
         <textarea
           ref={inputTextareaRef}
           value={inputText}
@@ -265,20 +260,85 @@ export const ExpressionWorkspace = ({
             }
           }}
           placeholder='Pega un chat de trabajo o escribi la idea que queres responder en ingles...'
-          className='min-h-36 w-full min-w-0 flex-1 resize-none overflow-hidden break-words bg-transparent p-4 text-lg leading-relaxed text-slate-900 outline-none [overflow-wrap:anywhere] placeholder:text-slate-300 sm:p-4 sm:text-xl'
+          className='min-h-[132px] w-full min-w-0 resize-none overflow-hidden break-words bg-transparent px-5 py-5 text-lg leading-relaxed text-slate-950 outline-none [overflow-wrap:anywhere] placeholder:text-slate-300 sm:px-7 sm:py-6 sm:text-xl'
           spellCheck
           aria-label='Mensaje o idea'
         />
 
-        <div className='flex min-h-14 flex-col items-stretch justify-between gap-3 border-t border-slate-100 px-3 py-3 text-sm text-slate-500 sm:flex-row sm:items-center sm:px-4'>
-          <span className='min-w-0 break-words font-semibold'>
-            {statusText || detectionCopy(mode, modeDetection)}
-          </span>
+        <div className='flex min-h-16 flex-col gap-3 border-t border-slate-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6'>
+          <div className='flex min-w-0 flex-wrap items-center gap-2'>
+            {canListen ? (
+              <button
+                type='button'
+                onClick={onListenInput}
+                disabled={!trimmedInputText}
+                className={`inline-flex h-10 w-10 items-center justify-center rounded-md transition-colors ${
+                  trimmedInputText
+                    ? 'text-slate-500 hover:bg-slate-100 hover:text-slate-950'
+                    : 'text-slate-300'
+                }`}
+                aria-label={speakingLanguage === sourceLanguage ? 'Detener audio' : 'Escuchar mensaje'}
+                title={speakingLanguage === sourceLanguage ? 'Detener audio' : 'Escuchar mensaje'}
+              >
+                {speakingLanguage === sourceLanguage ? (
+                  <Square size={16} />
+                ) : (
+                  <Volume2 size={18} />
+                )}
+              </button>
+            ) : null}
+
+            <button
+              type='button'
+              onClick={onDictateInput}
+              disabled={!canDictate}
+              className={`inline-flex h-10 w-10 items-center justify-center rounded-md transition-colors ${
+                canDictate
+                  ? dictatingLanguage
+                    ? 'bg-rose-600 text-white hover:bg-rose-500'
+                    : 'text-slate-500 hover:bg-slate-100 hover:text-slate-950'
+                  : 'text-slate-300'
+              }`}
+              aria-label={
+                canDictate
+                  ? dictatingLanguage
+                    ? 'Detener dictado'
+                    : 'Iniciar dictado'
+                  : 'Dictado por microfono no disponible'
+              }
+              title={canDictate ? 'Dictado por microfono' : dictationUnavailableReason}
+            >
+              {canDictate ? <Mic size={18} /> : <MicOff size={18} />}
+            </button>
+
+            <TranslationPresetControl
+              value={presetId}
+              onChange={onSelectPreset}
+            />
+
+            {trimmedInputText ? (
+              <button
+                type='button'
+                onClick={onTranslateToSpanish}
+                disabled={isTranslating}
+                className={`inline-flex h-10 items-center gap-2 rounded-md px-3 text-sm font-bold transition-colors ${
+                  !isTranslating
+                    ? 'text-slate-500 hover:bg-slate-100 hover:text-slate-950'
+                    : 'text-slate-300'
+                }`}
+                title='Ver en espanol'
+              >
+                <MessageSquareText size={16} />
+                Espanol
+              </button>
+            ) : null}
+          </div>
+
           <button
             type='button'
             onClick={onTranslate}
             disabled={!canTranslate}
-            className={`inline-flex h-10 w-full items-center justify-center gap-2 rounded-md px-3 text-sm font-black transition-colors sm:w-auto ${
+            className={`inline-flex h-11 items-center justify-center gap-2 rounded-md px-4 text-sm font-black transition-colors sm:min-w-32 ${
               canTranslate
                 ? 'bg-slate-950 text-white hover:bg-slate-800'
                 : 'bg-slate-100 text-slate-400'
@@ -286,86 +346,138 @@ export const ExpressionWorkspace = ({
             title={canTranslate ? 'Generar respuesta' : translateDisabledReason}
           >
             {isTranslating ? (
-              <Loader2 size={16} className='animate-spin' />
+              <Loader2 size={17} className='animate-spin' />
             ) : (
-              <Sparkles size={16} />
+              <Send size={17} />
             )}
             {isTranslating ? 'Generando' : 'Responder'}
           </button>
         </div>
       </div>
 
-      <div className='hidden min-h-[320px] min-w-0 max-w-full flex-col border border-slate-200 bg-white shadow-sm sm:min-h-[420px] lg:flex'>
-        <div className='flex flex-col gap-3 border-b border-slate-100 px-3 py-3 sm:flex-row sm:items-start sm:justify-between sm:px-4'>
-          <div className='min-w-0'>
-            <h2 className='text-sm font-black text-slate-950 sm:text-base'>Respuesta</h2>
-            <p className='mt-0.5 text-[11px] font-bold uppercase tracking-normal text-slate-400'>
-              Salida en {languageLabels[targetLanguage]}
-            </p>
-          </div>
-          <div className='flex w-full min-w-0 flex-col gap-2 sm:w-auto sm:items-end'>
-            <div className='flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:justify-end'>
+      <div
+        className={`hidden rounded-lg lg:block ${
+          shouldEmphasizeResponse
+            ? 'bg-white px-5 py-5 shadow-[0_18px_80px_rgba(15,23,42,0.07)] ring-1 ring-slate-200/70 lg:px-8 lg:py-7'
+            : 'px-2 py-1'
+        }`}
+      >
+        {shouldEmphasizeResponse ? (
+          <div className='flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between'>
+            <div className='min-w-0'>
+              <div className={`inline-flex items-center gap-2 text-sm font-black ${tone.text}`}>
+                {isTranslating ? (
+                  <Loader2 size={17} className='animate-spin' />
+                ) : (
+                  <CheckCircle2 size={17} className={tone.dot} />
+                )}
+                {readyText}
+              </div>
+              <p className='mt-1 text-xs font-bold uppercase tracking-normal text-slate-400'>
+                Respuesta en {responseLanguageLabel}
+              </p>
+            </div>
+
+            <div className='flex shrink-0 flex-wrap items-center gap-2'>
+              {canListen ? (
+                <button
+                  type='button'
+                  onClick={onListenResult}
+                  disabled={!hasResult}
+                  className={`inline-flex h-10 items-center gap-2 rounded-md px-3 text-sm font-bold transition-colors ${
+                    hasResult
+                      ? 'text-slate-500 hover:bg-slate-100 hover:text-slate-950'
+                      : 'text-slate-300'
+                  }`}
+                  title={speakingLanguage === targetLanguage ? 'Detener audio' : 'Audio'}
+                  aria-label={speakingLanguage === targetLanguage ? 'Detener audio' : 'Audio'}
+                >
+                  {speakingLanguage === targetLanguage ? (
+                    <Square size={16} />
+                  ) : (
+                    <Volume2 size={17} />
+                  )}
+                  Audio
+                </button>
+              ) : null}
               <button
                 type='button'
                 onClick={onTranslateToSpanish}
                 disabled={!trimmedInputText || isTranslating}
-                className={`inline-flex h-10 items-center gap-2 rounded-md border px-3 text-sm font-bold transition-colors ${
+                className={`inline-flex h-10 items-center gap-2 rounded-md px-3 text-sm font-bold transition-colors ${
                   trimmedInputText && !isTranslating
-                    ? 'border-amber-200 bg-amber-50 text-amber-900 hover:bg-amber-100'
-                    : 'border-slate-100 bg-slate-50 text-slate-300'
+                    ? 'text-slate-500 hover:bg-slate-100 hover:text-slate-950'
+                    : 'text-slate-300'
                 }`}
-                title='Ver el mensaje en espanol'
+                title='Ver en espanol'
               >
                 <MessageSquareText size={16} />
-                Ver en espanol
+                Espanol
               </button>
-              <TranslationActions
-                text={resultText}
-                copied={copiedResult}
-                canListen={canListen}
-                isSpeaking={speakingLanguage === targetLanguage}
-                canDictate={false}
-                showDictate={false}
-                isDictating={false}
-                dictationUnavailableReason={dictationUnavailableReason}
-                onCopy={onCopyResult}
-                onListen={onListenResult}
-                onDictate={() => undefined}
-              />
             </div>
           </div>
-        </div>
+        ) : null}
 
-        <div className='min-h-40 min-w-0 max-w-full flex-1 p-4 lg:min-h-[14rem]'>
+        <div className={shouldEmphasizeResponse ? 'min-h-36 pt-7' : 'pt-1'}>
           {hasResult ? (
-            <p className='max-w-4xl break-words text-xl font-semibold leading-[1.34] text-slate-950 [overflow-wrap:anywhere] sm:text-2xl xl:text-[1.75rem]'>
+            <p className='max-w-4xl break-words text-3xl font-semibold leading-[1.18] tracking-normal text-slate-950 [overflow-wrap:anywhere] xl:text-[2.45rem]'>
               {resultText}
             </p>
-          ) : (
-            <div className='flex h-full min-h-36 items-center rounded-md border border-dashed border-slate-200 bg-slate-50 p-4 text-sm font-semibold leading-6 text-slate-500'>
-              {resultPlaceholder(mode)}
+          ) : isTranslating ? (
+            <div className='inline-flex items-center gap-2 rounded-md bg-slate-50 px-3 py-2 text-sm font-bold text-slate-500'>
+              <Loader2 size={16} className='animate-spin' />
+              Generando una respuesta lista para mandar...
             </div>
+          ) : hasAttentionState ? (
+            <div className={`inline-flex rounded-md px-3 py-2 text-sm font-bold ring-1 ${tone.surface}`}>
+              {readyText}
+            </div>
+          ) : (
+            <p className='max-w-xl text-sm font-bold leading-6 text-slate-400'>
+              {responsePlaceholder(mode)}
+            </p>
           )}
         </div>
 
-        <ExpressionBreakdownDetails
-          key={breakdownKey || 'empty-breakdown'}
-          breakdown={breakdown}
-          emptyDescription={
-            hasResult
-              ? 'Abrilo para preparar un desglose completo.'
-              : undefined
-          }
-          isEnriching={breakdownStatus === 'enriching'}
-          hasEnrichmentError={breakdownStatus === 'error'}
-          open={isBreakdownOpen}
-          onOpenChange={handleBreakdownOpenChange}
-        />
+        {shouldEmphasizeResponse ? (
+          <div className='mt-7 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
+          <button
+            type='button'
+            onClick={onCopyResult}
+            disabled={!hasResult}
+            className='inline-flex h-11 w-full items-center justify-center gap-2 rounded-md bg-emerald-600 px-4 text-sm font-black text-white transition-colors hover:bg-emerald-500 disabled:bg-slate-100 disabled:text-slate-400 sm:w-auto'
+            aria-label={copiedResult ? 'Respuesta copiada' : 'Copiar respuesta'}
+            title='Copiar respuesta'
+          >
+            <Copy size={17} />
+            {copiedResult ? 'Copiado' : 'Copiar'}
+          </button>
+          </div>
+        ) : null}
+
+        {shouldEmphasizeResponse ? (
+          <div className='mt-5 border-t border-slate-100 pt-1'>
+          <ExpressionBreakdownDetails
+            key={breakdownKey || 'empty-breakdown'}
+            breakdown={breakdown}
+            emptyDescription={
+              hasResult
+                ? 'Abrilo para preparar un desglose completo.'
+                : undefined
+            }
+            withTopBorder={false}
+            isEnriching={breakdownStatus === 'enriching'}
+            hasEnrichmentError={breakdownStatus === 'error'}
+            open={isBreakdownOpen}
+            onOpenChange={handleBreakdownOpenChange}
+          />
+          </div>
+        ) : null}
       </div>
 
       {shouldShowMobileResultSheet ? (
         <div
-          className='fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white shadow-lg lg:hidden'
+          className='fixed inset-x-0 bottom-0 z-40 border-t border-slate-200/80 bg-white shadow-[0_-18px_55px_rgba(15,23,42,0.12)] lg:hidden'
           aria-live='polite'
         >
           <div className='mx-auto max-w-3xl px-4 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-3'>
@@ -376,10 +488,15 @@ export const ExpressionWorkspace = ({
               aria-expanded={isMobileResultOpen}
             >
               <span className='min-w-0'>
-                <span className='block text-xs font-black uppercase tracking-normal text-slate-400'>
-                  {isTranslating ? 'Generando' : 'Respuesta lista'}
+                <span className={`flex items-center gap-1.5 text-xs font-black ${tone.text}`}>
+                  {isTranslating ? (
+                    <Loader2 size={14} className='animate-spin' />
+                  ) : (
+                    <CheckCircle2 size={14} />
+                  )}
+                  {isTranslating ? 'Preparando' : hasResult ? 'Listo para mandar' : readyText}
                 </span>
-                <span className='block truncate text-base font-black text-slate-950'>
+                <span className='mt-0.5 block truncate text-base font-black text-slate-950'>
                   {isTranslating
                     ? 'Preparando tu respuesta en ingles...'
                     : trimmedResultText}
@@ -393,7 +510,7 @@ export const ExpressionWorkspace = ({
             </button>
 
             {isMobileResultOpen ? (
-              <div className='max-h-[56dvh] overflow-y-auto pb-2 pt-4'>
+              <div className='max-h-[58dvh] overflow-y-auto pb-2 pt-4'>
                 <div className='flex min-w-0 flex-col gap-4'>
                   {isTranslating ? (
                     <div className='flex min-h-24 items-center justify-center gap-2 rounded-md bg-slate-50 text-sm font-bold text-slate-500'>
@@ -401,18 +518,19 @@ export const ExpressionWorkspace = ({
                       Generando respuesta...
                     </div>
                   ) : (
-                    <p className='max-w-full break-words text-xl font-semibold leading-[1.3] text-slate-950 [overflow-wrap:anywhere]'>
+                    <p className='max-w-full break-words text-xl font-semibold leading-[1.28] text-slate-950 [overflow-wrap:anywhere]'>
                       {resultText}
                     </p>
                   )}
 
-                  <div className='flex min-w-0 items-center gap-2 border-t border-slate-100 pt-3'>
+                  <div className='grid min-w-0 grid-cols-[1fr_auto_auto] items-center gap-2 border-t border-slate-100 pt-3'>
                     <button
                       type='button'
                       onClick={onCopyResult}
                       disabled={!hasResult}
-                      className='inline-flex h-10 flex-1 items-center justify-center rounded-md bg-slate-950 px-3 text-sm font-black text-white transition-colors hover:bg-slate-800 disabled:bg-slate-100 disabled:text-slate-400'
+                      className='inline-flex h-10 items-center justify-center gap-2 rounded-md bg-emerald-600 px-3 text-sm font-black text-white transition-colors hover:bg-emerald-500 disabled:bg-slate-100 disabled:text-slate-400'
                     >
+                      <Copy size={16} />
                       {copiedResult ? 'Copiado' : 'Copiar'}
                     </button>
                     {canListen ? (
@@ -420,13 +538,13 @@ export const ExpressionWorkspace = ({
                         type='button'
                         onClick={onListenResult}
                         disabled={!hasResult}
-                        className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md border transition-colors ${
+                        className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md transition-colors ${
                           hasResult
-                            ? 'border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-950'
-                            : 'border-slate-100 text-slate-300'
+                            ? 'text-slate-500 hover:bg-slate-100 hover:text-slate-950'
+                            : 'text-slate-300'
                         }`}
-                        title={speakingLanguage === targetLanguage ? 'Detener audio' : 'Escuchar texto'}
-                        aria-label={speakingLanguage === targetLanguage ? 'Detener audio' : 'Escuchar texto'}
+                        title={speakingLanguage === targetLanguage ? 'Detener audio' : 'Audio'}
+                        aria-label={speakingLanguage === targetLanguage ? 'Detener audio' : 'Audio'}
                       >
                         {speakingLanguage === targetLanguage ? (
                           <Square size={16} />
@@ -439,10 +557,10 @@ export const ExpressionWorkspace = ({
                       type='button'
                       onClick={onTranslateToSpanish}
                       disabled={!trimmedInputText || isTranslating}
-                      className={`inline-flex h-10 shrink-0 items-center justify-center rounded-md border px-3 text-sm font-black transition-colors ${
+                      className={`inline-flex h-10 shrink-0 items-center justify-center rounded-md px-3 text-sm font-black transition-colors ${
                         trimmedInputText && !isTranslating
-                          ? 'border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-950'
-                          : 'border-slate-100 text-slate-300'
+                          ? 'text-slate-500 hover:bg-slate-100 hover:text-slate-950'
+                          : 'text-slate-300'
                       }`}
                     >
                       ES
@@ -459,7 +577,7 @@ export const ExpressionWorkspace = ({
                   type='button'
                   onClick={onCopyResult}
                   disabled={!hasResult}
-                  className='inline-flex h-9 shrink-0 items-center justify-center rounded-md bg-slate-950 px-3 text-sm font-black text-white transition-colors hover:bg-slate-800 disabled:bg-slate-100 disabled:text-slate-400'
+                  className='inline-flex h-9 shrink-0 items-center justify-center rounded-md bg-emerald-600 px-3 text-sm font-black text-white transition-colors hover:bg-emerald-500 disabled:bg-slate-100 disabled:text-slate-400'
                 >
                   {copiedResult ? 'Copiado' : 'Copiar'}
                 </button>

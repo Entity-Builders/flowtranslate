@@ -268,7 +268,7 @@ describe('account access UI', () => {
       expect(screen.getAllByText('Hi, can you send me the update?').length).toBeGreaterThan(0),
     );
 
-    const resultCopyButton = () => screen.getAllByTitle('Copiar texto')[1];
+    const resultCopyButton = () => screen.getByTitle('Copiar respuesta');
     fireEvent.click(resultCopyButton());
     fireEvent.click(resultCopyButton());
 

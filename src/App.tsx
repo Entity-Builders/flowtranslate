@@ -19,10 +19,9 @@ import {
   WifiOff,
   X,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import './App.css';
 import { ExpressionWorkspace } from './components/ExpressionWorkspace';
-import { LandingHero, type LandingExample } from './components/LandingHero';
 import { STORAGE_KEYS } from './constants';
 import { LearningView } from './components/LearningView';
 import { QuotaStatus } from './components/QuotaStatus';
@@ -617,15 +616,6 @@ function App() {
     }
   };
 
-  const statusTone = useMemo(() => {
-    if (translator.status === 'quota') return 'border-amber-200 bg-amber-50 text-amber-800';
-    if (translator.status === 'error' || translator.status === 'auth') {
-      return 'border-rose-200 bg-rose-50 text-rose-700';
-    }
-    if (translator.status === 'offline') return 'border-slate-200 bg-slate-100 text-slate-700';
-    return 'border-emerald-200 bg-emerald-50 text-emerald-700';
-  }, [translator.status]);
-
   const shouldShowAccountPrompt =
     account.isGuest &&
     !accountPromptDismissed &&
@@ -654,15 +644,6 @@ function App() {
     setShowAccount(true);
   };
 
-  const selectLandingExample = (example: LandingExample) => {
-    translator.editInput(example.text);
-    analytics.track('landing_example_selected', {
-      example_id: example.id,
-      account_kind: account.accountKind,
-      text_length: example.text.length,
-    });
-  };
-
   const accountButtonLabel = account.displayName;
   const accountButtonIcon = account.isGuest ? (
     <UserRound size={17} />
@@ -680,20 +661,13 @@ function App() {
       : translator.message || undefined;
   const dictationUnavailableReason =
     'El dictado por microfono no esta disponible en este navegador.';
-  const shouldShowLandingHero =
-    view === 'translate' &&
-    !translator.inputText.trim() &&
-    !translator.resultText.trim();
   const shouldReserveMobileResultSheet =
     view === 'translate' &&
     (translator.status === 'translating' || Boolean(translator.resultText.trim()));
-  const shouldHideTranslatorMessageOnMobile =
-    shouldReserveMobileResultSheet &&
-    !['error', 'quota', 'auth', 'offline'].includes(translator.status);
 
   return (
     <div className='flex h-[100dvh] min-h-0 flex-col overflow-x-hidden bg-slate-50 text-slate-950'>
-      <header className='flex min-h-16 shrink-0 items-center justify-between gap-2 border-b border-slate-200 bg-white px-3 sm:gap-3 sm:px-4'>
+      <header className='grid min-h-16 shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-b border-slate-200/70 bg-white px-3 sm:gap-3 sm:px-4'>
         <div className='flex min-w-0 items-center gap-3'>
           <div className='flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-slate-950 text-white'>
             <Languages size={19} />
@@ -706,14 +680,14 @@ function App() {
           </div>
         </div>
 
-        <nav className='flex min-w-0 shrink rounded-md bg-slate-100 p-1'>
+        <nav className='flex min-w-0 justify-center gap-5'>
           <button
             type='button'
             onClick={() => setView('translate')}
-            className={`inline-flex h-10 items-center gap-1.5 rounded-md px-2 text-sm font-semibold transition-colors sm:gap-2 sm:px-3 ${
+            className={`inline-flex h-16 items-center gap-1.5 border-b-2 px-0 text-sm font-bold transition-colors sm:gap-2 ${
               view === 'translate'
-                ? 'bg-white text-slate-950 shadow-sm'
-                : 'text-slate-500 hover:text-slate-800'
+                ? 'border-emerald-500 text-slate-950'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
             <Languages size={16} />
@@ -722,10 +696,10 @@ function App() {
           <button
             type='button'
             onClick={() => setView('learning')}
-            className={`inline-flex h-10 items-center gap-1.5 rounded-md px-2 text-sm font-semibold transition-colors sm:gap-2 sm:px-3 ${
+            className={`inline-flex h-16 items-center gap-1.5 border-b-2 px-0 text-sm font-bold transition-colors sm:gap-2 ${
               view === 'learning'
-                ? 'bg-white text-slate-950 shadow-sm'
-                : 'text-slate-500 hover:text-slate-800'
+                ? 'border-emerald-500 text-slate-950'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
             <BookOpen size={16} />
@@ -737,7 +711,7 @@ function App() {
           <button
             type='button'
             onClick={() => setShowAccount(true)}
-            className='inline-flex h-10 w-10 shrink-0 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white text-sm font-semibold text-slate-600 hover:text-slate-950 sm:w-auto sm:max-w-44 sm:px-3'
+            className='inline-flex h-10 w-10 shrink-0 items-center justify-center gap-2 rounded-md text-sm font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-950 sm:w-auto sm:max-w-44 sm:px-3'
             title='Cuenta'
           >
             {accountButtonIcon}
@@ -759,22 +733,6 @@ function App() {
             shouldReserveMobileResultSheet ? 'pb-28 sm:pb-32 lg:pb-4' : ''
           }`}
         >
-          {shouldShowLandingHero ? (
-            <LandingHero
-              onSelectExample={selectLandingExample}
-            />
-          ) : null}
-
-          {translator.message ? (
-            <div
-              className={`w-fit max-w-full rounded-md border px-3 py-1.5 text-sm font-medium shadow-sm ${statusTone} ${
-                shouldHideTranslatorMessageOnMobile ? 'hidden lg:block' : ''
-              }`}
-            >
-              {translator.message}
-            </div>
-          ) : null}
-
           {voiceMessage ? (
             <div className='border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-800'>
               {voiceMessage}

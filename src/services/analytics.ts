@@ -29,6 +29,7 @@ export const COMMERCIAL_ANALYTICS_EVENTS = [
   'account_connect_prompt_shown',
   'account_connect_prompt_clicked',
   'upgrade_intent_clicked',
+  'upgrade_prompt_dismissed',
   'checkout_started',
   'checkout_returned',
   'checkout_failed',

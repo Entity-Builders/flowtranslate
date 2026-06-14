@@ -1,6 +1,7 @@
 export const STORAGE_KEYS = {
   activeView: 'flowtranslate_active_view',
   guestDeviceId: 'flowtranslate_guest_device_id',
+  responderPromiseSeen: 'flowtranslate_responder_promise_seen',
 } as const;
 
 export const FLOWTRANSLATE_GUEST_DEVICE_HEADER =

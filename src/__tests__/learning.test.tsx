@@ -535,6 +535,7 @@ describe('learning UI', () => {
       onSelectPreset: noop,
       onRequestBreakdown: requestBreakdown,
       onTranslateToSpanish: noop,
+      hasSeenResponderPromise: false,
     };
 
     const { rerender } = render(<ExpressionWorkspace {...baseProps} />);
@@ -607,6 +608,7 @@ describe('learning UI', () => {
         onSelectPreset={noop}
         onRequestBreakdown={noop}
         onTranslateToSpanish={noop}
+        hasSeenResponderPromise={false}
       />,
     );
 
@@ -676,6 +678,7 @@ describe('learning UI', () => {
         onSelectPreset={noop}
         onRequestBreakdown={noop}
         onTranslateToSpanish={noop}
+        hasSeenResponderPromise={false}
       />,
     );
 
@@ -723,6 +726,7 @@ describe('learning UI', () => {
         onSelectPreset={noop}
         onRequestBreakdown={noop}
         onTranslateToSpanish={noop}
+        hasSeenResponderPromise={false}
       />,
     );
 
@@ -799,6 +803,7 @@ describe('learning UI', () => {
       onSelectPreset: noop,
       onRequestBreakdown: requestBreakdown,
       onTranslateToSpanish: noop,
+      hasSeenResponderPromise: false,
     };
 
     const { rerender } = render(<ExpressionWorkspace {...baseProps} />);

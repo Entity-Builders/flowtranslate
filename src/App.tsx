@@ -84,6 +84,9 @@ const readInitialView = (): AppView => {
   return saved === 'learning' ? 'learning' : 'translate';
 };
 
+const readResponderPromiseSeen = () =>
+  localStorage.getItem(STORAGE_KEYS.responderPromiseSeen) === 'true';
+
 const appendRecognizedText = (currentText: string, transcript: string) => {
   const trimmedTranscript = transcript.trim();
   if (!trimmedTranscript) return currentText;
@@ -207,6 +210,9 @@ function App() {
     signInAsGuest,
   } = account;
   const [view, setView] = useState<AppView>(readInitialView);
+  const [hasSeenResponderPromise, setHasSeenResponderPromise] = useState(
+    readResponderPromiseSeen,
+  );
   const [showAccount, setShowAccount] = useState(false);
   const [online, setOnline] = useState(isOnline);
   const [checkoutReturn, setCheckoutReturn] = useState(() =>
@@ -244,6 +250,9 @@ function App() {
   const [voiceMessage, setVoiceMessage] = useState('');
   const [resultCopyCount, setResultCopyCount] = useState(0);
   const [accountPromptDismissed, setAccountPromptDismissed] = useState(false);
+  const [dismissedUpgradePrompts, setDismissedUpgradePrompts] = useState<
+    ProUpgradeSurface[]
+  >([]);
   const [profileContextDraft, setProfileContextDraft] = useState('');
   const [profileContextSaving, setProfileContextSaving] = useState(false);
   const [profileContextMessage, setProfileContextMessage] = useState('');
@@ -293,6 +302,11 @@ function App() {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.activeView, view);
   }, [view]);
+
+  const markResponderPromiseSeen = useCallback(() => {
+    setHasSeenResponderPromise(true);
+    localStorage.setItem(STORAGE_KEYS.responderPromiseSeen, 'true');
+  }, []);
 
   useEffect(() => {
     if (
@@ -406,6 +420,34 @@ function App() {
     onSavedTranslation: handleSavedTranslation,
     onRefreshSavedTranslations: loadHistory,
   });
+
+  const shouldSuppressResponderPromise =
+    hasSeenResponderPromise ||
+    account.accountKind === 'permanent' ||
+    account.billingState.hasProAccess;
+
+  useEffect(() => {
+    if (hasSeenResponderPromise) return;
+    if (account.accountKind !== 'permanent' && !account.billingState.hasProAccess) {
+      return;
+    }
+
+    markResponderPromiseSeen();
+  }, [
+    account.accountKind,
+    account.billingState.hasProAccess,
+    hasSeenResponderPromise,
+    markResponderPromiseSeen,
+  ]);
+
+  useEffect(() => {
+    if (hasSeenResponderPromise || !translator.resultText.trim()) return;
+    markResponderPromiseSeen();
+  }, [
+    hasSeenResponderPromise,
+    markResponderPromiseSeen,
+    translator.resultText,
+  ]);
 
   useEffect(() => {
     if (trackedViewRef.current === view) return;
@@ -1086,9 +1128,14 @@ function App() {
     Boolean(usagePressure) &&
     translator.status !== 'quota' &&
     !account.billingState.hasProAccess &&
-    !account.billingState.shouldWaitForProvider;
+    !account.billingState.shouldWaitForProvider &&
+    !dismissedUpgradePrompts.includes('usage_limit');
   const shouldShowSavedHistoryUpgradePrompt =
-    shouldShowAccountPrompt && !account.billingState.hasProAccess;
+    account.accountKind === 'permanent' &&
+    resultCopyCount >= ACCOUNT_PROMPT_COPY_THRESHOLD &&
+    !account.billingState.hasProAccess &&
+    !account.billingState.shouldWaitForProvider &&
+    !dismissedUpgradePrompts.includes('saved_history');
   const shouldShowLearningUpgradePrompt =
     view === 'learning' &&
     !account.billingState.hasProAccess &&
@@ -1127,6 +1174,13 @@ function App() {
     (surface: ProUpgradeSurface) => billingAnalyticsProperties({ surface }),
     [billingAnalyticsProperties],
   );
+
+  const dismissUpgradePrompt = useCallback((surface: ProUpgradeSurface) => {
+    setDismissedUpgradePrompts((current) =>
+      current.includes(surface) ? current : [...current, surface],
+    );
+    analytics.track('upgrade_prompt_dismissed', { surface });
+  }, []);
 
   useEffect(() => {
     if (!shouldShowAccountPrompt) return;
@@ -1422,57 +1476,6 @@ function App() {
             </div>
           ) : null}
 
-          {shouldShowAccountPrompt ? (
-            <div className='flex flex-col gap-3 rounded-md border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 shadow-sm sm:flex-row sm:items-center sm:justify-between'>
-              <div className='min-w-0'>
-                <p className='font-bold text-slate-950'>
-                  Guarda tus respuestas y aprende con tus mensajes reales.
-                </p>
-                <p className='mt-1 leading-5 text-slate-600'>
-                  Conecta una cuenta para conservar historial, reutilizar buenas
-                  respuestas y desbloquear Learning personal.
-                </p>
-              </div>
-              <div className='flex shrink-0 items-center gap-2'>
-                <button
-                  type='button'
-                  onClick={() => openAccountFromPrompt('save_history')}
-                  className='inline-flex h-10 items-center justify-center rounded-md bg-slate-950 px-3 text-sm font-bold text-white hover:bg-slate-800'
-                >
-                  Guardar historial
-                </button>
-                <button
-                  type='button'
-                  onClick={() => setAccountPromptDismissed(true)}
-                  className='inline-flex h-10 w-10 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-800'
-                  title='Ocultar'
-                >
-                  <X size={16} />
-                </button>
-              </div>
-            </div>
-          ) : null}
-
-          {shouldShowSavedHistoryUpgradePrompt ? (
-            <ProUpgradePrompt
-              surface='saved_history'
-              accountKind={account.accountKind}
-              onStartCheckout={(surface) => void startProCheckout(surface)}
-              onConnectAccount={connectAccountForPro}
-              {...upgradePromptState('saved_history')}
-            />
-          ) : null}
-
-          {shouldShowUsageUpgradePrompt ? (
-            <ProUpgradePrompt
-              surface='usage_limit'
-              accountKind={account.accountKind}
-              onStartCheckout={(surface) => void startProCheckout(surface)}
-              onConnectAccount={connectAccountForPro}
-              {...upgradePromptState('usage_limit')}
-            />
-          ) : null}
-
           <ExpressionWorkspace
             inputText={translator.inputText}
             resultText={translator.resultText}
@@ -1510,6 +1513,7 @@ function App() {
                       : 'Pasar a Pro'
             }
             quotaUpgradeBusy={checkoutStartingSurface === 'usage_limit'}
+            hasSeenResponderPromise={shouldSuppressResponderPromise}
             onInputChange={(value) => translator.editInput(value)}
             onCopyInput={() =>
               void copyExpression(
@@ -1558,6 +1562,62 @@ function App() {
             }}
             onQuotaSupport={openQuotaSupport}
           />
+
+          {shouldShowAccountPrompt ? (
+            <div className='flex flex-col gap-3 rounded-md border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 shadow-sm sm:flex-row sm:items-center sm:justify-between'>
+              <div className='min-w-0'>
+                <p className='font-bold text-slate-950'>
+                  Guarda tus respuestas y aprende con tus mensajes reales.
+                </p>
+                <p className='mt-1 leading-5 text-slate-600'>
+                  Conecta una cuenta gratis para conservar historial, reutilizar
+                  buenas respuestas y desbloquear Learning personal.
+                </p>
+              </div>
+              <div className='flex shrink-0 items-center gap-2'>
+                <button
+                  type='button'
+                  onClick={() => openAccountFromPrompt('save_history')}
+                  className='inline-flex h-10 items-center justify-center rounded-md bg-slate-950 px-3 text-sm font-bold text-white hover:bg-slate-800'
+                >
+                  Guardar historial
+                </button>
+                <button
+                  type='button'
+                  onClick={() => setAccountPromptDismissed(true)}
+                  className='inline-flex h-10 w-10 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-800'
+                  title='Ocultar'
+                  aria-label='Ocultar invitacion a cuenta'
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          {shouldShowSavedHistoryUpgradePrompt ? (
+            <ProUpgradePrompt
+              surface='saved_history'
+              accountKind={account.accountKind}
+              compact={shouldReserveMobileResultSheet}
+              onDismiss={() => dismissUpgradePrompt('saved_history')}
+              onStartCheckout={(surface) => void startProCheckout(surface)}
+              onConnectAccount={connectAccountForPro}
+              {...upgradePromptState('saved_history')}
+            />
+          ) : null}
+
+          {shouldShowUsageUpgradePrompt ? (
+            <ProUpgradePrompt
+              surface='usage_limit'
+              accountKind={account.accountKind}
+              compact={shouldReserveMobileResultSheet}
+              onDismiss={() => dismissUpgradePrompt('usage_limit')}
+              onStartCheckout={(surface) => void startProCheckout(surface)}
+              onConnectAccount={connectAccountForPro}
+              {...upgradePromptState('usage_limit')}
+            />
+          ) : null}
           <p className='max-w-[calc(100vw-2rem)] break-words text-xs text-slate-500 sm:max-w-full'>
             Los servicios de voz del navegador pueden procesar audio durante el
             dictado; Flowtranslate guarda solo el texto que envias y tu historial.

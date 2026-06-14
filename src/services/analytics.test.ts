@@ -37,6 +37,7 @@ describe('Flowtranslate analytics', () => {
         'conversation_reply_copied',
         'account_connect_prompt_shown',
         'upgrade_intent_clicked',
+        'upgrade_prompt_dismissed',
         'checkout_started',
         'checkout_returned',
         'checkout_failed',

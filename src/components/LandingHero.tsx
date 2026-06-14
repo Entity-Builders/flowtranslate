@@ -10,7 +10,7 @@ const LANDING_EXAMPLES: LandingExample[] = [
   {
     id: 'client-delay',
     label: 'Responder a un cliente',
-    text: 'Decile a un cliente que el reporte se demora hasta manana, pero que ya estamos revisando los datos y le vamos a mandar una version clara apenas este lista.',
+    text: 'El reporte se demora hasta manana, pero ya estamos revisando los datos y te vamos a mandar una version clara apenas este lista.',
   },
   {
     id: 'slack-update',
@@ -20,12 +20,12 @@ const LANDING_EXAMPLES: LandingExample[] = [
   {
     id: 'linkedin-dm',
     label: 'Contestar LinkedIn',
-    text: 'Decile a esta persona que gracias por escribir, que me interesa la propuesta, y que podemos coordinar una llamada corta la semana que viene.',
+    text: 'Gracias por escribirme. Me interesa la propuesta y podemos coordinar una llamada corta la semana que viene.',
   },
   {
     id: 'direct-but-kind',
     label: 'Sonar directo y amable',
-    text: 'Necesito decirle que no puedo tomar este trabajo ahora sin sonar cortante, pero dejando la puerta abierta para el mes que viene.',
+    text: 'Ahora no puedo tomar este trabajo, pero me gustaria dejar la puerta abierta para el mes que viene.',
   },
 ];
 

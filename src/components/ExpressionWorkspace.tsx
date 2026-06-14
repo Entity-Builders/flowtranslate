@@ -65,6 +65,7 @@ type ExpressionWorkspaceProps = {
   quotaUsage?: UsageSnapshot | null;
   quotaUpgradeLabel?: string;
   quotaUpgradeBusy?: boolean;
+  hasSeenResponderPromise: boolean;
   onInputChange: (value: string) => void;
   onCopyInput: () => void;
   onCopyResult: () => void;
@@ -94,19 +95,19 @@ const responsePlaceholder = (mode: ExpressionMode) => {
 
 const zeroStateSuggestions = [
   {
-    label: 'Pedir un update',
+    label: 'Responder Slack',
     prompt:
-      'Decile que queria saber si hay novedades y que quedo atento a cualquier update.',
+      'Hola equipo, queria saber si hay novedades. Quedo atento a cualquier update.',
   },
   {
-    label: 'Avisar una demora',
+    label: 'Avisar demora a cliente',
     prompt:
-      'Decile que el reporte se demora hasta manana, pero que ya estamos revisando los datos.',
+      'El reporte se demora hasta manana. Ya estamos revisando los datos y te mando una version clara apenas este lista.',
   },
   {
-    label: 'Coordinar llamada',
+    label: 'Contestar LinkedIn',
     prompt:
-      'Decile que podemos coordinar una llamada corta la semana que viene para revisar el tema.',
+      'Gracias por escribirme. Me interesa la propuesta y podemos coordinar una llamada corta la semana que viene.',
   },
 ] satisfies SuggestionChip[];
 
@@ -260,6 +261,7 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
     quotaUsage,
     quotaUpgradeLabel,
     quotaUpgradeBusy = false,
+    hasSeenResponderPromise,
     onInputChange,
     onCopyResult,
     onListenInput,
@@ -292,6 +294,12 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
     status === 'offline';
   const shouldShowMobileResultSheet = isTranslating || hasResult || hasAttentionState;
   const shouldEmphasizeResponse = hasResult || isTranslating || hasAttentionState;
+  const shouldShowLaunchPromise =
+    !hasSeenResponderPromise &&
+    !trimmedInputText &&
+    !hasResult &&
+    !isTranslating &&
+    !hasAttentionState;
   const tone = statusTone(status);
   const isSpanishTranslationMode = mode === 'translate_to_spanish';
   const canOfferTranslateToSpanish =
@@ -410,11 +418,21 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
 
   return (
     <section className='mx-auto flex w-full max-w-5xl flex-1 flex-col gap-5 py-2 sm:gap-6 sm:py-5'>
-      <div className='px-1 sm:px-2'>
-        <h2 className='text-3xl font-black leading-tight tracking-normal text-slate-950 sm:text-4xl'>
-          Escribi como te salga.
-        </h2>
-      </div>
+      {shouldShowLaunchPromise ? (
+        <div className='px-1 sm:px-2'>
+          <h2 className='text-3xl font-black leading-tight tracking-normal text-slate-950 sm:text-4xl'>
+            Tu respuesta en ingles para trabajo, lista para mandar.
+          </h2>
+          <p className='mt-2 max-w-3xl text-sm font-semibold leading-6 text-slate-600 sm:text-base'>
+            Pega un Slack, DM, email o mensaje para cliente. Pensalo en espanol;
+            mandalo en ingles natural.
+          </p>
+          <p className='mt-2 max-w-2xl text-xs font-bold leading-5 text-slate-500 sm:text-sm'>
+            Probalo sin cuenta. Conecta despues para guardar historial y
+            desbloquear Learning personal.
+          </p>
+        </div>
+      ) : null}
 
       <div className='overflow-hidden rounded-lg bg-white shadow-[0_18px_70px_rgba(15,23,42,0.08)] ring-1 ring-slate-200/80'>
         <textarea

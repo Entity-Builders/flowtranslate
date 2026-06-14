@@ -117,6 +117,7 @@ describe('quota and account UI', () => {
         onTranslateToSpanish={vi.fn()}
         onQuotaUpgrade={onQuotaUpgrade}
         onQuotaSupport={onQuotaSupport}
+        hasSeenResponderPromise={false}
       />,
     );
 

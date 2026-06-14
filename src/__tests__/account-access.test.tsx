@@ -398,7 +398,7 @@ describe('account access UI', () => {
     );
   });
 
-  it('gates contextual Pro checkout behind a permanent account for guests', async () => {
+  it('keeps paid Pro pressure out of the early guest history prompt', async () => {
     signInAnonymously.mockResolvedValueOnce({
       data: { session: guestSession },
       error: null,
@@ -421,18 +421,23 @@ describe('account access UI', () => {
     fireEvent.click(resultCopyButton());
     fireEvent.click(resultCopyButton());
 
+    expect(await screen.findByText(/Conecta una cuenta gratis/i)).toBeInTheDocument();
     expect(
-      await screen.findByText(/FlowTranslate Pro desbloquea mas uso/i),
-    ).toBeInTheDocument();
+      screen.queryByText(/ARS 4\.999\/mes/i),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/FlowTranslate Pro/i),
+    ).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /conectar cuenta/i }));
+    fireEvent.click(screen.getByRole('button', { name: /guardar historial/i }));
 
     expect(startFlowtranslateProCheckout).not.toHaveBeenCalled();
     expect(await screen.findByRole('heading', { name: 'Cuenta' })).toBeInTheDocument();
     expect(analyticsTrack).toHaveBeenCalledWith(
-      'upgrade_intent_clicked',
+      'account_connect_prompt_clicked',
       expect.objectContaining({
-        surface: 'saved_history',
+        surface: 'translate_soft_banner',
+        reason: 'save_history',
         account_kind: 'guest',
       }),
     );
@@ -537,6 +542,44 @@ describe('account access UI', () => {
     expect(serializedCalls).not.toContain('subscription-secret');
     expect(serializedCalls).not.toContain('source_text');
     expect(serializedCalls).not.toContain('generated_text');
+  });
+
+  it('does not show first-run responder branding to active Pro accounts', async () => {
+    getSession.mockResolvedValue({ data: { session: permanentSession } });
+    profileMaybeSingle.mockResolvedValue({
+      data: {
+        user_id: 'permanent-user',
+        email: 'juan@example.com',
+        global_context: '',
+        current_streak: 0,
+        last_study_date: null,
+      },
+      error: null,
+    });
+    entitlementMaybeSingle.mockResolvedValue({
+      data: {
+        status: 'active',
+        account_kind: 'pro',
+        source: 'mercado_pago',
+        plan: 'pro',
+        subscription_id: 'subscription-secret',
+        active_from: '2026-06-01T00:00:00.000Z',
+        active_until: null,
+        last_verified_at: '2026-06-13T12:00:00.000Z',
+      },
+      error: null,
+    });
+
+    render(<App />);
+
+    expect(await screen.findByText('Pro')).toBeInTheDocument();
+    expect(screen.getByLabelText('Mensaje o idea')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', {
+        name: /tu respuesta en ingles para trabajo, lista para mandar/i,
+      }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/probalo sin cuenta/i)).not.toBeInTheDocument();
   });
 
   it('shows pending Pro entitlement state with a checkout retry path', async () => {

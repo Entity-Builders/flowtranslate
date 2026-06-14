@@ -1,7 +1,10 @@
+import { createSupabaseAuthStorageKey } from '@eb-packages/auth';
 import { createClient, type Session } from '@supabase/supabase-js';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL?.trim() || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY?.trim() || '';
+export const flowtranslateAuthStorageKey =
+  createSupabaseAuthStorageKey('flowtranslate');
 
 export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
 
@@ -13,6 +16,7 @@ export const supabase = isSupabaseConfigured
       auth: {
         autoRefreshToken: true,
         persistSession: true,
+        storageKey: flowtranslateAuthStorageKey,
       },
     })
   : null;

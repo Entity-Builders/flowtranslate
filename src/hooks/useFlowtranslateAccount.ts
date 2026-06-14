@@ -39,6 +39,7 @@ export const useFlowtranslateAccount = () => {
     isConfigured: isSupabaseConfigured,
     analytics,
     messages: FLOWTRANSLATE_AUTH_MESSAGES,
+    redirectTo: () => window.location.origin,
   });
   const { signInWithOAuth } = account;
   const sessionUser = account.session?.user;

@@ -10,6 +10,7 @@ export type ProUpgradeSurface =
 type ProUpgradePromptProps = {
   surface: ProUpgradeSurface;
   accountKind: FlowtranslateAccountKind;
+  actionLabel?: string;
   busy?: boolean;
   error?: string;
   compact?: boolean;
@@ -47,6 +48,7 @@ const surfaceCopy: Record<
 export const ProUpgradePrompt = ({
   surface,
   accountKind,
+  actionLabel,
   busy = false,
   error = '',
   compact = false,
@@ -56,7 +58,8 @@ export const ProUpgradePrompt = ({
 }: ProUpgradePromptProps) => {
   const copy = surfaceCopy[surface];
   const needsAccount = accountKind !== 'permanent';
-  const actionLabel = needsAccount ? 'Conectar cuenta' : 'Pasar a Pro';
+  const resolvedActionLabel =
+    actionLabel ?? (needsAccount ? 'Conectar cuenta' : 'Pasar a Pro');
 
   return (
     <section
@@ -91,7 +94,7 @@ export const ProUpgradePrompt = ({
           disabled={busy}
           className='inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-md bg-slate-950 px-3 text-sm font-bold text-white hover:bg-slate-800 disabled:bg-slate-300'
         >
-          {actionLabel}
+          {resolvedActionLabel}
           <ArrowRight size={15} />
         </button>
       </div>

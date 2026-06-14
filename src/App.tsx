@@ -1628,6 +1628,12 @@ function App() {
             <ProUpgradePrompt
               surface='profile_preferences'
               accountKind={account.accountKind}
+              actionLabel={
+                account.billingState.canRetryCheckout &&
+                  account.billingState.id !== 'free'
+                  ? 'Reintentar checkout'
+                  : undefined
+              }
               compact
               onStartCheckout={(surface) => void startProCheckout(surface)}
               onConnectAccount={connectAccountForPro}

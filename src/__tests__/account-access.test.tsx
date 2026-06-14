@@ -564,7 +564,9 @@ describe('account access UI', () => {
     expect(
       screen.getByText(/si abandonaste el checkout, podes reintentarlo/i),
     ).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /pasar a pro/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /reintentar checkout/i }),
+    ).toBeInTheDocument();
   });
 
   it('shows safe checkout return success without granting Pro from URL params', async () => {

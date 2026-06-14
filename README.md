@@ -113,6 +113,8 @@ MERCADO_PAGO_APPLICATION_ID=<provider-app-id>
 MERCADO_PAGO_WEBHOOK_URL_TOKEN=<optional-story-1.8-fallback>
 ENTITY_BUILDERS_BILLING_WEBHOOK_URL=https://xfcvuzcxvdpzkqpnahyx.supabase.co/functions/v1/entitybuilders-billing-webhook?source_news=webhooks&provider=mercado_pago
 FLOWTRANSLATE_PRO_MERCADO_PAGO_INTERNAL_PLAN_ID=flowtranslate_pro_monthly_ar
+FLOWTRANSLATE_PRO_MERCADO_PAGO_TEST_ACCOUNT_MODE=false
+FLOWTRANSLATE_PRO_MERCADO_PAGO_TEST_PAYER_EMAIL=<optional-test-buyer-email>
 FLOWTRANSLATE_PRO_PRICE_AMOUNT=4999
 FLOWTRANSLATE_PRO_PRICE_CURRENCY=ARS
 FLOWTRANSLATE_PRO_CHECKOUT_RETURN_URL=https://flowtranslate.app/pro/checkout/return
@@ -126,6 +128,38 @@ server-side billing webhook; FlowTranslate routes through provider lookup and
 Builders app can add its own plan without reintegrating the provider from
 scratch. v1 does not expose `VITE_MERCADO_PAGO_*` because checkout will be
 created server-side and redirected through Mercado Pago's hosted `init_point`.
+
+For end-to-end Mercado Pago testing against the local Supabase stack, expose
+the local functions server through a public HTTPS tunnel and put that tunnel in
+`ENTITY_BUILDERS_BILLING_WEBHOOK_URL`, including
+`?source_news=webhooks&provider=mercado_pago`. Mercado Pago cannot deliver
+provider webhooks to `127.0.0.1` or `localhost` from its servers.
+
+Mercado Pago also validates the checkout `back_url`. For local subscription
+tests, set `FLOWTRANSLATE_PRO_CHECKOUT_RETURN_URL` to a public HTTPS route such
+as `https://flowtranslate.app/pro/checkout/return`, or expose the local Vite app
+through a second HTTPS tunnel and use that tunnel's `/pro/checkout/return` URL.
+When using one Tailscale Funnel host for both services, route `/functions/v1`
+to `http://127.0.0.1:54321/functions/v1` and `/` to
+`http://127.0.0.1:5173`; otherwise `/pro/checkout/return` will hit the
+Supabase gateway and return `no Route matched with those values`.
+
+Configure Webhooks in the Mercado Pago app for the seller test account as well
+as passing the webhook URL from the server payload. In local tests Mercado Pago
+may still show `notification_url: null` on the subscription resource, so the
+dashboard Webhooks configuration is the source of truth for automatic delivery.
+
+For hosted subscription checkout tests, Mercado Pago requires two test
+accounts: a seller and a buyer. Log in as the seller test account, create an app
+there, and use that seller test account's production `APP_USR-*` credentials in
+`.env.source.local`; `TEST-*` credentials from a real account can create a
+pending preapproval that fails on the hosted checkout with "una de las partes es
+de prueba". Then set `FLOWTRANSLATE_PRO_MERCADO_PAGO_TEST_ACCOUNT_MODE=true`
+and `FLOWTRANSLATE_PRO_MERCADO_PAGO_TEST_PAYER_EMAIL` to the separate buyer
+test account email. Mercado Pago may show the buyer as `TESTUSER123...`, but
+the email expected by `/preapproval` is usually `test_user_123...@testuser.com`.
+Run `yarn env:sync:local`, restart the local functions server, and complete
+checkout in an incognito browser signed in as the buyer test account.
 
 ## Data And Runtime
 

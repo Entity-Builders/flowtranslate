@@ -86,9 +86,28 @@ yarn env:sync:local --dry-run
 ```
 
 For local development, the source should be `.env.source.local`, created from
-`.env.source.local.template`. Use Mercado Pago test credentials there. For
-production, use `.env.source.production`; do not mix production provider tokens
-into the local source file.
+`.env.source.local.template`. For hosted Mercado Pago subscription checkout
+tests, use production `APP_USR-*` credentials from a Mercado Pago seller test
+account, not `TEST-*` credentials from a real account. For production, use
+`.env.source.production`; do not mix live provider tokens into the local source
+file.
+
+For real local subscription tests, `ENTITY_BUILDERS_BILLING_WEBHOOK_URL` must
+be a public HTTPS tunnel that forwards to the local Supabase functions server.
+`FLOWTRANSLATE_PRO_CHECKOUT_RETURN_URL` must also be public HTTPS because
+Mercado Pago validates the subscription `back_url` before creating the
+preapproval. Use production return URL for backend entitlement testing, or a
+second tunnel to the local Vite app for full local return-screen testing.
+If both URLs use a single Tailscale Funnel host, configure path routing so `/`
+proxies to the Vite dev server and `/functions/v1` proxies to Supabase
+Functions. A return page that shows `{"message":"no Route matched with those
+values"}` is reaching Supabase, not FlowTranslate.
+
+Mercado Pago Webhooks should also be configured in the seller test account's
+Developer Panel application for the local tunnel URL and subscription/payment
+events. Do not assume that the subscription resource will echo
+`notification_url`; local preapproval tests can return `notification_url: null`
+even when the server sent a webhook URL in the create request.
 
 Expected server-side keys for local Edge Functions:
 
@@ -99,10 +118,25 @@ MERCADO_PAGO_WEBHOOK_SECRET=<redacted>
 MERCADO_PAGO_APPLICATION_ID=<redacted>
 ENTITY_BUILDERS_BILLING_WEBHOOK_URL=<redacted-shared-webhook-url>
 FLOWTRANSLATE_PRO_MERCADO_PAGO_INTERNAL_PLAN_ID=flowtranslate_pro_monthly_ar
+FLOWTRANSLATE_PRO_MERCADO_PAGO_TEST_ACCOUNT_MODE=<true-for-seller-test-account>
+FLOWTRANSLATE_PRO_MERCADO_PAGO_TEST_PAYER_EMAIL=<optional-test-buyer-email>
 FLOWTRANSLATE_PRO_PRICE_AMOUNT=4999
 FLOWTRANSLATE_PRO_PRICE_CURRENCY=ARS
 FLOWTRANSLATE_PRO_CHECKOUT_RETURN_URL=https://flowtranslate.app/pro/checkout/return
 ```
+
+If Mercado Pago shows "Una de las partes con la que intentas hacer el pago es
+de prueba", verify the full test-account chain: create separate seller and
+buyer test accounts in Mercado Pago, log in as the seller test account to create
+an app, use that seller test account's production `APP_USR-*` credentials in
+the local Edge Function env, set
+`FLOWTRANSLATE_PRO_MERCADO_PAGO_TEST_ACCOUNT_MODE=true`, set
+`FLOWTRANSLATE_PRO_MERCADO_PAGO_TEST_PAYER_EMAIL` to the buyer test account
+email, then run `yarn env:sync:local` and restart `supabase functions serve`.
+If Mercado Pago shows the buyer nickname as `TESTUSER123...`, use the email
+shape `test_user_123...@testuser.com` unless `/users/me` for that test account
+shows a different email. Open checkout in an incognito browser signed in as the
+buyer test account, not a real account and not the seller account.
 
 Do not paste real tokens, webhook secrets, payment payloads, card data, source
 text, generated text, or user emails into issue notes, analytics, screenshots,

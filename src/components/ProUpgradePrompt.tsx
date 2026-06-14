@@ -25,24 +25,24 @@ const surfaceCopy: Record<
   { title: string; reason: string }
 > = {
   usage_limit: {
-    title: 'Mas respuestas de trabajo este mes',
+    title: 'Mas respuestas este mes',
     reason:
-      'FlowTranslate Pro te da mas margen para seguir respondiendo clientes, equipo y oportunidades sin esperar el proximo reinicio.',
+      'Segui respondiendo clientes, equipo y oportunidades sin esperar el reinicio.',
   },
   saved_history: {
-    title: 'Tu ingles de trabajo mejora con continuidad',
+    title: 'Historial y Learning con continuidad',
     reason:
-      'FlowTranslate Pro suma mas respuestas, historial reutilizable y Learning personalizado desde tus mensajes reales.',
+      'Mas respuestas, historial reutilizable y practica desde tus mensajes reales.',
   },
   learning: {
     title: 'Learning con continuidad',
     reason:
-      'FlowTranslate Pro suma mas practica personalizada, progreso y frases guardadas desde tus mensajes reales.',
+      'Mas practica personalizada, progreso y frases guardadas.',
   },
   profile_preferences: {
-    title: 'Preferencias reutilizables en cada respuesta',
+    title: 'Pro: mas margen y contexto',
     reason:
-      'FlowTranslate Pro conserva preferencias para que tus respuestas mantengan mejor contexto y tono de trabajo.',
+      'Usa tu perfil profesional y amplia tus respuestas mensuales.',
   },
 };
 
@@ -62,10 +62,13 @@ export const ProUpgradePrompt = ({
   const needsAccount = accountKind !== 'permanent';
   const resolvedActionLabel =
     actionLabel ?? (needsAccount ? 'Conectar cuenta' : 'Pasar a Pro');
+  const priceCopy = 'ARS 4.999/mes. Cancela cuando quieras.';
 
   return (
     <section
-      className={`rounded-md border border-emerald-200 bg-emerald-50 text-sm text-emerald-950 shadow-sm ${className}`}
+      className={`rounded-md border border-emerald-200 bg-emerald-50 text-sm text-emerald-950 ${
+        compact ? '' : 'shadow-sm'
+      } ${className}`}
     >
       <div
         className={`flex flex-col gap-3 ${
@@ -90,11 +93,14 @@ export const ProUpgradePrompt = ({
               </button>
             ) : null}
           </div>
-          <p className='mt-1 leading-5 text-emerald-900'>{copy.reason}</p>
-          <p className='mt-1 text-xs font-semibold leading-5 text-emerald-800'>
-            ARS 4.999/mes. Cancela cuando quieras. Pro se activa cuando Mercado
-            Pago confirma el pago.
+          <p className='mt-1 leading-5 text-emerald-900'>
+            {compact ? priceCopy : copy.reason}
           </p>
+          {!compact ? (
+            <p className='mt-1 text-xs font-semibold leading-5 text-emerald-800'>
+              {priceCopy}
+            </p>
+          ) : null}
           {error ? (
             <p className='mt-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800'>
               {error}

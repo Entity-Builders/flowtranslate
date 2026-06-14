@@ -42,27 +42,26 @@ const billingNoticeCopy: Record<
   guest: {
     label: 'Prueba gratis',
     body:
-      'Responde ahora sin friccion. Conecta una cuenta para conservar historial y Learning personal.',
+      'Responde ahora. Conecta una cuenta para conservar historial y Learning.',
     toneClass: 'border-slate-200 bg-slate-50 text-slate-700',
     Icon: UserRound,
   },
   free: {
     label: 'Cuenta gratis',
-    body: 'Tu cuenta gratis de FlowTranslate esta conectada.',
+    body: 'Cuenta conectada.',
     toneClass: 'border-slate-200 bg-slate-50 text-slate-700',
     Icon: ShieldCheck,
   },
   pro_pending: {
     label: 'Pro pendiente',
     body:
-      'Estamos esperando la confirmacion segura de Mercado Pago. Si abandonaste el checkout, podes reintentarlo desde esta cuenta.',
+      'Esperando confirmacion segura de Mercado Pago. Podes reintentar checkout.',
     toneClass: 'border-amber-200 bg-amber-50 text-amber-800',
     Icon: Clock3,
   },
   pro_active: {
     label: 'FlowTranslate Pro',
-    body:
-      'Tu Pro esta activo. Tenes mas margen de IA para respuestas, Learning e historial.',
+    body: 'Pro activo para mas respuestas, Learning e historial.',
     toneClass: 'border-emerald-200 bg-emerald-50 text-emerald-800',
     Icon: CheckCircle2,
   },
@@ -76,7 +75,7 @@ const billingNoticeCopy: Record<
   pro_cancelled: {
     label: 'Pro cancelado',
     body:
-      'Tu Pro no esta activo. Podes reactivar checkout o pedir revision si Mercado Pago ya confirmo el cobro.',
+      'Pro no esta activo. Reactiva checkout si queres seguir.',
     toneClass: 'border-slate-200 bg-white text-slate-700',
     Icon: XCircle,
   },
@@ -116,21 +115,24 @@ export const AccountAccessModal = ({
 }: AccountAccessModalProps) => {
   const accountSummary = account.session ? (
     <div className='space-y-3'>
-      <div className='space-y-2'>
-        <div className='flex items-center gap-2 text-xs font-bold uppercase text-slate-400'>
+      <div className='flex items-center justify-between gap-3'>
+        <div className='flex min-w-0 items-center gap-2 text-xs font-bold uppercase text-slate-400'>
           {account.isGuest ? <UserRound size={14} /> : <ShieldCheck size={14} />}
-          {billingNoticeCopy[account.billingState.id].label}
+          <span className='truncate'>
+            {billingNoticeCopy[account.billingState.id].label}
+          </span>
         </div>
         {account.currentStreak > 0 && (
-          <div className='flex items-center gap-1.5 text-sm font-semibold text-orange-600'>
+          <div className='flex shrink-0 items-center gap-1.5 text-sm font-semibold text-orange-600'>
             <Flame size={16} />
             {account.currentStreak} dias seguidos
           </div>
         )}
       </div>
-      <BillingNotice account={account} />
+      {account.billingState.id !== 'free' ? <BillingNotice account={account} /> : null}
       <QuotaStatus
         usage={usage}
+        compact
         accountKind={account.accountKind}
         billingState={account.billingState}
       />
@@ -139,8 +141,6 @@ export const AccountAccessModal = ({
 
   const permanentContent = !account.isGuest ? (
     <>
-      {account.billingState.canRetryCheckout ? profileUpgradePrompt : null}
-
       <div className='space-y-3 border-t border-slate-100 pt-5'>
         <div className='space-y-1'>
           <div className='flex items-center gap-2 text-sm font-black text-slate-900'>
@@ -148,9 +148,7 @@ export const AccountAccessModal = ({
             Perfil profesional
           </div>
           <p className='text-xs leading-5 text-slate-500'>
-            Contale a Flowtranslate quien sos, con quien hablas o en que
-            contexto trabajas. Se usa como contexto permanente para ajustar
-            vocabulario y tono.
+            Contexto fijo para ajustar vocabulario y tono.
           </p>
         </div>
         <label className='block'>
@@ -185,6 +183,10 @@ export const AccountAccessModal = ({
           </button>
         </div>
       </div>
+
+      {account.billingState.canRetryCheckout ? (
+        <div className='pt-3'>{profileUpgradePrompt}</div>
+      ) : null}
     </>
   ) : null;
 

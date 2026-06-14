@@ -505,7 +505,7 @@ describe('account access UI', () => {
     fireEvent.click(screen.getByTitle('Perfil'));
 
     expect(
-      (await screen.findAllByText(/preferencias reutilizables/i)).length,
+      (await screen.findAllByText(/pro: mas margen y contexto/i)).length,
     ).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole('button', { name: /pasar a pro/i }));
@@ -562,7 +562,7 @@ describe('account access UI', () => {
     fireEvent.click(screen.getByTitle('FlowTranslate Pro'));
 
     expect((await screen.findAllByText('FlowTranslate Pro')).length).toBeGreaterThan(0);
-    expect(screen.getByText(/tu pro esta activo/i)).toBeInTheDocument();
+    expect(screen.getByText(/pro activo para mas respuestas/i)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /pasar a pro/i })).not.toBeInTheDocument();
 
     await waitFor(() =>
@@ -648,7 +648,7 @@ describe('account access UI', () => {
 
     expect((await screen.findAllByText('Pro pendiente')).length).toBeGreaterThan(0);
     expect(
-      screen.getByText(/si abandonaste el checkout, podes reintentarlo/i),
+      screen.getByText(/podes reintentar checkout/i),
     ).toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: /reintentar checkout/i }),

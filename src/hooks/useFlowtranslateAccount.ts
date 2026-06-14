@@ -3,8 +3,7 @@ import {
   type EntityBuildersAccountKind,
   type SupabaseAuthAccessClient,
 } from '@eb-packages/auth';
-import { useCallback, useEffect, useState } from 'react';
-import type { Provider } from '@supabase/supabase-js';
+import { useEffect, useState } from 'react';
 import {
   mapAccountKindToBillingState,
   resolveFlowtranslateBillingState,
@@ -16,6 +15,7 @@ import {
   isSupabaseConfigured,
   supabase,
 } from '../lib/supabase';
+import { flowtranslateAuthConfig } from '../lib/auth-config';
 import { analytics } from '../services/analytics';
 
 export type FlowtranslateAccountKind = EntityBuildersAccountKind;
@@ -37,11 +37,10 @@ export const useFlowtranslateAccount = () => {
   const account = useSupabaseAccountAccess({
     client: supabase as unknown as SupabaseAuthAccessClient | null,
     isConfigured: isSupabaseConfigured,
+    authConfig: flowtranslateAuthConfig,
     analytics,
     messages: FLOWTRANSLATE_AUTH_MESSAGES,
-    redirectTo: () => window.location.origin,
   });
-  const { signInWithOAuth } = account;
   const sessionUser = account.session?.user;
   const [profile, setProfile] = useState<Profile | null>(null);
   const [billingState, setBillingState] = useState<FlowtranslateBillingState>(
@@ -129,11 +128,6 @@ export const useFlowtranslateAccount = () => {
     };
   }, [account.accountKind, sessionUser]);
 
-  const signInWithGoogle = useCallback(
-    async () => signInWithOAuth('google' as Provider),
-    [signInWithOAuth],
-  );
-
   const updateGlobalContext = async (context: string) => {
     if (!account.session?.user || !supabase) {
       return false;
@@ -180,6 +174,6 @@ export const useFlowtranslateAccount = () => {
     currentStreak: profile?.current_streak || 0,
     globalContext: profile?.global_context || '',
     updateGlobalContext,
-    signInWithGoogle,
+    authEntryConfig: flowtranslateAuthConfig,
   };
 };

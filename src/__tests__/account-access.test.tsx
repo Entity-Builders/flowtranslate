@@ -163,10 +163,15 @@ describe('account access UI', () => {
 
     await waitFor(() => expect(signInAnonymously).toHaveBeenCalledTimes(1));
     expect(screen.queryByRole('heading', { name: 'Cuenta' })).not.toBeInTheDocument();
-    expect(analyticsTrack).toHaveBeenCalledWith('auth_guest_submitted', {
-      method: 'anonymous',
-      source: 'automatic',
-    });
+    expect(analyticsTrack).toHaveBeenCalledWith(
+      'auth_guest_submitted',
+      expect.objectContaining({
+        method: 'anonymous',
+        source: 'automatic',
+        app: 'flowtranslate',
+        app_id: 'flowtranslate',
+      }),
+    );
   });
 
   it('uses a returned anonymous session as the initial guest trial', async () => {
@@ -205,6 +210,7 @@ describe('account access UI', () => {
       email: 'juan@example.com',
       options: {
         emailRedirectTo: window.location.origin,
+        data: { app_name: 'flowtranslate' },
       },
     }));
     expect(await screen.findByLabelText(/codigo/i)).toBeInTheDocument();
@@ -229,10 +235,15 @@ describe('account access UI', () => {
     fireEvent.click(screen.getByRole('button', { name: /iniciar prueba gratis/i }));
 
     await waitFor(() => expect(signInAnonymously).toHaveBeenCalledTimes(2));
-    expect(analyticsTrack).toHaveBeenCalledWith('auth_guest_submitted', {
-      method: 'anonymous',
-      source: 'manual',
-    });
+    expect(analyticsTrack).toHaveBeenCalledWith(
+      'auth_guest_submitted',
+      expect.objectContaining({
+        method: 'anonymous',
+        source: 'manual',
+        app: 'flowtranslate',
+        app_id: 'flowtranslate',
+      }),
+    );
   });
 
   it('links Google OAuth from a guest session without signing out first', async () => {
@@ -282,6 +293,7 @@ describe('account access UI', () => {
       email: 'juan@example.com',
       options: {
         emailRedirectTo: window.location.origin,
+        data: { app_name: 'flowtranslate' },
       },
     }));
   });
@@ -337,6 +349,37 @@ describe('account access UI', () => {
       }),
     );
     expect(await screen.findByText(/perfil guardado/i)).toBeInTheDocument();
+  });
+
+  it('signs out from the shared account modal for permanent users', async () => {
+    getSession.mockResolvedValue({ data: { session: permanentSession } });
+    profileMaybeSingle.mockResolvedValue({
+      data: {
+        user_id: 'permanent-user',
+        email: 'juan@example.com',
+        global_context: '',
+        current_streak: 0,
+        last_study_date: null,
+      },
+      error: null,
+    });
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByTitle('Perfil'));
+    fireEvent.click(
+      await screen.findByRole('button', { name: /cerrar sesion/i }),
+    );
+
+    await waitFor(() => expect(signOut).toHaveBeenCalledTimes(1));
+    expect(analyticsTrack).toHaveBeenCalledWith(
+      'auth_signed_out',
+      expect.objectContaining({
+        account_kind: 'permanent',
+        app: 'flowtranslate',
+        app_id: 'flowtranslate',
+      }),
+    );
   });
 
   it('cleans up an existing Google identity link error on return', async () => {

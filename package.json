@@ -23,7 +23,9 @@
   },
   "dependencies": {
     "@eb-packages/analytics": "1.0.0",
+    "@eb-packages/app-registry": "workspace:*",
     "@eb-packages/auth": "workspace:*",
+    "@eb-packages/auth-ui-web": "workspace:*",
     "@eb-packages/billing-core": "workspace:*",
     "@eb-packages/flowtranslate-core": "workspace:*",
     "@supabase/supabase-js": "^2.97.0",

@@ -39,11 +39,11 @@ const billingStateCopy: Record<
   { label: string; detail: string }
 > = {
   guest: {
-    label: 'Prueba gratis',
+    label: 'Modo invitado',
     detail: 'Conecta una cuenta para guardar historial y preparar Pro.',
   },
   free: {
-    label: 'Cuenta gratis',
+    label: 'Plan basico',
     detail: 'Podes pasar a Pro cuando necesites mas margen mensual.',
   },
   pro_pending: {

@@ -95,7 +95,7 @@ const appendRecognizedText = (currentText: string, transcript: string) => {
 };
 
 const guestLearningMessage =
-  'Conecta una cuenta gratis para desbloquear Learning personal y conservar tu progreso.';
+  'Conecta una cuenta para desbloquear Learning personal y conservar tu progreso.';
 const ACCOUNT_PROMPT_COPY_THRESHOLD = 2;
 const FLOWTRANSLATE_PRO_ANALYTICS = {
   provider: 'mercado_pago',
@@ -904,7 +904,7 @@ function App() {
       ) {
         setShowAccount(true);
         setLearningAttemptError(
-          'Conecta una cuenta gratis para recibir feedback personalizado y guardar intentos.',
+          'Conecta una cuenta para recibir feedback personalizado y guardar intentos.',
         );
         analytics.track('account_connect_prompt_shown', {
           surface: 'learning_rewrite',
@@ -1570,8 +1570,8 @@ function App() {
                   Guarda tus respuestas y aprende con tus mensajes reales.
                 </p>
                 <p className='mt-1 leading-5 text-slate-600'>
-                  Conecta una cuenta gratis para conservar historial, reutilizar
-                  buenas respuestas y desbloquear Learning personal.
+                  Conecta una cuenta para conservar historial, reutilizar buenas
+                  respuestas y desbloquear Learning personal.
                 </p>
               </div>
               <div className='flex shrink-0 items-center gap-2'>

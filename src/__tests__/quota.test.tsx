@@ -31,7 +31,7 @@ describe('quota and account UI', () => {
     );
 
     expect(screen.getByText('Te queda poco')).toBeInTheDocument();
-    expect(screen.getByText(/Prueba gratis/i)).toBeInTheDocument();
+    expect(screen.getByText(/Modo invitado/i)).toBeInTheDocument();
     expect(
       screen.getByText(/Detalle tecnico: quedan 250 de 2,000 creditos mensuales de IA/i),
     ).toBeInTheDocument();
@@ -66,7 +66,7 @@ describe('quota and account UI', () => {
     expect(screen.getByText(/pro activo para mas respuestas/i)).toBeInTheDocument();
   });
 
-  it('offers Pro and coffee support when quota is exhausted', () => {
+  it('offers Pro and Cafecito support when quota is exhausted', () => {
     const onQuotaUpgrade = vi.fn();
     const onQuotaSupport = vi.fn();
 
@@ -121,11 +121,11 @@ describe('quota and account UI', () => {
       />,
     );
 
-    expect(screen.getByText('Prueba gratis completa')).toBeInTheDocument();
+    expect(screen.getByText('Limite de prueba alcanzado')).toBeInTheDocument();
     expect(screen.getByText('Segui respondiendo hoy')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /pasar a pro/i }));
-    fireEvent.click(screen.getByRole('button', { name: /invitar un cafe/i }));
+    fireEvent.click(screen.getByRole('button', { name: /invitar un cafecito/i }));
 
     expect(onQuotaUpgrade).toHaveBeenCalledTimes(1);
     expect(onQuotaSupport).toHaveBeenCalledTimes(1);

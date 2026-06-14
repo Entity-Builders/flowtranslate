@@ -40,22 +40,22 @@ const billingNoticeCopy: Record<
   }
 > = {
   guest: {
-    label: 'Prueba gratis',
+    label: 'Guarda tu progreso',
     body:
-      'Responde ahora. Conecta una cuenta para conservar historial y Learning.',
+      'Conecta una cuenta para conservar historial y Learning.',
     toneClass: 'border-slate-200 bg-slate-50 text-slate-700',
     Icon: UserRound,
   },
   free: {
-    label: 'Cuenta gratis',
-    body: 'Cuenta conectada.',
+    label: 'Plan basico',
+    body: 'Tu historial y Learning quedan guardados en esta cuenta.',
     toneClass: 'border-slate-200 bg-slate-50 text-slate-700',
     Icon: ShieldCheck,
   },
   pro_pending: {
-    label: 'Pro pendiente',
+    label: 'Pro en proceso',
     body:
-      'Esperando confirmacion segura de Mercado Pago. Podes reintentar checkout.',
+      'Estamos confirmando tu acceso Pro. Podes reintentar checkout.',
     toneClass: 'border-amber-200 bg-amber-50 text-amber-800',
     Icon: Clock3,
   },
@@ -115,20 +115,24 @@ export const AccountAccessModal = ({
 }: AccountAccessModalProps) => {
   const accountSummary = account.session ? (
     <div className='space-y-3'>
-      <div className='flex items-center justify-between gap-3'>
-        <div className='flex min-w-0 items-center gap-2 text-xs font-bold uppercase text-slate-400'>
-          {account.isGuest ? <UserRound size={14} /> : <ShieldCheck size={14} />}
-          <span className='truncate'>
-            {billingNoticeCopy[account.billingState.id].label}
-          </span>
-        </div>
-        {account.currentStreak > 0 && (
+      {!account.isGuest || account.currentStreak > 0 ? (
+        <div className='flex items-center justify-between gap-3'>
+          {!account.isGuest ? (
+            <div className='flex min-w-0 items-center gap-2 text-xs font-bold uppercase text-slate-400'>
+              <ShieldCheck size={14} />
+              <span className='truncate'>
+                {billingNoticeCopy[account.billingState.id].label}
+              </span>
+            </div>
+          ) : null}
+          {account.currentStreak > 0 && (
           <div className='flex shrink-0 items-center gap-1.5 text-sm font-semibold text-orange-600'>
             <Flame size={16} />
             {account.currentStreak} dias seguidos
           </div>
-        )}
-      </div>
+          )}
+        </div>
+      ) : null}
       {account.billingState.id !== 'free' ? <BillingNotice account={account} /> : null}
       <QuotaStatus
         usage={usage}

@@ -572,7 +572,7 @@ export const useBidirectionalTranslator = ({
       if (!accessToken) {
         if (authPending) {
           setStatus('typing');
-          setMessage('Preparando tu prueba gratis...');
+          setMessage('Preparando modo invitado...');
           setHasPendingChanges(true);
           return;
         }
@@ -889,7 +889,7 @@ export const useBidirectionalTranslator = ({
       if (!accessToken) {
         if (authPending) {
           setStatus('typing');
-          setMessage('Preparando tu prueba gratis...');
+          setMessage('Preparando modo invitado...');
           return;
         }
 
@@ -1113,7 +1113,7 @@ export const useBidirectionalTranslator = ({
     if (!accessToken) {
       if (authPending) {
         setStatus('typing');
-        setMessage('Preparando tu prueba gratis...');
+        setMessage('Preparando modo invitado...');
         setHasPendingChanges(true);
         return;
       }
@@ -1322,7 +1322,7 @@ export const useBidirectionalTranslator = ({
       ? 'Estas offline. La IA necesita conexion.'
       : !accessToken
         ? authPending
-          ? 'Preparando tu prueba gratis...'
+          ? 'Preparando modo invitado...'
           : 'Conecta tu cuenta para guardar progreso y seguir.'
         : status === 'translating'
           ? 'Generacion en curso.'

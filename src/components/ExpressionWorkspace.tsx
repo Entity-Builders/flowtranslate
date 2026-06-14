@@ -159,7 +159,7 @@ const QuotaExhaustedState = ({
             </div>
             <div className='min-w-0'>
               <p className='text-xs font-black uppercase tracking-normal text-amber-700'>
-                Prueba gratis completa
+                Limite de prueba alcanzado
               </p>
               <h3 className='mt-1 text-2xl font-black leading-tight text-slate-950'>
                 Segui respondiendo hoy
@@ -168,12 +168,12 @@ const QuotaExhaustedState = ({
           </div>
           <p className='max-w-2xl text-sm font-semibold leading-6 text-amber-900 sm:text-base'>
             Llegaste al limite mensual de IA para esta prueba. Tu texto sigue
-            aca; podes pasar a Pro para continuar ahora o apoyar con un cafe si
-            Flowtranslate te salvo una respuesta.
+            aca; podes pasar a Pro para continuar ahora o apoyar el proyecto con
+            un cafecito si FlowTranslate te salvo una respuesta.
           </p>
           {resetLabel ? (
             <p className='mt-3 text-xs font-bold text-amber-800'>
-              La cuota gratis se renueva el {resetLabel}.
+              Tu cuota se renueva el {resetLabel}.
             </p>
           ) : null}
         </div>
@@ -196,7 +196,7 @@ const QuotaExhaustedState = ({
             className='inline-flex h-10 items-center justify-center gap-2 rounded-md border border-amber-300 bg-white px-4 text-sm font-black text-amber-900 transition-colors hover:bg-amber-100 disabled:text-amber-300'
           >
             <Coffee size={16} />
-            Invitar un cafe
+            Invitar un cafecito
           </button>
         </div>
       </div>

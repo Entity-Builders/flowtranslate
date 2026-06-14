@@ -182,7 +182,7 @@ describe('account access UI', () => {
 
     render(<App />);
 
-    expect(await screen.findByText('Prueba gratis')).toBeInTheDocument();
+    expect(await screen.findByText('Invitado')).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Cuenta' })).not.toBeInTheDocument();
   });
 
@@ -196,7 +196,7 @@ describe('account access UI', () => {
       await screen.findByRole('button', { name: /continuar con google/i }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole('button', { name: /iniciar prueba gratis/i }),
+      screen.getByRole('button', { name: /probar sin cuenta/i }),
     ).toBeInTheDocument();
     expect(screen.getByLabelText(/email/i)).toBeInTheDocument();
     expect(screen.queryByLabelText(/codigo/i)).not.toBeInTheDocument();
@@ -232,7 +232,7 @@ describe('account access UI', () => {
       },
     }));
 
-    fireEvent.click(screen.getByRole('button', { name: /iniciar prueba gratis/i }));
+    fireEvent.click(screen.getByRole('button', { name: /probar sin cuenta/i }));
 
     await waitFor(() => expect(signInAnonymously).toHaveBeenCalledTimes(2));
     expect(analyticsTrack).toHaveBeenCalledWith(
@@ -415,7 +415,7 @@ describe('account access UI', () => {
 
     render(<App />);
 
-    await screen.findByText('Prueba gratis');
+    await screen.findByText('Invitado');
     expect(screen.queryByText(/Guarda tus respuestas/i)).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText('Mensaje o idea'), {
@@ -449,7 +449,7 @@ describe('account access UI', () => {
 
     render(<App />);
 
-    await screen.findByText('Prueba gratis');
+    await screen.findByText('Invitado');
 
     fireEvent.change(screen.getByLabelText('Mensaje o idea'), {
       target: { value: 'me pasas el update?' },
@@ -464,7 +464,7 @@ describe('account access UI', () => {
     fireEvent.click(resultCopyButton());
     fireEvent.click(resultCopyButton());
 
-    expect(await screen.findByText(/Conecta una cuenta gratis/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Conecta una cuenta/i)).toBeInTheDocument();
     expect(
       screen.queryByText(/ARS 4\.999\/mes/i),
     ).not.toBeInTheDocument();
@@ -646,7 +646,7 @@ describe('account access UI', () => {
     expect(await screen.findByText('Perfil')).toBeInTheDocument();
     fireEvent.click(screen.getByTitle('Perfil'));
 
-    expect((await screen.findAllByText('Pro pendiente')).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText('Pro en proceso')).length).toBeGreaterThan(0);
     expect(
       screen.getByText(/podes reintentar checkout/i),
     ).toBeInTheDocument();

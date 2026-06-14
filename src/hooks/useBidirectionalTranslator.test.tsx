@@ -804,8 +804,8 @@ describe('useBidirectionalTranslator', () => {
     act(() => result.current.editInput('hola como estas'));
 
     expect(result.current.status).toBe('typing');
-    expect(result.current.message).toBe('Preparando tu prueba gratis...');
-    expect(result.current.translateDisabledReason).toBe('Preparando tu prueba gratis...');
+    expect(result.current.message).toBe('Preparando modo invitado...');
+    expect(result.current.translateDisabledReason).toBe('Preparando modo invitado...');
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(TRANSLATION_IDLE_DELAY_MS);

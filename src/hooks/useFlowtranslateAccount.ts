@@ -26,11 +26,11 @@ const FLOWTRANSLATE_AUTH_MESSAGES = {
   missingCredentials: 'Ingresa el email y el codigo.',
   codeSent: 'Revisa tu email e ingresa el codigo aca.',
   connected: 'Cuenta conectada.',
-  guestReady: 'Tu prueba gratis esta lista.',
+  guestReady: 'Modo invitado listo.',
   oauthStarted: 'Continua con Google para terminar el inicio de sesion.',
   oauthFailed: 'No pudimos terminar el inicio con Google. Proba de nuevo.',
   oauthLinkedIdentityError:
-    'Ese Google ya esta conectado a otra cuenta. Tu prueba gratis sigue activa; usa codigo por email o entra con otra cuenta.',
+    'Ese Google ya esta conectado a otra cuenta. Tu sesion temporal sigue activa; usa codigo por email o entra con otra cuenta.',
 };
 
 export const useFlowtranslateAccount = () => {
@@ -169,7 +169,7 @@ export const useFlowtranslateAccount = () => {
     billingStateLoading,
     displayName:
       account.accountKind === 'guest'
-        ? 'Prueba gratis'
+        ? 'Invitado'
         : account.session?.user.email || 'Cuenta',
     currentStreak: profile?.current_streak || 0,
     globalContext: profile?.global_context || '',

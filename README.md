@@ -72,6 +72,12 @@ To test OTP locally:
 The account UI should keep the anonymous guest trial usable if Google OAuth is
 missing or a provider link attempt fails.
 
+If you need Google OAuth locally, fill
+`SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET` in `.env.source.local` before starting
+infra, then restart Supabase. The Google client ID is public and lives in
+`eb-infra/supabase/config.toml`; local Supabase does not expand `env(...)` for
+`auth.external.google.client_id`.
+
 Function environment lives in `eb-infra/supabase/functions/.env`:
 
 ```bash
@@ -224,3 +230,10 @@ the shared `eb-core` project. Preview the server-side upload with:
 
 Remove `--dry-run` only when `.env.source.production` contains the intended
 production server-side values.
+
+Google OAuth provider values named `SUPABASE_AUTH_EXTERNAL_GOOGLE_*` are not
+Edge Function secrets. Configure them in Supabase Auth Providers for the
+`eb-core` project, or patch
+`/v1/projects/xfcvuzcxvdpzkqpnahyx/config/auth` with
+`external_google_enabled`, `external_google_client_id`, and
+`external_google_secret`. `sync-secrets.sh` intentionally skips those keys.

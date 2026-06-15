@@ -104,6 +104,16 @@ export type BreakdownEnrichmentResponse = {
   usage: FlowtranslateUsage;
 };
 
+export type GuestAccountSyncResponse = {
+  kind: 'guest_account_sync';
+  guestUserId: string;
+  targetUserId: string;
+  translationRecordsMoved: number;
+  duplicateTranslationRecordsArchived: number;
+  usageEventsMoved: number;
+  guestIdentitiesMoved: number;
+};
+
 export type FlowtranslateProCheckoutResponse = {
   checkoutUrl: string;
   subscriptionId: string;
@@ -156,6 +166,10 @@ type FlowtranslateRequest =
   | {
       kind: 'breakdown_enrichment';
       translationRecordId: string;
+    }
+  | {
+      kind: 'sync_guest_account';
+      guestUserId: string;
     };
 
 type FlowtranslateResponse =
@@ -167,10 +181,12 @@ type FlowtranslateResponse =
   | LearningAttemptFeedbackResponse
   | BreakdownChatResponse
   | BreakdownEnrichmentResponse
-  | {
-      error: string;
-      usage?: FlowtranslateUsage;
-    };
+  | GuestAccountSyncResponse;
+
+type FlowtranslateErrorResponse = {
+  error: string;
+  usage?: FlowtranslateUsage;
+};
 
 export class FlowtranslateApiError extends Error {
   status: number;
@@ -206,12 +222,19 @@ const requestFlowtranslate = async <TResponse extends FlowtranslateResponse>(
     body: JSON.stringify(payload),
   });
 
-  const data = (await response.json().catch(() => null)) as TResponse | null;
+  const data = (await response.json().catch(() => null)) as
+    | FlowtranslateErrorResponse
+    | TResponse
+    | null;
 
   if (!response.ok) {
     const message =
       data && 'error' in data ? data.error : 'Flowtranslate request failed.';
-    throw new FlowtranslateApiError(message, response.status, data?.usage);
+    throw new FlowtranslateApiError(
+      message,
+      response.status,
+      data && 'error' in data ? data.usage : undefined,
+    );
   }
 
   if (!data || 'error' in data) {
@@ -339,6 +362,18 @@ export const enrichBreakdown = (
     {
       kind: 'breakdown_enrichment',
       translationRecordId: params.translationRecordId,
+    },
+    accessToken,
+  );
+
+export const syncGuestAccount = (
+  params: { guestUserId: string },
+  accessToken: string,
+) =>
+  requestFlowtranslate<GuestAccountSyncResponse>(
+    {
+      kind: 'sync_guest_account',
+      guestUserId: params.guestUserId,
     },
     accessToken,
   );

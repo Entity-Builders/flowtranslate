@@ -6,6 +6,7 @@ import type { UsageSnapshot } from '@eb-packages/flowtranslate-core';
 import {
   CheckCircle2,
   Clock3,
+  Link2,
   Flame,
   Save,
   ShieldCheck,
@@ -194,6 +195,29 @@ export const AccountAccessModal = ({
     </>
   ) : null;
 
+  const guestContent = account.canSyncExistingGoogleAccount ? (
+    <div className='space-y-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900'>
+      <div className='flex items-start gap-2'>
+        <Link2 size={17} className='mt-0.5 shrink-0' />
+        <div className='min-w-0'>
+          <div className='font-black'>Ese Google ya tiene cuenta</div>
+          <p className='mt-1 leading-5'>
+            Podes entrar con esa cuenta y traer tu historial temporal de esta sesion.
+          </p>
+        </div>
+      </div>
+      <button
+        type='button'
+        onClick={() => void account.syncExistingGoogleAccount()}
+        disabled={account.busy || account.guestSyncLoading}
+        className='inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-slate-950 px-3 text-sm font-bold text-white hover:bg-slate-800 disabled:bg-slate-300'
+      >
+        <Link2 size={16} />
+        {account.guestSyncLoading ? 'Sincronizando' : 'Entrar y sincronizar'}
+      </button>
+    </div>
+  ) : null;
+
   return (
     <SharedAccountAccessModal
       config={account.authEntryConfig}
@@ -201,6 +225,7 @@ export const AccountAccessModal = ({
       onClose={onClose}
       slots={{
         accountSummary,
+        guestContent,
         permanentContent,
       }}
     />

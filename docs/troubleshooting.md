@@ -61,6 +61,11 @@ Use the latest auth email to copy the six-digit code back into the account
 surface. If Google OAuth fails locally, the current guest trial should remain
 usable and the email code path should still be available.
 
+If Google shows `invalid_client` locally, verify local Supabase is not sending
+the literal `env(SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID)` as its client ID.
+The client ID must be literal in `eb-infra/supabase/config.toml`; the provider
+secret belongs in `.env.source.local` before `yarn infra:start`.
+
 The Edge Function environment requires:
 
 ```bash
@@ -179,3 +184,8 @@ values:
 `eb-infra/.env.local` is legacy compatibility for older scripts. It is not the
 source for `supabase functions serve` and should not be treated as the canonical
 production secret source.
+
+`SUPABASE_AUTH_EXTERNAL_GOOGLE_*` values are Supabase Auth provider config, not
+Edge Function secrets. `sync-secrets.sh` skips them; configure production
+Google OAuth in the Supabase Auth Providers screen or through the Management
+API auth config endpoint.

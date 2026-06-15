@@ -17,6 +17,8 @@ import {
 } from '../lib/supabase';
 import { flowtranslateAuthConfig } from '../lib/auth-config';
 import { analytics } from '../services/analytics';
+import { syncGuestAccount } from '../services/flowtranslate-api';
+import { STORAGE_KEYS } from '../constants';
 
 export type FlowtranslateAccountKind = EntityBuildersAccountKind;
 
@@ -33,6 +35,30 @@ const FLOWTRANSLATE_AUTH_MESSAGES = {
     'Ese Google ya esta conectado a otra cuenta. Tu sesion temporal sigue activa; usa codigo por email o entra con otra cuenta.',
 };
 
+const readPendingGuestSyncUserId = () => {
+  try {
+    return localStorage.getItem(STORAGE_KEYS.pendingGuestSyncUserId) || '';
+  } catch {
+    return '';
+  }
+};
+
+const writePendingGuestSyncUserId = (guestUserId: string) => {
+  try {
+    localStorage.setItem(STORAGE_KEYS.pendingGuestSyncUserId, guestUserId);
+  } catch {
+    // A blocked storage write should not erase the current guest session.
+  }
+};
+
+const clearPendingGuestSyncUserId = () => {
+  try {
+    localStorage.removeItem(STORAGE_KEYS.pendingGuestSyncUserId);
+  } catch {
+    // Ignore storage cleanup failures; the sync effect is guarded in-memory.
+  }
+};
+
 export const useFlowtranslateAccount = () => {
   const account = useSupabaseAccountAccess({
     client: supabase as unknown as SupabaseAuthAccessClient | null,
@@ -47,6 +73,20 @@ export const useFlowtranslateAccount = () => {
     () => mapAccountKindToBillingState('none'),
   );
   const [billingStateLoading, setBillingStateLoading] = useState(false);
+  const [guestSyncLoading, setGuestSyncLoading] = useState(false);
+  const [guestSyncMessage, setGuestSyncMessage] = useState('');
+  const [guestSyncError, setGuestSyncError] = useState('');
+  const [guestSyncAttemptedFor, setGuestSyncAttemptedFor] = useState('');
+
+  useEffect(() => {
+    if (account.accountKind === 'permanent') return;
+
+    setGuestSyncMessage('');
+    setGuestSyncError('');
+    if (account.accountKind === 'guest') {
+      setGuestSyncAttemptedFor('');
+    }
+  }, [account.accountKind]);
 
   useEffect(() => {
     if (!supabase) return;
@@ -139,6 +179,72 @@ export const useFlowtranslateAccount = () => {
     };
   }, [account.accountKind, sessionUser]);
 
+  useEffect(() => {
+    if (
+      !account.accessToken ||
+      account.accountKind !== 'permanent' ||
+      !sessionUser?.id
+    ) {
+      return;
+    }
+
+    const guestUserId = readPendingGuestSyncUserId();
+    if (
+      !guestUserId ||
+      guestUserId === sessionUser.id ||
+      guestSyncAttemptedFor === guestUserId
+    ) {
+      if (guestUserId === sessionUser.id) clearPendingGuestSyncUserId();
+      return;
+    }
+
+    setGuestSyncAttemptedFor(guestUserId);
+    setGuestSyncLoading(true);
+    setGuestSyncMessage('');
+    setGuestSyncError('');
+
+    void syncGuestAccount({ guestUserId }, account.accessToken)
+      .then((result) => {
+        clearPendingGuestSyncUserId();
+        const movedCount =
+          result.translationRecordsMoved + result.usageEventsMoved;
+        setGuestSyncMessage(
+          movedCount > 0
+            ? 'Historial temporal sincronizado con esta cuenta.'
+            : 'No habia historial temporal nuevo para sincronizar.',
+        );
+        analytics.track('auth_guest_sync_succeeded', {
+          account_kind: 'permanent',
+          moved_translation_records: result.translationRecordsMoved,
+          archived_duplicate_records:
+            result.duplicateTranslationRecordsArchived,
+          moved_usage_events: result.usageEventsMoved,
+          moved_guest_identities: result.guestIdentitiesMoved,
+        });
+      })
+      .catch((error) => {
+        clearPendingGuestSyncUserId();
+        analytics.captureError(error, {
+          screen: 'account',
+          action: 'sync_guest_account',
+          account_kind: 'permanent',
+        });
+        analytics.track('auth_guest_sync_failed', {
+          account_kind: 'permanent',
+          error_type: error instanceof Error ? error.name : 'sync_error',
+        });
+        setGuestSyncError(
+          'Entraste con Google, pero no pudimos sincronizar el historial temporal.',
+        );
+      })
+      .finally(() => setGuestSyncLoading(false));
+  }, [
+    account.accessToken,
+    account.accountKind,
+    guestSyncAttemptedFor,
+    sessionUser?.id,
+  ]);
+
   const updateGlobalContext = async (context: string) => {
     if (!account.session?.user || !supabase) {
       return false;
@@ -179,6 +285,28 @@ export const useFlowtranslateAccount = () => {
     return true;
   };
 
+  const syncExistingGoogleAccount = async () => {
+    const guestUserId = account.session?.user?.id;
+    if (!guestUserId || account.accountKind !== 'guest') return false;
+
+    writePendingGuestSyncUserId(guestUserId);
+    setGuestSyncAttemptedFor('');
+    setGuestSyncMessage('');
+    setGuestSyncError('');
+    analytics.track('auth_guest_sync_requested', {
+      provider: 'google',
+      account_kind: account.accountKind,
+    });
+    await account.signInWithOAuth('google', { forceSignIn: true });
+    return true;
+  };
+
+  const canSyncExistingGoogleAccount = Boolean(
+    account.isGuest &&
+      account.oauthRecovery?.reason === 'identity_already_exists' &&
+      account.oauthRecovery.provider === 'google',
+  );
+
   return {
     ...account,
     profile,
@@ -188,9 +316,14 @@ export const useFlowtranslateAccount = () => {
       account.accountKind === 'guest'
         ? 'Invitado'
         : account.session?.user.email || 'Cuenta',
+    message: guestSyncMessage || account.message,
+    error: guestSyncError || account.error,
     currentStreak: profile?.current_streak || 0,
     globalContext: profile?.global_context || '',
     updateGlobalContext,
     authEntryConfig: flowtranslateAuthConfig,
+    canSyncExistingGoogleAccount,
+    syncExistingGoogleAccount,
+    guestSyncLoading,
   };
 };

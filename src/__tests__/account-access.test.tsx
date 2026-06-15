@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const analyticsScreen = vi.hoisted(() => vi.fn());
@@ -15,9 +15,11 @@ const verifyOtp = vi.hoisted(() => vi.fn());
 const signOut = vi.hoisted(() => vi.fn());
 const generateTranslation = vi.hoisted(() => vi.fn());
 const startFlowtranslateProCheckout = vi.hoisted(() => vi.fn());
+const syncGuestAccount = vi.hoisted(() => vi.fn());
 const profileMaybeSingle = vi.hoisted(() => vi.fn());
 const profileUpdate = vi.hoisted(() => vi.fn());
 const entitlementMaybeSingle = vi.hoisted(() => vi.fn());
+let authStateCallback: ((event: string, session: unknown) => void) | null = null;
 
 vi.mock('../services/analytics', () => ({
   analytics: {
@@ -48,6 +50,7 @@ vi.mock('../services/flowtranslate-api', () => ({
   },
   generateTranslation,
   startFlowtranslateProCheckout,
+  syncGuestAccount,
   generateLearningInsight: vi.fn(),
   generateStudyArticle: vi.fn(),
   askBreakdownQuestion: vi.fn(),
@@ -118,14 +121,18 @@ describe('account access UI', () => {
     localStorage.clear();
     window.history.replaceState({}, '', '/');
     vi.clearAllMocks();
+    authStateCallback = null;
     analyticsGetFeatureFlag.mockReturnValue(undefined);
     getSession.mockResolvedValue({ data: { session: null } });
-    onAuthStateChange.mockReturnValue({
+    onAuthStateChange.mockImplementation((callback) => {
+      authStateCallback = callback;
+      return {
       data: {
         subscription: {
           unsubscribe: vi.fn(),
         },
       },
+      };
     });
     signInAnonymously.mockResolvedValue({ data: { session: null }, error: null });
     signInWithOAuth.mockResolvedValue({ error: null });
@@ -138,6 +145,15 @@ describe('account access UI', () => {
     entitlementMaybeSingle.mockResolvedValue({ data: null, error: null });
     startFlowtranslateProCheckout.mockResolvedValue({
       checkoutUrl: '#mercado-pago-checkout',
+    });
+    syncGuestAccount.mockResolvedValue({
+      kind: 'guest_account_sync',
+      guestUserId: 'guest-user',
+      targetUserId: 'permanent-user',
+      translationRecordsMoved: 2,
+      duplicateTranslationRecordsArchived: 0,
+      usageEventsMoved: 2,
+      guestIdentitiesMoved: 1,
     });
     generateTranslation.mockResolvedValue({
       kind: 'translate',
@@ -432,6 +448,101 @@ describe('account access UI', () => {
         error_code: 'identity_already_exists',
       }),
     );
+  });
+
+  it('offers guests a sign-in and sync path when Google is already connected', async () => {
+    window.history.pushState(
+      {},
+      '',
+      '/?error=server_error&error_code=identity_already_exists&error_description=Identity+is+already+linked+to+another+user#error=server_error&error_code=identity_already_exists',
+    );
+    getSession.mockResolvedValue({ data: { session: guestSession } });
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByTitle('Cuenta'));
+    expect(
+      await screen.findByText(/ese google ya tiene cuenta/i),
+    ).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole('button', { name: /entrar y sincronizar/i }),
+    );
+
+    await waitFor(() => expect(signOut).toHaveBeenCalledTimes(1));
+    expect(linkIdentity).not.toHaveBeenCalled();
+    expect(signInWithOAuth).toHaveBeenCalledWith({
+      provider: 'google',
+      options: {
+        redirectTo: window.location.origin,
+      },
+    });
+    expect(localStorage.getItem('flowtranslate_pending_guest_sync_user_id')).toBe(
+      'guest-user',
+    );
+    expect(analyticsTrack).toHaveBeenCalledWith(
+      'auth_guest_sync_requested',
+      expect.objectContaining({
+        provider: 'google',
+        account_kind: 'guest',
+      }),
+    );
+  });
+
+  it('syncs pending guest history after returning as a permanent account', async () => {
+    localStorage.setItem('flowtranslate_pending_guest_sync_user_id', 'guest-user');
+    getSession.mockResolvedValue({ data: { session: permanentSession } });
+
+    render(<App />);
+
+    await waitFor(() =>
+      expect(syncGuestAccount).toHaveBeenCalledWith(
+        { guestUserId: 'guest-user' },
+        'permanent-token',
+      ),
+    );
+    fireEvent.click(await screen.findByTitle('Perfil'));
+    expect(
+      await screen.findByText(/historial temporal sincronizado/i),
+    ).toBeInTheDocument();
+    expect(localStorage.getItem('flowtranslate_pending_guest_sync_user_id')).toBe(
+      null,
+    );
+    expect(analyticsTrack).toHaveBeenCalledWith(
+      'auth_guest_sync_succeeded',
+      expect.objectContaining({
+        moved_translation_records: 2,
+        moved_usage_events: 2,
+      }),
+    );
+  });
+
+  it('can sync the same anonymous session again after returning to guest mode', async () => {
+    localStorage.setItem('flowtranslate_pending_guest_sync_user_id', 'guest-user');
+    getSession.mockResolvedValue({ data: { session: permanentSession } });
+
+    render(<App />);
+
+    await waitFor(() => expect(syncGuestAccount).toHaveBeenCalledTimes(1));
+    fireEvent.click(await screen.findByTitle('Perfil'));
+    expect(
+      await screen.findByText(/historial temporal sincronizado/i),
+    ).toBeInTheDocument();
+
+    act(() => authStateCallback?.('SIGNED_OUT', guestSession));
+
+    await waitFor(() =>
+      expect(screen.getAllByText('Invitado').length).toBeGreaterThan(0),
+    );
+    expect(
+      screen.queryByText(/historial temporal sincronizado/i),
+    ).not.toBeInTheDocument();
+
+    localStorage.setItem('flowtranslate_pending_guest_sync_user_id', 'guest-user');
+
+    act(() => authStateCallback?.('SIGNED_IN', permanentSession));
+
+    await waitFor(() => expect(syncGuestAccount).toHaveBeenCalledTimes(2));
   });
 
   it('prompts guests to connect an account only after repeated copied replies', async () => {

@@ -97,6 +97,12 @@ const appendRecognizedText = (currentText: string, transcript: string) => {
 const guestLearningMessage =
   'Conecta una cuenta para desbloquear Learning personal y conservar tu progreso.';
 const ACCOUNT_PROMPT_COPY_THRESHOLD = 2;
+const COMMERCIAL_EXPERIMENT_DEFAULT_VARIANTS = {
+  ft_account_prompt_after_copy_count: 'after_2_copies',
+  ft_pro_value_copy: 'higher_limits',
+  ft_onboarding_positioning: 'work_chat_speed',
+} as const;
+type CommercialExperimentKey = keyof typeof COMMERCIAL_EXPERIMENT_DEFAULT_VARIANTS;
 const FLOWTRANSLATE_PRO_ANALYTICS = {
   provider: 'mercado_pago',
   plan_id: 'flowtranslate_pro',
@@ -116,6 +122,26 @@ const FLOWTRANSLATE_COFFEE_URL =
 
 const isStarterLearningSession = (session: LearningSession) =>
   session.id.startsWith('starter-');
+
+const getCommercialExperimentVariant = (experimentKey: CommercialExperimentKey) => {
+  const flagReader = analytics as typeof analytics & {
+    getFeatureFlag?: (key: string) => string | boolean | undefined;
+  };
+  const flagValue = flagReader.getFeatureFlag?.(experimentKey);
+
+  if (typeof flagValue === 'string' && flagValue.trim()) return flagValue.trim();
+  if (flagValue === true) return 'enabled';
+  if (flagValue === false) return 'control';
+
+  return COMMERCIAL_EXPERIMENT_DEFAULT_VARIANTS[experimentKey];
+};
+
+const captureFlowtranslateError = (
+  error: unknown,
+  context: Record<string, unknown>,
+) => {
+  analytics.captureError(error, safeCommercialAnalyticsProperties(context));
+};
 
 const buildStarterLearningSession = (situationId?: string): LearningSession => {
   const situation =
@@ -268,9 +294,39 @@ function App() {
   const trackedAccountPromptRef = useRef(false);
   const trackedCheckoutReturnRef = useRef<string | null>(null);
   const trackedEntitlementStateRef = useRef<string | null>(null);
+  const trackedGuestTrialRef = useRef(false);
+  const trackedUpgradePromptRef = useRef<Set<string>>(new Set());
+  const trackedCommercialExperimentRef = useRef<Set<string>>(new Set());
   const autoGuestStartedRef = useRef(false);
 
   useEffect(() => subscribeToOnlineState(setOnline), []);
+
+  const trackCommercialExperimentExposure = useCallback(
+    (
+      experimentKey: CommercialExperimentKey,
+      properties: Record<string, unknown> = {},
+    ) => {
+      if (trackedCommercialExperimentRef.current.has(experimentKey)) return;
+      trackedCommercialExperimentRef.current.add(experimentKey);
+
+      analytics.track('experiment_exposed', safeCommercialAnalyticsProperties({
+        experiment_key: experimentKey,
+        variant: getCommercialExperimentVariant(experimentKey),
+        ...properties,
+      }));
+    },
+    [],
+  );
+
+  useEffect(() => {
+    trackCommercialExperimentExposure('ft_onboarding_positioning', {
+      surface: 'responder',
+    });
+    trackCommercialExperimentExposure('ft_account_prompt_after_copy_count', {
+      surface: 'translate_soft_banner',
+      threshold: ACCOUNT_PROMPT_COPY_THRESHOLD,
+    });
+  }, [trackCommercialExperimentExposure]);
 
   useEffect(() => {
     setSpeechAvailable(canUseSpeechSynthesis());
@@ -287,6 +343,19 @@ function App() {
     setProfileContextDraft(account.globalContext);
     setProfileContextMessage('');
   }, [account.globalContext, showAccount]);
+
+  useEffect(() => {
+    if (trackedGuestTrialRef.current) return;
+    if (account.accountKind !== 'guest' || !account.session) return;
+
+    trackedGuestTrialRef.current = true;
+    analytics.track('guest_trial_started', {
+      source: 'anonymous_session',
+      account_kind: account.accountKind,
+      has_saved_history: history.length > 0,
+      history_count: history.length,
+    });
+  }, [account.accountKind, account.session, history.length]);
 
   const saveProfileContext = async () => {
     setProfileContextSaving(true);
@@ -352,12 +421,17 @@ function App() {
       setHistory(nextHistory);
       return nextHistory;
     } catch (error) {
+      captureFlowtranslateError(error, {
+        screen: 'translate',
+        action: 'load_translation_history',
+        account_kind: account.accountKind,
+      });
       setHistoryError(
         error instanceof Error ? error.message : 'No pudimos cargar tu historial.',
       );
       return [];
     }
-  }, [account.accessToken]);
+  }, [account.accessToken, account.accountKind]);
 
   useEffect(() => {
     void loadHistory();
@@ -386,6 +460,11 @@ function App() {
         return nextSessions.find((session) => session.id === current.id) || current;
       });
     } catch (error) {
+      captureFlowtranslateError(error, {
+        screen: 'learning',
+        action: 'load_learning_progress',
+        account_kind: account.accountKind,
+      });
       setLearningProgressError(
         error instanceof Error
           ? error.message
@@ -394,7 +473,7 @@ function App() {
     } finally {
       setLearningProgressLoading(false);
     }
-  }, [account.accessToken, account.isGuest]);
+  }, [account.accessToken, account.accountKind, account.isGuest]);
 
   useEffect(() => {
     if (view !== 'learning') return;
@@ -666,6 +745,11 @@ function App() {
           result.article.estimatedReadingMinutes || null,
       });
     } catch (error) {
+      captureFlowtranslateError(error, {
+        screen: 'learning',
+        action: 'generate_study_article',
+        account_kind: account.accountKind,
+      });
       if (error instanceof FlowtranslateApiError) {
         if (error.usage) setUsage(error.usage);
         setStudyError(error.message);
@@ -739,6 +823,12 @@ function App() {
         });
         return result.answer;
       } catch (error) {
+        captureFlowtranslateError(error, {
+          screen: 'learning',
+          action: 'ask_breakdown_question',
+          account_kind: account.accountKind,
+          mode: record.mode || null,
+        });
         if (error instanceof FlowtranslateApiError && error.usage) {
           setUsage(error.usage);
         }
@@ -829,6 +919,12 @@ function App() {
           source_record_count: result.session.sourceRecordIds.length,
         });
       } catch (error) {
+        captureFlowtranslateError(error, {
+          screen: 'learning',
+          action: 'start_learning_session',
+          account_kind: account.accountKind,
+          situation_id: targetSituationId,
+        });
         if (error instanceof FlowtranslateApiError && error.usage) {
           setUsage(error.usage);
         }
@@ -945,6 +1041,12 @@ function App() {
           naturalness: result.attempt.feedback.naturalness,
         });
       } catch (error) {
+        captureFlowtranslateError(error, {
+          screen: 'learning',
+          action: 'submit_learning_rewrite',
+          account_kind: account.accountKind,
+          situation_id: activeLearningSession.situationId,
+        });
         if (error instanceof FlowtranslateApiError && error.usage) {
           setUsage(error.usage);
         }
@@ -1008,6 +1110,12 @@ function App() {
           phrase_length: trimmedText.length,
         });
       } catch (error) {
+        captureFlowtranslateError(error, {
+          screen: 'learning',
+          action: 'save_learning_phrase',
+          account_kind: account.accountKind,
+          situation_id: input.situationId || null,
+        });
         setLearningSessionError(
           error instanceof Error
             ? error.message
@@ -1024,6 +1132,10 @@ function App() {
       setSavedPhrases((current) => current.filter((phrase) => phrase.id !== id));
       analytics.track('learning_phrase_archived');
     } catch (error) {
+      captureFlowtranslateError(error, {
+        screen: 'learning',
+        action: 'archive_learning_phrase',
+      });
       setLearningProgressError(
         error instanceof Error
           ? error.message
@@ -1062,6 +1174,12 @@ function App() {
         had_rewrite_feedback: Boolean(latestLearningAttempt),
       });
     } catch (error) {
+      captureFlowtranslateError(error, {
+        screen: 'learning',
+        action: 'complete_learning_session',
+        account_kind: account.accountKind,
+        situation_id: activeLearningSession.situationId,
+      });
       setLearningSessionError(
         error instanceof Error
           ? error.message
@@ -1098,6 +1216,11 @@ function App() {
       if (selectedStudyRecordId === id) closeStudyArticle();
       analytics.track('translation_history_deleted', { count: 1 });
     } catch (error) {
+      captureFlowtranslateError(error, {
+        screen: 'learning',
+        action: 'delete_translation_history_item',
+        account_kind: account.accountKind,
+      });
       setHistoryError(error instanceof Error ? error.message : 'No pudimos borrar ese item.');
     }
   };
@@ -1111,6 +1234,11 @@ function App() {
       closeStudyArticle();
       analytics.track('translation_history_cleared');
     } catch (error) {
+      captureFlowtranslateError(error, {
+        screen: 'learning',
+        action: 'clear_translation_history',
+        account_kind: account.accountKind,
+      });
       setHistoryError(error instanceof Error ? error.message : 'No pudimos limpiar tu historial.');
     }
   };
@@ -1175,12 +1303,76 @@ function App() {
     [billingAnalyticsProperties],
   );
 
+  const trackUpgradePromptShown = useCallback(
+    (surface: ProUpgradeSurface, reason: string) => {
+      const trackingKey = [
+        surface,
+        reason,
+        account.accountKind,
+        account.billingState.id,
+      ].join(':');
+      if (trackedUpgradePromptRef.current.has(trackingKey)) return;
+      trackedUpgradePromptRef.current.add(trackingKey);
+
+      const properties = billingAnalyticsProperties({
+        surface,
+        reason,
+        history_count: history.length,
+        has_saved_history: history.length > 0,
+        remaining_quota: usage?.remainingThisMonth ?? null,
+      });
+
+      analytics.track('upgrade_prompt_shown', properties);
+      analytics.track('pricing_viewed', properties);
+      trackCommercialExperimentExposure('ft_pro_value_copy', { surface });
+    },
+    [
+      account.accountKind,
+      account.billingState.id,
+      billingAnalyticsProperties,
+      history.length,
+      trackCommercialExperimentExposure,
+      usage?.remainingThisMonth,
+    ],
+  );
+
   const dismissUpgradePrompt = useCallback((surface: ProUpgradeSurface) => {
     setDismissedUpgradePrompts((current) =>
       current.includes(surface) ? current : [...current, surface],
     );
     analytics.track('upgrade_prompt_dismissed', { surface });
   }, []);
+
+  useEffect(() => {
+    if (shouldShowSavedHistoryUpgradePrompt) {
+      trackUpgradePromptShown('saved_history', 'copied_replies');
+    }
+    if (shouldShowUsageUpgradePrompt) {
+      trackUpgradePromptShown('usage_limit', 'usage_pressure');
+    }
+    if (translator.status === 'quota') {
+      trackUpgradePromptShown('usage_limit', 'quota_exhausted');
+    }
+    if (shouldShowLearningUpgradePrompt) {
+      trackUpgradePromptShown('learning', 'learning_value');
+    }
+    if (
+      showAccount &&
+      account.billingState.canRetryCheckout &&
+      !account.billingState.hasProAccess
+    ) {
+      trackUpgradePromptShown('profile_preferences', 'account_modal');
+    }
+  }, [
+    account.billingState.canRetryCheckout,
+    account.billingState.hasProAccess,
+    shouldShowLearningUpgradePrompt,
+    shouldShowSavedHistoryUpgradePrompt,
+    shouldShowUsageUpgradePrompt,
+    showAccount,
+    trackUpgradePromptShown,
+    translator.status,
+  ]);
 
   useEffect(() => {
     if (!shouldShowAccountPrompt) return;
@@ -1304,6 +1496,15 @@ function App() {
         analytics.track('checkout_started', proUpgradeAnalytics(surface));
         window.location.assign(checkout.checkoutUrl);
       } catch (error) {
+        captureFlowtranslateError(error, {
+          screen: 'account',
+          action: 'start_pro_checkout',
+          account_kind: account.accountKind,
+          billing_state: account.billingState.id,
+          surface,
+          http_status:
+            error instanceof FlowtranslateApiError ? error.status : null,
+        });
         analytics.track(
           'checkout_failed',
           billingAnalyticsProperties({
@@ -1331,6 +1532,7 @@ function App() {
     },
     [
       account.accessToken,
+      account.billingState.id,
       account.accountKind,
       account.isGuest,
       billingAnalyticsProperties,

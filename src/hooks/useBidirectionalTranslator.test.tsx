@@ -15,10 +15,12 @@ import {
 import { useBidirectionalTranslator } from './useBidirectionalTranslator';
 
 const analyticsTrack = vi.hoisted(() => vi.fn());
+const analyticsCaptureError = vi.hoisted(() => vi.fn());
 
 vi.mock('../services/analytics', () => ({
   analytics: {
     track: analyticsTrack,
+    captureError: analyticsCaptureError,
   },
 }));
 
@@ -1034,5 +1036,47 @@ describe('useBidirectionalTranslator', () => {
     expect(blockedProperties).not.toHaveProperty('text');
     expect(blockedProperties).not.toHaveProperty('source_text');
     expect(blockedProperties).not.toHaveProperty('translated_text');
+    expect(analyticsCaptureError).not.toHaveBeenCalled();
+  });
+
+  it('captures unexpected translation API failures for error tracking', async () => {
+    const apiError = new FlowtranslateApiError('Gemini unavailable.', 503);
+    vi.mocked(generateTranslation).mockRejectedValueOnce(apiError);
+
+    const { result } = renderHook(() =>
+      useBidirectionalTranslator({
+        accessToken: 'token',
+        online: true,
+        onUsage: vi.fn(),
+        onSavedTranslation: vi.fn(),
+      }),
+    );
+
+    act(() => result.current.editInput('necesito ayuda con esto'));
+
+    await act(async () => {
+      await result.current.translate();
+    });
+
+    expect(result.current.status).toBe('error');
+    expect(analyticsTrack).toHaveBeenCalledWith(
+      'translation_failed',
+      expect.objectContaining({
+        mode: 'translate_to_english',
+        trigger: 'manual_generate',
+        error_status: 503,
+        error_type: 'api_error',
+      }),
+    );
+    expect(analyticsCaptureError).toHaveBeenCalledWith(
+      apiError,
+      expect.objectContaining({
+        screen: 'translate',
+        action: 'generate_translation',
+        mode: 'translate_to_english',
+        trigger: 'manual_generate',
+        http_status: 503,
+      }),
+    );
   });
 });

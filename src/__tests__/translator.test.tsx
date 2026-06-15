@@ -5,18 +5,24 @@ import { STORAGE_KEYS } from '../constants';
 
 const analyticsScreen = vi.hoisted(() => vi.fn());
 const analyticsTrack = vi.hoisted(() => vi.fn());
+const analyticsCaptureError = vi.hoisted(() => vi.fn());
+const analyticsGetFeatureFlag = vi.hoisted(() => vi.fn());
 
 vi.mock('../services/analytics', () => ({
   analytics: {
     screen: analyticsScreen,
     track: analyticsTrack,
+    captureError: analyticsCaptureError,
+    getFeatureFlag: analyticsGetFeatureFlag,
   },
+  safeCommercialAnalyticsProperties: (properties: Record<string, unknown>) => properties,
 }));
 
 describe('translator UI', () => {
   beforeEach(() => {
     localStorage.clear();
     vi.clearAllMocks();
+    analyticsGetFeatureFlag.mockReturnValue(undefined);
   });
 
   it('renders one expression input and one result surface as the primary view', () => {

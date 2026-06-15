@@ -257,6 +257,12 @@ export const useBidirectionalTranslator = ({
               record_id: savedRecord.id,
             });
           } catch (error) {
+            analytics.captureError(error, {
+              screen: 'translate',
+              action: 'refresh_pending_translation_history',
+              mode: params.mode,
+              trigger: params.trigger,
+            });
             analytics.track('translation_pending_save_refresh_failed', {
               ...translationAnalyticsProperties(
                 params.mode,
@@ -433,6 +439,14 @@ export const useBidirectionalTranslator = ({
         }
 
         setBreakdownStatus('error');
+        analytics.captureError(error, {
+          screen: 'translate',
+          action: 'enrich_breakdown',
+          mode: params.mode,
+          trigger: params.trigger,
+          http_status:
+            error instanceof FlowtranslateApiError ? error.status : null,
+        });
         analytics.track('breakdown_enrichment_failed', {
           ...translationAnalyticsProperties(
             params.mode,
@@ -801,6 +815,13 @@ export const useBidirectionalTranslator = ({
               reason: 'auth',
             });
           } else {
+            analytics.captureError(error, {
+              screen: 'translate',
+              action: 'generate_translation',
+              mode: nextMode,
+              trigger,
+              http_status: error.status,
+            });
             analytics.track('translation_failed', {
               ...errorProperties,
               error_type: 'api_error',
@@ -815,6 +836,12 @@ export const useBidirectionalTranslator = ({
           return;
         }
 
+        analytics.captureError(error, {
+          screen: 'translate',
+          action: 'generate_translation',
+          mode: nextMode,
+          trigger,
+        });
         analytics.track('translation_failed', {
           ...translationAnalyticsProperties(
             nextMode,
@@ -1268,6 +1295,13 @@ export const useBidirectionalTranslator = ({
             reason: 'auth',
           });
         } else {
+          analytics.captureError(error, {
+            screen: 'translate',
+            action: 'translate_input_to_spanish',
+            mode: nextMode,
+            trigger,
+            http_status: error.status,
+          });
           analytics.track('translation_failed', {
             ...errorProperties,
             error_type: 'api_error',
@@ -1282,6 +1316,12 @@ export const useBidirectionalTranslator = ({
         return;
       }
 
+      analytics.captureError(error, {
+        screen: 'translate',
+        action: 'translate_input_to_spanish',
+        mode: nextMode,
+        trigger,
+      });
       analytics.track('translation_failed', {
         ...translationAnalyticsProperties(
           nextMode,

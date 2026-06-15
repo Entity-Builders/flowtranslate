@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const analyticsScreen = vi.hoisted(() => vi.fn());
 const analyticsTrack = vi.hoisted(() => vi.fn());
+const analyticsCaptureError = vi.hoisted(() => vi.fn());
+const analyticsGetFeatureFlag = vi.hoisted(() => vi.fn());
 const getSession = vi.hoisted(() => vi.fn());
 const onAuthStateChange = vi.hoisted(() => vi.fn());
 const signInAnonymously = vi.hoisted(() => vi.fn());
@@ -21,6 +23,8 @@ vi.mock('../services/analytics', () => ({
   analytics: {
     screen: analyticsScreen,
     track: analyticsTrack,
+    captureError: analyticsCaptureError,
+    getFeatureFlag: analyticsGetFeatureFlag,
   },
   safeCommercialAnalyticsProperties: (properties: Record<string, unknown>) => properties,
 }));
@@ -114,6 +118,7 @@ describe('account access UI', () => {
     localStorage.clear();
     window.history.replaceState({}, '', '/');
     vi.clearAllMocks();
+    analyticsGetFeatureFlag.mockReturnValue(undefined);
     getSession.mockResolvedValue({ data: { session: null } });
     onAuthStateChange.mockReturnValue({
       data: {
@@ -172,6 +177,21 @@ describe('account access UI', () => {
         app_id: 'flowtranslate',
       }),
     );
+    expect(analyticsTrack).toHaveBeenCalledWith(
+      'experiment_exposed',
+      expect.objectContaining({
+        experiment_key: 'ft_onboarding_positioning',
+        variant: 'work_chat_speed',
+      }),
+    );
+    expect(analyticsTrack).toHaveBeenCalledWith(
+      'experiment_exposed',
+      expect.objectContaining({
+        experiment_key: 'ft_account_prompt_after_copy_count',
+        variant: 'after_2_copies',
+        threshold: 2,
+      }),
+    );
   });
 
   it('uses a returned anonymous session as the initial guest trial', async () => {
@@ -184,6 +204,13 @@ describe('account access UI', () => {
 
     expect(await screen.findByText('Invitado')).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Cuenta' })).not.toBeInTheDocument();
+    expect(analyticsTrack).toHaveBeenCalledWith(
+      'guest_trial_started',
+      expect.objectContaining({
+        source: 'anonymous_session',
+        account_kind: 'guest',
+      }),
+    );
   });
 
   it('offers Google, guest trial, and email code sign-in as a visible fallback', async () => {
@@ -439,6 +466,12 @@ describe('account access UI', () => {
         reason: 'copied_replies',
       }),
     );
+    expect(analyticsTrack).not.toHaveBeenCalledWith(
+      'pricing_viewed',
+      expect.objectContaining({
+        surface: 'saved_history',
+      }),
+    );
   });
 
   it('keeps paid Pro pressure out of the early guest history prompt', async () => {
@@ -507,6 +540,30 @@ describe('account access UI', () => {
     expect(
       (await screen.findAllByText(/pro: mas margen y contexto/i)).length,
     ).toBeGreaterThan(0);
+    expect(analyticsTrack).toHaveBeenCalledWith(
+      'upgrade_prompt_shown',
+      expect.objectContaining({
+        surface: 'profile_preferences',
+        provider: 'mercado_pago',
+        plan_id: 'flowtranslate_pro',
+      }),
+    );
+    expect(analyticsTrack).toHaveBeenCalledWith(
+      'pricing_viewed',
+      expect.objectContaining({
+        surface: 'profile_preferences',
+        provider: 'mercado_pago',
+        plan_id: 'flowtranslate_pro',
+      }),
+    );
+    expect(analyticsTrack).toHaveBeenCalledWith(
+      'experiment_exposed',
+      expect.objectContaining({
+        experiment_key: 'ft_pro_value_copy',
+        variant: 'higher_limits',
+        surface: 'profile_preferences',
+      }),
+    );
 
     fireEvent.click(screen.getByRole('button', { name: /pasar a pro/i }));
 

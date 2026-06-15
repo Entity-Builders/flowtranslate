@@ -95,6 +95,12 @@ export const useFlowtranslateAccount = () => {
         if (!mounted) return;
 
         if (error) {
+          analytics.captureError(error, {
+            screen: 'account',
+            action: 'load_pro_entitlement_state',
+            account_kind: account.accountKind,
+            error_code: error.code || null,
+          });
           analytics.track('pro_entitlement_state_load_failed', {
             account_kind: account.accountKind,
             error_type: error.name || 'entitlement_load_error',
@@ -112,6 +118,11 @@ export const useFlowtranslateAccount = () => {
         );
       } catch (error) {
         if (!mounted) return;
+        analytics.captureError(error, {
+          screen: 'account',
+          action: 'load_pro_entitlement_state',
+          account_kind: account.accountKind,
+        });
         analytics.track('pro_entitlement_state_load_failed', {
           account_kind: account.accountKind,
           error_type: error instanceof Error ? error.name : 'entitlement_load_error',
@@ -142,6 +153,12 @@ export const useFlowtranslateAccount = () => {
       .maybeSingle();
 
     if (updateError) {
+      analytics.captureError(updateError, {
+        screen: 'account',
+        action: 'update_profile_context',
+        account_kind: account.accountKind,
+        error_code: updateError.code || null,
+      });
       analytics.track('profile_context_update_failed', {
         account_kind: account.accountKind,
         error_type: updateError.name || 'profile_update_error',

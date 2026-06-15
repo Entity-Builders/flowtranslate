@@ -112,7 +112,7 @@ const CHECKOUT_RETURN_PAYMENT_EVENTS: Record<CheckoutReturnState, string> = {
 };
 const FLOWTRANSLATE_COFFEE_URL =
   import.meta.env.VITE_FLOWTRANSLATE_COFFEE_URL?.trim() ||
-  'https://www.buymeacoffee.com/juanobrach';
+  'https://cafecito.app/entitybuilders';
 
 const isStarterLearningSession = (session: LearningSession) =>
   session.id.startsWith('starter-');
@@ -1346,6 +1346,7 @@ function App() {
   const openQuotaSupport = useCallback(() => {
     analytics.track('quota_support_clicked', {
       surface: 'usage_limit',
+      provider: 'cafecito',
       account_kind: account.accountKind,
     });
     window.open(FLOWTRANSLATE_COFFEE_URL, '_blank', 'noopener,noreferrer');

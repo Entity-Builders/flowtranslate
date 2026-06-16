@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import type { StudyArticle } from '@eb-packages/flowtranslate-core';
 import { STARTER_LEARNING_SITUATIONS } from '@eb-packages/flowtranslate-core';
 import type { ComponentProps } from 'react';
@@ -54,18 +60,34 @@ describe('learning UI', () => {
   it('keeps Learning in a separate view with empty history state', () => {
     render(<App />);
 
-    fireEvent.click(screen.getByRole('button', { name: /aprender/i }));
+    const mainNav = screen.getByRole('navigation', {
+      name: /flowtranslate/i,
+    });
+    expect(
+      within(mainNav).getByRole('button', { name: /responder/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByTitle('Cuenta')).toBeInTheDocument();
+
+    fireEvent.click(within(mainNav).getByRole('button', { name: /aprender/i }));
 
     expect(screen.getByText('Hoy en tu ingles')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /Avisar una demora/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: /Avisar una demora/i }),
+    ).toBeInTheDocument();
     expect(
       screen.getAllByRole('button', { name: /Empezar practica/i }).length,
     ).toBeGreaterThan(0);
     expect(screen.getAllByText('Frases guardadas').length).toBeGreaterThan(0);
     expect(screen.getByText('Fuentes recientes')).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Panel de Learning' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Recommended exercises' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Practice' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: 'Panel de Learning' }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: 'Recommended exercises' }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: 'Practice' }),
+    ).not.toBeInTheDocument();
   });
 
   it('renders a contextual Pro prompt in the Learning progress area', () => {
@@ -241,9 +263,9 @@ describe('learning UI', () => {
     });
 
     expect(screen.getByText('Tus practicas')).toBeInTheDocument();
-    expect(
-      screen.getAllByText('Hacer seguimiento sin presionar'),
-    ).toHaveLength(1);
+    expect(screen.getAllByText('Hacer seguimiento sin presionar')).toHaveLength(
+      1,
+    );
     expect(screen.getByText('Completada')).toBeInTheDocument();
     expect(screen.getByText('Repasar')).toBeInTheDocument();
   });
@@ -263,39 +285,49 @@ describe('learning UI', () => {
     renderLearningView({
       history,
       studyArticle: {
-          translationRecordId: 'record-1',
-          sourceLanguage: 'es',
-          targetLanguage: 'en',
-          sourceText: history[0].sourceText,
-          translatedText: history[0].translatedText,
-          mode: 'translate_to_english',
-          title: 'Talking about Plans',
-          summary: 'A near-future phrase in context.',
-          articleVersion: 'markdown-v3',
-          lessonFocus: ['near future', 'movement verb'],
-          estimatedReadingMinutes: 4,
-          markdown: [
-            '# Talking about Plans',
-            '',
-            '## Syntactic breakdown',
-            '| Part | Role |',
-            '| --- | --- |',
-            '| Ellos | Subject |',
-            '| van a comer | Verb phrase |',
-            '',
-            '## Common mistakes',
-            '- Ellos van comer.',
-          ].join('\n'),
+        translationRecordId: 'record-1',
+        sourceLanguage: 'es',
+        targetLanguage: 'en',
+        sourceText: history[0].sourceText,
+        translatedText: history[0].translatedText,
+        mode: 'translate_to_english',
+        title: 'Talking about Plans',
+        summary: 'A near-future phrase in context.',
+        articleVersion: 'markdown-v3',
+        lessonFocus: ['near future', 'movement verb'],
+        estimatedReadingMinutes: 4,
+        markdown: [
+          '# Talking about Plans',
+          '',
+          '## Syntactic breakdown',
+          '| Part | Role |',
+          '| --- | --- |',
+          '| Ellos | Subject |',
+          '| van a comer | Verb phrase |',
+          '',
+          '## Common mistakes',
+          '- Ellos van comer.',
+        ].join('\n'),
       },
       selectedStudyRecordId: 'record-1',
     });
 
-    expect(screen.getByRole('heading', { name: 'Articulo de estudio' })).toBeInTheDocument();
-    expect(screen.getByText('Leccion: Talking about Plans')).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: 'Articulo de estudio' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('Leccion: Talking about Plans'),
+    ).toBeInTheDocument();
     expect(screen.getByText(history[0].sourceText)).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: /Hoy en tu ingles/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Historial' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Practice' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: /Hoy en tu ingles/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: 'Historial' }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: 'Practice' }),
+    ).not.toBeInTheDocument();
   });
 
   it('preloads the saved Spanish breakdown when a history record opens for study', () => {
@@ -357,7 +389,9 @@ describe('learning UI', () => {
     expect(
       screen.getByText(/Se corrigio la conjugacion del verbo/),
     ).toBeInTheDocument();
-    expect(screen.getByText('Generando articulo de estudio')).toBeInTheDocument();
+    expect(
+      screen.getByText('Generando articulo de estudio'),
+    ).toBeInTheDocument();
   });
 
   it('renders multiple tense notes when a phrase mixes clauses', () => {
@@ -409,11 +443,7 @@ describe('learning UI', () => {
 
   it('shows the on-demand breakdown loading state', () => {
     render(
-      <ExpressionBreakdownDetails
-        defaultOpen
-        breakdown={null}
-        isEnriching
-      />,
+      <ExpressionBreakdownDetails defaultOpen breakdown={null} isEnriching />,
     );
 
     expect(screen.getByText('Preparando desglose...')).toBeInTheDocument();
@@ -423,10 +453,7 @@ describe('learning UI', () => {
     const requestBreakdown = vi.fn();
 
     render(
-      <ExpressionBreakdownDetails
-        breakdown={null}
-        onOpen={requestBreakdown}
-      />,
+      <ExpressionBreakdownDetails breakdown={null} onOpen={requestBreakdown} />,
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'Desglose' }));
@@ -456,10 +483,7 @@ describe('learning UI', () => {
     };
     const requestBreakdown = vi.fn();
     const { rerender } = render(
-      <ExpressionBreakdownDetails
-        breakdown={null}
-        onOpen={requestBreakdown}
-      />,
+      <ExpressionBreakdownDetails breakdown={null} onOpen={requestBreakdown} />,
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'Desglose' }));
@@ -617,16 +641,33 @@ describe('learning UI', () => {
 
     await waitFor(() =>
       expect(
-        within(mobileSheet as HTMLElement).getByText('Respuesta en ingles'),
+        within(mobileSheet as HTMLElement).getByText('Listo para mandar'),
       ).toBeInTheDocument(),
     );
     expect(
+      within(mobileSheet as HTMLElement).queryByText('Respuesta en ingles'),
+    ).not.toBeInTheDocument();
+    expect(
       within(mobileSheet as HTMLElement).getAllByText(resultText),
     ).toHaveLength(1);
+    expect(
+      within(mobileSheet as HTMLElement).getByRole('button', {
+        name: /ver respuesta completa/i,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(mobileSheet as HTMLElement).getByRole('button', {
+        name: 'Copiar',
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Desglose' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
 
     fireEvent.click(
       within(mobileSheet as HTMLElement).getByRole('button', {
-        name: /listo para mandar/i,
+        name: /ver respuesta completa/i,
       }),
     );
 
@@ -634,7 +675,19 @@ describe('learning UI', () => {
       within(mobileSheet as HTMLElement).getAllByText(resultText),
     ).toHaveLength(1);
     expect(
-      within(mobileSheet as HTMLElement).queryByRole('button', { name: /^ES$/i }),
+      within(mobileSheet as HTMLElement).getByRole('button', {
+        name: /abrir desglose movil/i,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(mobileSheet as HTMLElement).getByRole('button', {
+        name: /estudiar/i,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(mobileSheet as HTMLElement).queryByRole('button', {
+        name: /^ES$/i,
+      }),
     ).not.toBeInTheDocument();
   });
 
@@ -682,8 +735,12 @@ describe('learning UI', () => {
       />,
     );
 
-    expect(screen.getAllByLabelText('Preparando respuesta').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Analizando contexto').length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByLabelText('Preparando respuesta').length,
+    ).toBeGreaterThan(0);
+    expect(screen.getAllByText('Analizando contexto').length).toBeGreaterThan(
+      0,
+    );
   });
 
   it('does not show redundant Spanish shortcuts when the response is already in Spanish', async () => {
@@ -731,7 +788,9 @@ describe('learning UI', () => {
     );
 
     await waitFor(() =>
-      expect(screen.getAllByText('Respuesta en espanol').length).toBeGreaterThan(0),
+      expect(
+        screen.getAllByText('Respuesta en espanol').length,
+      ).toBeGreaterThan(0),
     );
     expect(
       screen.queryByRole('button', { name: /^Espanol$/i }),
@@ -742,7 +801,91 @@ describe('learning UI', () => {
     expect(
       screen.queryByRole('button', { name: /pasar a espanol/i }),
     ).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Traducir' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Traducir' }),
+    ).toBeInTheDocument();
+  });
+
+  it('shows usage pips and a post-copy continuation nudge', async () => {
+    const noop = () => undefined;
+    const onOpenAccount = vi.fn();
+    const onOpenLearning = vi.fn();
+
+    render(
+      <ExpressionWorkspace
+        inputText='Gracias por escribir, me interesa la propuesta.'
+        resultText='Thanks for reaching out. Your proposal sounds really interesting.'
+        mode='translate_to_english'
+        modeDetection={{
+          mode: 'translate_to_english',
+          confidence: 'high',
+          reason: 'spanish',
+          automatic: true,
+        }}
+        sourceLanguage='es'
+        targetLanguage='en'
+        presetId='natural'
+        breakdown={null}
+        breakdownStatus='idle'
+        translationRecordId='record-1'
+        status='idle'
+        canTranslate
+        translateDisabledReason=''
+        copiedInput={false}
+        copiedResult
+        canListen={false}
+        speakingLanguage={null}
+        canDictate={false}
+        dictatingLanguage={null}
+        dictationUnavailableReason='No disponible'
+        quotaUsage={{
+          estimatedTokens: 4,
+          monthlyQuota: 100,
+          usedThisMonth: 4,
+          remainingThisMonth: 96,
+          charged: true,
+          resetAt: '2026-07-01T00:00:00.000Z',
+        }}
+        onInputChange={noop}
+        onCopyInput={noop}
+        onCopyResult={noop}
+        onListenInput={noop}
+        onListenResult={noop}
+        onDictateInput={noop}
+        onTranslate={noop}
+        onSelectPreset={noop}
+        onRequestBreakdown={noop}
+        onTranslateToSpanish={noop}
+        onOpenAccount={onOpenAccount}
+        onOpenLearning={onOpenLearning}
+        postCopyAccountLabel='Crear cuenta gratis'
+        hasSeenResponderPromise={false}
+      />,
+    );
+
+    expect(
+      screen.getByLabelText(/Uso de IA: Quedan 96 de 100 creditos/i),
+    ).toBeInTheDocument();
+
+    expect(await screen.findAllByText('Respuesta copiada.')).not.toHaveLength(0);
+
+    fireEvent.click(
+      screen.getAllByRole('button', { name: /guardar en aprender/i })[0],
+    );
+    fireEvent.click(
+      screen.getAllByRole('button', { name: /crear cuenta gratis/i })[0],
+    );
+
+    expect(onOpenLearning).toHaveBeenCalledTimes(1);
+    expect(onOpenAccount).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(
+      screen.getAllByRole('button', {
+        name: /cerrar sugerencia post-copy/i,
+      })[0],
+    );
+
+    expect(screen.queryByText('Respuesta copiada.')).not.toBeInTheDocument();
   });
 
   it('keeps the workspace Desglose open when enriched content arrives', () => {
@@ -847,9 +990,11 @@ describe('learning UI', () => {
         createdAt: '2026-06-05T12:00:00.000Z',
       },
     ];
-    const askBreakdownQuestion = vi.fn().mockResolvedValue(
-      'Si dices "I need help with this", agregas contexto y sigue sonando natural.',
-    );
+    const askBreakdownQuestion = vi
+      .fn()
+      .mockResolvedValue(
+        'Si dices "I need help with this", agregas contexto y sigue sonando natural.',
+      );
 
     renderLearningView({
       history,
@@ -952,18 +1097,26 @@ describe('learning UI', () => {
       screen.getAllByText('I will send you a clean version tomorrow.').length,
     ).toBeGreaterThan(0);
 
-    fireEvent.click(screen.getByRole('button', { name: /The report is delayed/i }));
+    fireEvent.click(
+      screen.getByRole('button', { name: /The report is delayed/i }),
+    );
     expect(onSelectBestOption).toHaveBeenCalledWith('rough');
 
     fireEvent.change(screen.getByLabelText('Tu version en ingles'), {
       target: { value: 'I will send it tomorrow.' },
     });
-    fireEvent.click(screen.getByRole('button', { name: /Revisar mi version/i }));
+    fireEvent.click(
+      screen.getByRole('button', { name: /Revisar mi version/i }),
+    );
     expect(onSubmitAttempt).toHaveBeenCalledWith('I will send it tomorrow.');
 
-    fireEvent.click(screen.getByRole('button', { name: /Completar practica/i }));
+    fireEvent.click(
+      screen.getByRole('button', { name: /Completar practica/i }),
+    );
     expect(onCompleteSession).toHaveBeenCalledTimes(1);
-    expect(screen.queryByRole('heading', { name: 'Practice' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: 'Practice' }),
+    ).not.toBeInTheDocument();
   });
 
   it('renders a markdown study article with syntax and exercises', () => {
@@ -1016,13 +1169,21 @@ describe('learning UI', () => {
       />,
     );
 
-    expect(screen.getByRole('heading', { name: 'Syntax map' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: 'Syntax map' }),
+    ).toBeInTheDocument();
     expect(screen.getByText('simple present')).toBeInTheDocument();
-    expect(screen.getByText('Simple present shows the current desire.')).toBeInTheDocument();
+    expect(
+      screen.getByText('Simple present shows the current desire.'),
+    ).toBeInTheDocument();
     expect(screen.getByText('I want learn English')).toBeInTheDocument();
-    expect(screen.getByText('Complete: I want __ learn English.')).toBeInTheDocument();
+    expect(
+      screen.getByText('Complete: I want __ learn English.'),
+    ).toBeInTheDocument();
     expect(screen.getByText('Answer key')).toBeInTheDocument();
-    expect(screen.queryByLabelText('Roleplay Simulator')).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText('Roleplay Simulator'),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByText('This legacy roleplay should never render.'),
     ).not.toBeInTheDocument();

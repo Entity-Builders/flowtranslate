@@ -25,8 +25,12 @@ type FlowtranslateAppShellProps = {
   children: ReactNode;
   online: boolean;
   view: AppView;
+  checkoutReturnRetryBusy?: boolean;
+  checkoutReturnRetryLabel?: string;
   onDismissCheckoutReturn: () => void;
   onOpenAccount: () => void;
+  onOpenAccountFromCheckoutReturn: () => void;
+  onRetryCheckoutFromReturn: () => void;
   onReturnToResponderFromCheckout: () => void;
   onViewChange: (view: AppView) => void;
 };
@@ -43,20 +47,24 @@ export const FlowtranslateAppShell = ({
   children,
   online,
   view,
+  checkoutReturnRetryBusy,
+  checkoutReturnRetryLabel,
   onDismissCheckoutReturn,
   onOpenAccount,
+  onOpenAccountFromCheckoutReturn,
+  onRetryCheckoutFromReturn,
   onReturnToResponderFromCheckout,
   onViewChange,
 }: FlowtranslateAppShellProps) => (
   <div className='flex h-[100dvh] min-h-0 flex-col overflow-x-hidden bg-slate-50 text-slate-950'>
-    <header className='grid min-h-16 shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-b border-slate-200/70 bg-white px-3 sm:gap-3 sm:px-4'>
+    <header className='grid min-h-16 shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-b border-slate-200/70 bg-white/95 px-3 shadow-sm shadow-slate-200/50 backdrop-blur sm:gap-4 sm:px-4'>
       <div className='flex min-w-0 items-center gap-3'>
-        <div className='flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-slate-950 text-white'>
+        <div className='flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-600 text-white shadow-sm ring-1 ring-emerald-500/30'>
           <Languages size={19} />
         </div>
         <div className='min-w-0'>
-          <h1 className='hidden truncate text-lg font-bold leading-none sm:block'>
-            flowtranslate
+          <h1 className='hidden truncate text-lg font-black leading-none sm:block'>
+            FlowTranslate
           </h1>
           <p className='mt-1 hidden text-xs text-slate-500 sm:block'>
             Respuestas en ingles listas para mandar.
@@ -64,30 +72,33 @@ export const FlowtranslateAppShell = ({
         </div>
       </div>
 
-      <nav className='flex min-w-0 justify-center gap-5'>
+      <nav
+        className='flex min-w-0 justify-center rounded-full bg-slate-100 p-1 ring-1 ring-slate-200/80'
+        aria-label='Navegacion principal de FlowTranslate'
+      >
         <button
           type='button'
           onClick={() => onViewChange('translate')}
-          className={`inline-flex h-16 items-center gap-1.5 border-b-2 px-0 text-sm font-bold transition-colors sm:gap-2 ${
+          className={`inline-flex h-10 min-w-0 items-center justify-center gap-1.5 rounded-full px-2 text-xs font-black transition-colors min-[380px]:px-3 sm:min-w-28 sm:text-sm ${
             view === 'translate'
-              ? 'border-emerald-500 text-slate-950'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
+              ? 'bg-white text-slate-950 shadow-sm ring-1 ring-slate-200'
+              : 'text-slate-500 hover:text-slate-800'
           }`}
         >
           <Languages size={16} />
-          <span className='hidden min-[360px]:inline'>Responder</span>
+          <span className='truncate'>Responder</span>
         </button>
         <button
           type='button'
           onClick={() => onViewChange('learning')}
-          className={`inline-flex h-16 items-center gap-1.5 border-b-2 px-0 text-sm font-bold transition-colors sm:gap-2 ${
+          className={`inline-flex h-10 min-w-0 items-center justify-center gap-1.5 rounded-full px-2 text-xs font-black transition-colors min-[380px]:px-3 sm:min-w-28 sm:text-sm ${
             view === 'learning'
-              ? 'border-emerald-500 text-slate-950'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
+              ? 'bg-white text-slate-950 shadow-sm ring-1 ring-slate-200'
+              : 'text-slate-500 hover:text-slate-800'
           }`}
         >
           <BookOpen size={16} />
-          <span className='hidden min-[360px]:inline'>Aprender</span>
+          <span className='truncate'>Aprender</span>
         </button>
       </nav>
 
@@ -95,11 +106,13 @@ export const FlowtranslateAppShell = ({
         <button
           type='button'
           onClick={onOpenAccount}
-          className='inline-flex h-10 w-10 shrink-0 items-center justify-center gap-2 rounded-md text-sm font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-950 sm:w-auto sm:max-w-44 sm:px-3'
+          className='inline-flex h-10 w-10 shrink-0 items-center justify-center gap-2 rounded-full border border-slate-200 bg-white text-sm font-bold text-slate-600 shadow-sm transition-colors hover:border-slate-300 hover:text-slate-950 sm:w-auto sm:max-w-44 sm:px-3'
           title={accountButton.title}
         >
           {renderAccountIcon(accountButton.icon)}
-          <span className='hidden truncate sm:inline'>{accountButton.label}</span>
+          <span className='hidden truncate sm:inline'>
+            {accountButton.label}
+          </span>
         </button>
       </div>
     </header>
@@ -107,8 +120,8 @@ export const FlowtranslateAppShell = ({
     {!online ? (
       <div className='flex items-center gap-2 border-b border-slate-200 bg-slate-100 px-4 py-2 text-sm text-slate-700'>
         <WifiOff size={16} />
-        Estas offline. Podes ver la app, pero las nuevas respuestas con IA quedan
-        pausadas.
+        Estas offline. Podes ver la app, pero las nuevas respuestas con IA
+        quedan pausadas.
       </div>
     ) : null}
 
@@ -116,7 +129,11 @@ export const FlowtranslateAppShell = ({
       <CheckoutReturnStatus
         info={checkoutReturn}
         onDismiss={onDismissCheckoutReturn}
+        onOpenAccount={onOpenAccountFromCheckoutReturn}
+        onRetryCheckout={onRetryCheckoutFromReturn}
         onReturnToResponder={onReturnToResponderFromCheckout}
+        retryCheckoutBusy={checkoutReturnRetryBusy}
+        retryCheckoutLabel={checkoutReturnRetryLabel}
       />
     ) : null}
 

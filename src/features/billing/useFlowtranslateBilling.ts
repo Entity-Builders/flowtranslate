@@ -239,8 +239,15 @@ export const useFlowtranslateBilling = ({
     });
 
     analytics.track('checkout_returned', properties);
-    analytics.track(CHECKOUT_RETURN_PAYMENT_EVENTS[checkoutReturn.state], properties);
-  }, [account.billingState.hasProAccess, billingAnalyticsProperties, checkoutReturn]);
+    analytics.track(
+      CHECKOUT_RETURN_PAYMENT_EVENTS[checkoutReturn.state],
+      properties,
+    );
+  }, [
+    account.billingState.hasProAccess,
+    billingAnalyticsProperties,
+    checkoutReturn,
+  ]);
 
   useEffect(() => {
     if (account.authLoading || account.billingStateLoading) return;
@@ -311,7 +318,9 @@ export const useFlowtranslateBilling = ({
 
       setCheckoutStartingSurface(surface);
       try {
-        const checkout = await startFlowtranslateProCheckout(account.accessToken);
+        const checkout = await startFlowtranslateProCheckout(
+          account.accessToken,
+        );
         analytics.track('checkout_started', proUpgradeAnalytics(surface));
         window.location.assign(checkout.checkoutUrl);
       } catch (error) {
@@ -383,6 +392,53 @@ export const useFlowtranslateBilling = ({
     setCheckoutReturn(null);
   }, [onReturnToResponder]);
 
+  const openAccountFromCheckoutReturn = useCallback(() => {
+    analytics.track(
+      'checkout_return_account_clicked',
+      billingAnalyticsProperties({
+        checkout_return_state: checkoutReturn?.state ?? 'unknown',
+      }),
+    );
+    openAccount();
+  }, [billingAnalyticsProperties, checkoutReturn?.state, openAccount]);
+
+  const retryCheckoutFromReturn = useCallback(() => {
+    const checkoutReturnState = checkoutReturn?.state ?? 'unknown';
+
+    analytics.track(
+      'checkout_return_retry_clicked',
+      billingAnalyticsProperties({
+        checkout_return_state: checkoutReturnState,
+        requires_account: !account.accessToken || account.isGuest,
+      }),
+    );
+
+    if (!account.accessToken || account.isGuest) {
+      analytics.track('account_connect_prompt_shown', {
+        surface: 'profile_preferences',
+        reason: 'checkout_return_retry_requires_account',
+        account_kind: account.accountKind,
+      });
+      openAccount();
+      return;
+    }
+
+    void startProCheckout('profile_preferences');
+  }, [
+    account.accessToken,
+    account.accountKind,
+    account.isGuest,
+    billingAnalyticsProperties,
+    checkoutReturn?.state,
+    openAccount,
+    startProCheckout,
+  ]);
+
+  const checkoutReturnRetryLabel =
+    !account.accessToken || account.isGuest
+      ? 'Conectar cuenta'
+      : 'Reintentar Pro';
+
   const quotaUpgradeLabel =
     account.accountKind !== 'permanent'
       ? 'Conectar cuenta'
@@ -423,13 +479,17 @@ export const useFlowtranslateBilling = ({
 
   return {
     checkoutReturn,
+    checkoutReturnRetryBusy: checkoutStartingSurface === 'profile_preferences',
+    checkoutReturnRetryLabel,
     connectAccountForPro,
     dismissCheckoutReturn,
     dismissUpgradePrompt,
+    openAccountFromCheckoutReturn,
     openQuotaSupport,
     quotaUpgradeBusy: checkoutStartingSurface === 'usage_limit',
     quotaUpgradeLabel,
     profileUpgradeActionLabel,
+    retryCheckoutFromReturn,
     returnToResponderFromCheckout,
     shouldShowLearningUpgradePrompt,
     shouldShowSavedHistoryUpgradePrompt,

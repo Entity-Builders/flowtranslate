@@ -9,6 +9,7 @@ import {
 } from '@eb-packages/flowtranslate-core';
 import {
   ArrowRight,
+  BookOpen,
   CheckCircle2,
   ChevronDown,
   ChevronUp,
@@ -21,7 +22,9 @@ import {
   Send,
   Sparkles,
   Square,
+  UserRound,
   Volume2,
+  X,
 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ExpressionBreakdownDetails } from './ExpressionBreakdownDetails';
@@ -76,6 +79,9 @@ type ExpressionWorkspaceProps = {
   onSelectPreset: (presetId: TranslationPresetId) => void;
   onRequestBreakdown: () => void;
   onRequestStudy?: () => void;
+  onOpenAccount?: () => void;
+  onOpenLearning?: () => void;
+  postCopyAccountLabel?: string;
   onTranslateToSpanish: () => void;
   onQuotaUpgrade?: () => void;
   onQuotaSupport?: () => void;
@@ -123,6 +129,126 @@ const formatQuotaResetDate = (resetAt?: string) => {
     month: 'long',
     day: 'numeric',
   }).format(new Date(resetAt));
+};
+
+const USAGE_PIP_COUNT = 5;
+
+const getUsageSummary = (usage?: UsageSnapshot | null) => {
+  if (!usage || usage.monthlyQuota <= 0) return null;
+
+  const quota = Math.max(0, usage.monthlyQuota);
+  const used = Math.max(0, Math.min(usage.usedThisMonth, quota));
+  const remaining = Math.max(0, usage.remainingThisMonth);
+  const usedRatio = quota > 0 ? used / quota : 0;
+  const usedPips =
+    remaining <= 0
+      ? USAGE_PIP_COUNT
+      : used <= 0
+        ? 0
+      : Math.min(
+          USAGE_PIP_COUNT,
+          Math.max(1, Math.ceil(usedRatio * USAGE_PIP_COUNT)),
+        );
+
+  return {
+    label: `Quedan ${remaining.toLocaleString()} de ${quota.toLocaleString()} creditos`,
+    usedPips,
+  };
+};
+
+const UsagePips = ({ usage }: { usage?: UsageSnapshot | null }) => {
+  const summary = getUsageSummary(usage);
+  if (!summary) return null;
+
+  return (
+    <div
+      className='inline-flex h-10 min-w-0 items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 text-xs font-black text-slate-600'
+      aria-label={`Uso de IA: ${summary.label}`}
+      title={`Uso de IA: ${summary.label}`}
+    >
+      <span className='hidden truncate min-[420px]:inline'>
+        {summary.label}
+      </span>
+      <span className='inline-flex items-center gap-1' aria-hidden='true'>
+        {Array.from({ length: USAGE_PIP_COUNT }).map((_, index) => (
+          <span
+            key={index}
+            className={`h-1.5 w-4 rounded-full ${
+              index < summary.usedPips ? 'bg-emerald-500' : 'bg-slate-200'
+            }`}
+          />
+        ))}
+      </span>
+    </div>
+  );
+};
+
+const PostCopyNudge = ({
+  accountLabel = 'Crear cuenta gratis',
+  compact = false,
+  onDismiss,
+  onOpenAccount,
+  onOpenLearning,
+}: {
+  accountLabel?: string;
+  compact?: boolean;
+  onDismiss: () => void;
+  onOpenAccount?: () => void;
+  onOpenLearning?: () => void;
+}) => {
+  if (!onOpenAccount && !onOpenLearning) return null;
+
+  return (
+    <div
+      className={`relative rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-950 ${
+        compact ? 'p-3 pr-9' : 'p-4 pr-10'
+      }`}
+    >
+      <button
+        type='button'
+        onClick={onDismiss}
+        className='absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-md text-emerald-700 transition-colors hover:bg-emerald-100 hover:text-emerald-950'
+        aria-label='Cerrar sugerencia post-copy'
+        title='Cerrar'
+      >
+        <X size={15} />
+      </button>
+      <div className='flex min-w-0 gap-3'>
+        <div className='mt-0.5 hidden h-9 w-9 shrink-0 items-center justify-center rounded-md bg-white text-emerald-700 shadow-sm ring-1 ring-emerald-200 sm:flex'>
+          <Sparkles size={18} />
+        </div>
+        <div className='min-w-0'>
+          <p className='text-sm font-black'>Respuesta copiada.</p>
+          <p className='mt-1 text-sm font-semibold leading-5 text-emerald-900'>
+            Si esta respuesta te sirvio, llevala a Aprender o guardala con una
+            cuenta para reutilizarla despues.
+          </p>
+          <div className='mt-3 flex flex-wrap items-center gap-2'>
+            {onOpenLearning ? (
+              <button
+                type='button'
+                onClick={onOpenLearning}
+                className='inline-flex h-9 items-center justify-center gap-2 rounded-md bg-emerald-700 px-3 text-xs font-black text-white transition-colors hover:bg-emerald-600'
+              >
+                <BookOpen size={15} />
+                Guardar en Aprender
+              </button>
+            ) : null}
+            {onOpenAccount ? (
+              <button
+                type='button'
+                onClick={onOpenAccount}
+                className='inline-flex h-9 items-center justify-center gap-2 rounded-md border border-emerald-300 bg-white px-3 text-xs font-black text-emerald-900 transition-colors hover:bg-emerald-100'
+              >
+                <UserRound size={15} />
+                {accountLabel}
+              </button>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 };
 
 const QuotaExhaustedState = ({
@@ -185,7 +311,9 @@ const QuotaExhaustedState = ({
             disabled={!onUpgrade || upgradeBusy}
             className='inline-flex h-11 items-center justify-center gap-2 rounded-md bg-slate-950 px-4 text-sm font-black text-white transition-colors hover:bg-slate-800 disabled:bg-slate-300'
           >
-            {upgradeBusy ? <Loader2 size={16} className='animate-spin' /> : null}
+            {upgradeBusy ? (
+              <Loader2 size={16} className='animate-spin' />
+            ) : null}
             {upgradeLabel}
             {!upgradeBusy ? <ArrowRight size={16} /> : null}
           </button>
@@ -271,6 +399,9 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
     onSelectPreset,
     onRequestBreakdown,
     onRequestStudy,
+    onOpenAccount,
+    onOpenLearning,
+    postCopyAccountLabel = 'Crear cuenta gratis',
     onTranslateToSpanish,
     onQuotaUpgrade,
     onQuotaSupport,
@@ -279,6 +410,7 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
   const [isBreakdownOpen, setIsBreakdownOpen] = useState(false);
   const [isMobileResultOpen, setIsMobileResultOpen] = useState(false);
   const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
+  const [showPostCopyNudge, setShowPostCopyNudge] = useState(false);
   const inputTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const previousBreakdownKeyRef = useRef('');
   const previousResultTextRef = useRef('');
@@ -292,8 +424,10 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
     status === 'auth' ||
     status === 'quota' ||
     status === 'offline';
-  const shouldShowMobileResultSheet = isTranslating || hasResult || hasAttentionState;
-  const shouldEmphasizeResponse = hasResult || isTranslating || hasAttentionState;
+  const shouldShowMobileResultSheet =
+    isTranslating || hasResult || hasAttentionState;
+  const shouldEmphasizeResponse =
+    hasResult || isTranslating || hasAttentionState;
   const shouldShowLaunchPromise =
     !hasSeenResponderPromise &&
     !trimmedInputText &&
@@ -322,6 +456,12 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
         ? statusText || 'Listo para mandar'
         : 'Listo para mandar';
   const responseLanguageLabel = targetLanguage === 'en' ? 'ingles' : 'espanol';
+  const shouldShowPostCopyNudge =
+    showPostCopyNudge &&
+    hasResult &&
+    !isTranslating &&
+    status !== 'quota' &&
+    (Boolean(onOpenAccount) || Boolean(onOpenLearning));
 
   const handleSuggestionSelect = (suggestion: string) => {
     onInputChange(suggestion);
@@ -334,14 +474,20 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
     if (!trimmedResultText) {
       previousResultTextRef.current = '';
       setIsMobileResultOpen(false);
+      setShowPostCopyNudge(false);
       return;
     }
 
     if (previousResultTextRef.current !== trimmedResultText) {
       previousResultTextRef.current = trimmedResultText;
-      setIsMobileResultOpen(true);
+      setIsMobileResultOpen(false);
+      setShowPostCopyNudge(false);
     }
   }, [trimmedResultText]);
+
+  useEffect(() => {
+    if (copiedResult && hasResult) setShowPostCopyNudge(true);
+  }, [copiedResult, hasResult]);
 
   useEffect(() => {
     if (status === 'typing') setIsMobileResultOpen(false);
@@ -354,8 +500,8 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
     }
 
     const intervalId = window.setInterval(() => {
-      setLoadingMessageIndex((current) =>
-        (current + 1) % translationLoadingMessages.length,
+      setLoadingMessageIndex(
+        (current) => (current + 1) % translationLoadingMessages.length,
       );
     }, 1200);
 
@@ -416,6 +562,49 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
     [requestCurrentBreakdown],
   );
 
+  const mobileBreakdownSummary = isBreakdownOpen ? (
+    <div className='rounded-md border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700'>
+      {breakdownStatus === 'enriching' ? (
+        <div className='flex items-center gap-2 font-bold text-slate-500'>
+          <Loader2 size={16} className='animate-spin text-emerald-600' />
+          Preparando desglose...
+        </div>
+      ) : breakdownStatus === 'error' ? (
+        <p className='font-semibold text-rose-700'>
+          No pudimos preparar el desglose ahora. Proba abrirlo de nuevo en un
+          momento.
+        </p>
+      ) : breakdown ? (
+        <div className='space-y-3'>
+          {breakdown.tense ? (
+            <div>
+              <div className='text-xs font-black uppercase text-slate-400'>
+                Tiempo
+              </div>
+              <p className='mt-1 font-semibold text-slate-900'>
+                {breakdown.tense}
+              </p>
+            </div>
+          ) : null}
+          {breakdown.whyThisWorks ? (
+            <p className='leading-6 text-slate-700'>{breakdown.whyThisWorks}</p>
+          ) : null}
+          {breakdown.feedback.length ? (
+            <ul className='space-y-2 leading-6'>
+              {breakdown.feedback.slice(0, 2).map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : (
+        <p className='font-semibold text-slate-500'>
+          Abrilo para preparar un desglose completo.
+        </p>
+      )}
+    </div>
+  ) : null;
+
   return (
     <section className='mx-auto flex w-full min-w-0 max-w-5xl flex-1 flex-col gap-5 overflow-x-hidden py-2 sm:gap-6 sm:py-5'>
       {shouldShowLaunchPromise ? (
@@ -463,8 +652,16 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
                     ? 'text-slate-500 hover:bg-slate-100 hover:text-slate-950'
                     : 'text-slate-300'
                 }`}
-                aria-label={speakingLanguage === sourceLanguage ? 'Detener audio' : 'Escuchar mensaje'}
-                title={speakingLanguage === sourceLanguage ? 'Detener audio' : 'Escuchar mensaje'}
+                aria-label={
+                  speakingLanguage === sourceLanguage
+                    ? 'Detener audio'
+                    : 'Escuchar mensaje'
+                }
+                title={
+                  speakingLanguage === sourceLanguage
+                    ? 'Detener audio'
+                    : 'Escuchar mensaje'
+                }
               >
                 {speakingLanguage === sourceLanguage ? (
                   <Square size={16} />
@@ -492,7 +689,11 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
                     : 'Iniciar dictado'
                   : 'Dictado por microfono no disponible'
               }
-              title={canDictate ? 'Dictado por microfono' : dictationUnavailableReason}
+              title={
+                canDictate
+                  ? 'Dictado por microfono'
+                  : dictationUnavailableReason
+              }
             >
               {canDictate ? <Mic size={18} /> : <MicOff size={18} />}
             </button>
@@ -519,6 +720,8 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
                 Pasar a espanol
               </button>
             ) : null}
+
+            <UsagePips usage={quotaUsage} />
           </div>
 
           <button
@@ -566,7 +769,9 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
         {shouldEmphasizeResponse ? (
           <div className='flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between'>
             <div className='min-w-0'>
-              <div className={`inline-flex items-center gap-2 text-sm font-black ${tone.text}`}>
+              <div
+                className={`inline-flex items-center gap-2 text-sm font-black ${tone.text}`}
+              >
                 {isTranslating ? (
                   <Loader2 size={17} className='animate-spin' />
                 ) : (
@@ -590,8 +795,16 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
                       ? 'text-slate-500 hover:bg-slate-100 hover:text-slate-950'
                       : 'text-slate-300'
                   }`}
-                  title={speakingLanguage === targetLanguage ? 'Detener audio' : 'Audio'}
-                  aria-label={speakingLanguage === targetLanguage ? 'Detener audio' : 'Audio'}
+                  title={
+                    speakingLanguage === targetLanguage
+                      ? 'Detener audio'
+                      : 'Audio'
+                  }
+                  aria-label={
+                    speakingLanguage === targetLanguage
+                      ? 'Detener audio'
+                      : 'Audio'
+                  }
                 >
                   {speakingLanguage === targetLanguage ? (
                     <Square size={16} />
@@ -631,7 +844,9 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
               </div>
             </div>
           ) : hasAttentionState ? (
-            <div className={`inline-flex rounded-md px-3 py-2 text-sm font-bold ring-1 ${tone.surface}`}>
+            <div
+              className={`inline-flex rounded-md px-3 py-2 text-sm font-bold ring-1 ${tone.surface}`}
+            >
               {readyText}
             </div>
           ) : (
@@ -643,36 +858,49 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
 
         {shouldEmphasizeResponse && status !== 'quota' ? (
           <div className='mt-7 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
-          <button
-            type='button'
-            onClick={onCopyResult}
-            disabled={!hasResult}
-            className='inline-flex h-11 w-full items-center justify-center gap-2 rounded-md bg-emerald-600 px-4 text-sm font-black text-white transition-colors hover:bg-emerald-500 disabled:bg-slate-100 disabled:text-slate-400 sm:w-auto'
-            aria-label={copiedResult ? 'Respuesta copiada' : 'Copiar respuesta'}
-            title='Copiar respuesta'
-          >
-            <Copy size={17} />
-            {copiedResult ? 'Copiado' : 'Copiar'}
-          </button>
+            <button
+              type='button'
+              onClick={onCopyResult}
+              disabled={!hasResult}
+              className='inline-flex h-11 w-full items-center justify-center gap-2 rounded-md bg-emerald-600 px-4 text-sm font-black text-white transition-colors hover:bg-emerald-500 disabled:bg-slate-100 disabled:text-slate-400 sm:w-auto'
+              aria-label={
+                copiedResult ? 'Respuesta copiada' : 'Copiar respuesta'
+              }
+              title='Copiar respuesta'
+            >
+              <Copy size={17} />
+              {copiedResult ? 'Copiado' : 'Copiar'}
+            </button>
+          </div>
+        ) : null}
+
+        {shouldShowPostCopyNudge ? (
+          <div className='mt-4'>
+            <PostCopyNudge
+              accountLabel={postCopyAccountLabel}
+              onDismiss={() => setShowPostCopyNudge(false)}
+              onOpenAccount={onOpenAccount}
+              onOpenLearning={onOpenLearning}
+            />
           </div>
         ) : null}
 
         {shouldEmphasizeResponse && status !== 'quota' ? (
           <div className='mt-5 border-t border-slate-100 pt-1'>
-          <ExpressionBreakdownDetails
-            key={breakdownKey || 'empty-breakdown'}
-            breakdown={breakdown}
-            emptyDescription={
-              hasResult
-                ? 'Abrilo para preparar un desglose completo.'
-                : undefined
-            }
-            withTopBorder={false}
-            isEnriching={breakdownStatus === 'enriching'}
-            hasEnrichmentError={breakdownStatus === 'error'}
-            open={isBreakdownOpen}
-            onOpenChange={handleBreakdownOpenChange}
-          />
+            <ExpressionBreakdownDetails
+              key={breakdownKey || 'empty-breakdown'}
+              breakdown={breakdown}
+              emptyDescription={
+                hasResult
+                  ? 'Abrilo para preparar un desglose completo.'
+                  : undefined
+              }
+              withTopBorder={false}
+              isEnriching={breakdownStatus === 'enriching'}
+              hasEnrichmentError={breakdownStatus === 'error'}
+              open={isBreakdownOpen}
+              onOpenChange={handleBreakdownOpenChange}
+            />
           </div>
         ) : null}
 
@@ -699,23 +927,29 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
               aria-expanded={isMobileResultOpen}
             >
               <span className='min-w-0'>
-                <span className={`flex items-center gap-1.5 text-xs font-black ${tone.text}`}>
+                <span
+                  className={`flex items-center gap-1.5 text-xs font-black ${tone.text}`}
+                >
                   {isTranslating ? (
                     <Loader2 size={14} className='animate-spin' />
                   ) : (
                     <CheckCircle2 size={14} />
                   )}
-                  {isTranslating ? 'Preparando' : hasResult ? 'Listo para mandar' : readyText}
+                  {isTranslating
+                    ? 'Preparando'
+                    : hasResult
+                      ? 'Listo para mandar'
+                      : readyText}
                 </span>
-                {hasResult ? (
+                {hasResult && isMobileResultOpen ? (
                   <span className='mt-0.5 block text-sm font-bold text-slate-500'>
                     Respuesta en {responseLanguageLabel}
                   </span>
-                ) : (
+                ) : !hasResult ? (
                   <span className='mt-0.5 block truncate text-base font-black text-slate-950'>
                     {readyText}
                   </span>
-                )}
+                ) : null}
               </span>
               {isMobileResultOpen ? (
                 <ChevronDown size={18} className='shrink-0 text-slate-500' />
@@ -733,7 +967,10 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
                       aria-label='Preparando respuesta'
                     >
                       <div className='flex items-center gap-2 text-sm font-bold text-slate-500'>
-                        <Loader2 size={18} className='animate-spin text-emerald-600' />
+                        <Loader2
+                          size={18}
+                          className='animate-spin text-emerald-600'
+                        />
                         <span>{loadingStatusText}</span>
                       </div>
                       <div className='mt-5 space-y-2' aria-hidden='true'>
@@ -758,66 +995,163 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
                   )}
 
                   {status !== 'quota' ? (
-                  <div className='flex min-w-0 items-center gap-2 border-t border-slate-100 pt-3'>
-                    <button
-                      type='button'
-                      onClick={onCopyResult}
-                      disabled={!hasResult}
-                      className='inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-md bg-emerald-600 px-3 text-sm font-black text-white transition-colors hover:bg-emerald-500 disabled:bg-slate-100 disabled:text-slate-400'
-                    >
-                      <Copy size={16} />
-                      {copiedResult ? 'Copiado' : 'Copiar'}
-                    </button>
-                    {canListen ? (
-                      <button
-                        type='button'
-                        onClick={onListenResult}
-                        disabled={!hasResult}
-                        className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md transition-colors ${
-                          hasResult
-                            ? 'text-slate-500 hover:bg-slate-100 hover:text-slate-950'
-                            : 'text-slate-300'
-                        }`}
-                        title={speakingLanguage === targetLanguage ? 'Detener audio' : 'Audio'}
-                        aria-label={speakingLanguage === targetLanguage ? 'Detener audio' : 'Audio'}
-                      >
-                        {speakingLanguage === targetLanguage ? (
-                          <Square size={16} />
-                        ) : (
-                          <Volume2 size={17} />
-                        )}
-                      </button>
-                    ) : null}
-                  </div>
+                    <>
+                      <div className='flex min-w-0 items-center gap-2 border-t border-slate-100 pt-3'>
+                        <button
+                          type='button'
+                          onClick={onCopyResult}
+                          disabled={!hasResult}
+                          className='inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-md bg-emerald-600 px-3 text-sm font-black text-white transition-colors hover:bg-emerald-500 disabled:bg-slate-100 disabled:text-slate-400'
+                        >
+                          <Copy size={16} />
+                          {copiedResult ? 'Copiado' : 'Copiar'}
+                        </button>
+                        {canListen ? (
+                          <button
+                            type='button'
+                            onClick={onListenResult}
+                            disabled={!hasResult}
+                            className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md transition-colors ${
+                              hasResult
+                                ? 'text-slate-500 hover:bg-slate-100 hover:text-slate-950'
+                                : 'text-slate-300'
+                            }`}
+                            title={
+                              speakingLanguage === targetLanguage
+                                ? 'Detener audio'
+                                : 'Audio'
+                            }
+                            aria-label={
+                              speakingLanguage === targetLanguage
+                                ? 'Detener audio'
+                                : 'Audio'
+                            }
+                          >
+                            {speakingLanguage === targetLanguage ? (
+                              <Square size={16} />
+                            ) : (
+                              <Volume2 size={17} />
+                            )}
+                          </button>
+                        ) : null}
+                      </div>
+
+                      <div className='grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3'>
+                        {canOfferTranslateToSpanish ? (
+                          <button
+                            type='button'
+                            onClick={onTranslateToSpanish}
+                            disabled={isTranslating}
+                            className='inline-flex h-10 items-center justify-center gap-2 rounded-md border border-slate-200 px-3 text-sm font-bold text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-950 disabled:text-slate-300'
+                          >
+                            <Languages size={16} />
+                            Espanol
+                          </button>
+                        ) : null}
+                        <button
+                          type='button'
+                          onClick={() =>
+                            handleBreakdownOpenChange(!isBreakdownOpen)
+                          }
+                          disabled={!hasResult || isTranslating}
+                          className='inline-flex h-10 items-center justify-center gap-2 rounded-md border border-slate-200 px-3 text-sm font-bold text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-950 disabled:text-slate-300'
+                          aria-label={
+                            isBreakdownOpen
+                              ? 'Ocultar desglose movil'
+                              : 'Abrir desglose movil'
+                          }
+                        >
+                          <ChevronDown
+                            size={16}
+                            className={`transition-transform ${
+                              isBreakdownOpen ? 'rotate-180' : ''
+                            }`}
+                          />
+                          Desglose
+                        </button>
+                        <button
+                          type='button'
+                          onClick={onRequestStudy}
+                          disabled={
+                            !hasResult ||
+                            !translationRecordId ||
+                            !onRequestStudy
+                          }
+                          className='inline-flex h-10 items-center justify-center gap-2 rounded-md border border-slate-200 px-3 text-sm font-bold text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-950 disabled:text-slate-300'
+                        >
+                          <BookOpen size={16} />
+                          Estudiar
+                        </button>
+                      </div>
+
+                      {shouldShowPostCopyNudge ? (
+                        <PostCopyNudge
+                          accountLabel={postCopyAccountLabel}
+                          compact
+                          onDismiss={() => setShowPostCopyNudge(false)}
+                          onOpenAccount={onOpenAccount}
+                          onOpenLearning={onOpenLearning}
+                        />
+                      ) : null}
+
+                      {mobileBreakdownSummary}
+                    </>
                   ) : null}
                 </div>
               </div>
             ) : hasResult ? (
-              <div className='flex min-w-0 items-center justify-between gap-2 pb-2 pt-2'>
-                <p className='min-w-0 flex-1 truncate text-sm font-semibold text-slate-600'>
-                  {trimmedResultText}
-                </p>
-                <button
-                  type='button'
-                  onClick={onCopyResult}
-                  disabled={!hasResult}
-                  className='inline-flex h-9 shrink-0 items-center justify-center rounded-md bg-emerald-600 px-3 text-sm font-black text-white transition-colors hover:bg-emerald-500 disabled:bg-slate-100 disabled:text-slate-400'
-                >
-                  {copiedResult ? 'Copiado' : 'Copiar'}
-                </button>
-              </div>
+              <>
+                <div className='grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-3 pb-3 pt-2'>
+                  <div className='min-w-0'>
+                    <p className='line-clamp-2 min-w-0 break-words text-sm font-semibold leading-5 text-slate-700 [overflow-wrap:anywhere]'>
+                      {trimmedResultText}
+                    </p>
+                    <button
+                      type='button'
+                      onClick={() => setIsMobileResultOpen(true)}
+                      className='mt-1 inline-flex text-xs font-black text-blue-600 transition-colors hover:text-blue-700'
+                      aria-label='Ver respuesta completa'
+                      title='Ver respuesta completa'
+                    >
+                      Ver respuesta completa
+                    </button>
+                  </div>
+                  <button
+                    type='button'
+                    onClick={onCopyResult}
+                    disabled={!hasResult}
+                    className='inline-flex h-9 shrink-0 items-center justify-center rounded-md bg-emerald-600 px-4 text-sm font-black text-white transition-colors hover:bg-emerald-500 disabled:bg-slate-100 disabled:text-slate-400'
+                  >
+                    {copiedResult ? 'Copiado' : 'Copiar'}
+                  </button>
+                </div>
+                {shouldShowPostCopyNudge ? (
+                  <div className='pb-3'>
+                    <PostCopyNudge
+                      accountLabel={postCopyAccountLabel}
+                      compact
+                      onDismiss={() => setShowPostCopyNudge(false)}
+                      onOpenAccount={onOpenAccount}
+                      onOpenLearning={onOpenLearning}
+                    />
+                  </div>
+                ) : null}
+              </>
             ) : null}
 
-            {isMobileResultOpen && grammarInsight && hasResult && !isTranslating && (
-              <div className='px-4 pb-4'>
-                <GrammarInsightCard
-                  tense={grammarInsight.tense}
-                  structure={grammarInsight.structure}
-                  observation={grammarInsight.observation}
-                  onStudyClick={onRequestStudy}
-                />
-              </div>
-            )}
+            {isMobileResultOpen &&
+              grammarInsight &&
+              hasResult &&
+              !isTranslating && (
+                <div className='px-4 pb-4'>
+                  <GrammarInsightCard
+                    tense={grammarInsight.tense}
+                    structure={grammarInsight.structure}
+                    observation={grammarInsight.observation}
+                    onStudyClick={onRequestStudy}
+                  />
+                </div>
+              )}
           </div>
         </div>
       ) : null}

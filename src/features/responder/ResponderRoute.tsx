@@ -49,6 +49,7 @@ type ResponderRouteProps = {
   onListenInput: () => void;
   onListenResult: () => void;
   onOpenAccountFromPrompt: (reason?: string) => void;
+  onOpenLearning: () => void;
   onQuotaSupport: () => void;
   onQuotaUpgrade: () => void;
   onSelectPreset: (presetId: TranslationPresetId) => void;
@@ -86,6 +87,7 @@ export const ResponderRoute = ({
   onListenInput,
   onListenResult,
   onOpenAccountFromPrompt,
+  onOpenLearning,
   onQuotaSupport,
   onQuotaUpgrade,
   onSelectPreset,
@@ -146,6 +148,11 @@ export const ResponderRoute = ({
         if (record) onRequestStudy(record);
       }}
       onTranslateToSpanish={() => void translator.translateInputToSpanish()}
+      onOpenAccount={() => onOpenAccountFromPrompt('post_copy_nudge')}
+      onOpenLearning={onOpenLearning}
+      postCopyAccountLabel={
+        accountKind === 'guest' ? 'Crear cuenta gratis' : 'Ver perfil'
+      }
       onQuotaUpgrade={onQuotaUpgrade}
       onQuotaSupport={onQuotaSupport}
     />

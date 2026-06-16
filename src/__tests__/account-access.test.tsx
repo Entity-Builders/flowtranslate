@@ -1,4 +1,10 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const analyticsScreen = vi.hoisted(() => vi.fn());
@@ -19,7 +25,8 @@ const syncGuestAccount = vi.hoisted(() => vi.fn());
 const profileMaybeSingle = vi.hoisted(() => vi.fn());
 const profileUpdate = vi.hoisted(() => vi.fn());
 const entitlementMaybeSingle = vi.hoisted(() => vi.fn());
-let authStateCallback: ((event: string, session: unknown) => void) | null = null;
+let authStateCallback: ((event: string, session: unknown) => void) | null =
+  null;
 
 vi.mock('../services/analytics', () => ({
   analytics: {
@@ -28,7 +35,8 @@ vi.mock('../services/analytics', () => ({
     captureError: analyticsCaptureError,
     getFeatureFlag: analyticsGetFeatureFlag,
   },
-  safeCommercialAnalyticsProperties: (properties: Record<string, unknown>) => properties,
+  safeCommercialAnalyticsProperties: (properties: Record<string, unknown>) =>
+    properties,
 }));
 
 vi.mock('../services/translation-history', () => ({
@@ -58,7 +66,8 @@ vi.mock('../services/flowtranslate-api', () => ({
 
 vi.mock('../lib/supabase', () => ({
   isSupabaseConfigured: true,
-  getFlowtranslateFunctionUrl: () => 'http://localhost/functions/v1/flowtranslate-generate',
+  getFlowtranslateFunctionUrl: () =>
+    'http://localhost/functions/v1/flowtranslate-generate',
   supabase: {
     from: (table: string) => {
       if (table !== 'profiles' && table !== 'entitlements') {
@@ -127,14 +136,17 @@ describe('account access UI', () => {
     onAuthStateChange.mockImplementation((callback) => {
       authStateCallback = callback;
       return {
-      data: {
-        subscription: {
-          unsubscribe: vi.fn(),
+        data: {
+          subscription: {
+            unsubscribe: vi.fn(),
+          },
         },
-      },
       };
     });
-    signInAnonymously.mockResolvedValue({ data: { session: null }, error: null });
+    signInAnonymously.mockResolvedValue({
+      data: { session: null },
+      error: null,
+    });
     signInWithOAuth.mockResolvedValue({ error: null });
     signInWithOtp.mockResolvedValue({ error: null });
     linkIdentity.mockResolvedValue({ error: null });
@@ -183,7 +195,9 @@ describe('account access UI', () => {
     render(<App />);
 
     await waitFor(() => expect(signInAnonymously).toHaveBeenCalledTimes(1));
-    expect(screen.queryByRole('heading', { name: 'Cuenta' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: 'Cuenta' }),
+    ).not.toBeInTheDocument();
     expect(analyticsTrack).toHaveBeenCalledWith(
       'auth_guest_submitted',
       expect.objectContaining({
@@ -219,7 +233,9 @@ describe('account access UI', () => {
     render(<App />);
 
     expect(await screen.findByText('Invitado')).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Cuenta' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: 'Cuenta' }),
+    ).not.toBeInTheDocument();
     expect(analyticsTrack).toHaveBeenCalledWith(
       'guest_trial_started',
       expect.objectContaining({
@@ -249,13 +265,15 @@ describe('account access UI', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: /enviar codigo/i }));
 
-    await waitFor(() => expect(signInWithOtp).toHaveBeenCalledWith({
-      email: 'juan@example.com',
-      options: {
-        emailRedirectTo: window.location.origin,
-        data: { app_name: 'flowtranslate' },
-      },
-    }));
+    await waitFor(() =>
+      expect(signInWithOtp).toHaveBeenCalledWith({
+        email: 'juan@example.com',
+        options: {
+          emailRedirectTo: window.location.origin,
+          data: { app_name: 'flowtranslate' },
+        },
+      }),
+    );
     expect(await screen.findByLabelText(/codigo/i)).toBeInTheDocument();
   });
 
@@ -268,12 +286,14 @@ describe('account access UI', () => {
       await screen.findByRole('button', { name: /continuar con google/i }),
     );
 
-    await waitFor(() => expect(signInWithOAuth).toHaveBeenCalledWith({
-      provider: 'google',
-      options: {
-        redirectTo: window.location.origin,
-      },
-    }));
+    await waitFor(() =>
+      expect(signInWithOAuth).toHaveBeenCalledWith({
+        provider: 'google',
+        options: {
+          redirectTo: window.location.origin,
+        },
+      }),
+    );
 
     fireEvent.click(screen.getByRole('button', { name: /probar sin cuenta/i }));
 
@@ -299,12 +319,14 @@ describe('account access UI', () => {
       await screen.findByRole('button', { name: /conectar con google/i }),
     );
 
-    await waitFor(() => expect(linkIdentity).toHaveBeenCalledWith({
-      provider: 'google',
-      options: {
-        redirectTo: window.location.origin,
-      },
-    }));
+    await waitFor(() =>
+      expect(linkIdentity).toHaveBeenCalledWith({
+        provider: 'google',
+        options: {
+          redirectTo: window.location.origin,
+        },
+      }),
+    );
     expect(signOut).not.toHaveBeenCalled();
     expect(signInWithOAuth).not.toHaveBeenCalled();
     expect(analyticsTrack).toHaveBeenCalledWith(
@@ -332,13 +354,52 @@ describe('account access UI', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: /enviar codigo/i }));
 
-    await waitFor(() => expect(signInWithOtp).toHaveBeenCalledWith({
-      email: 'juan@example.com',
-      options: {
-        emailRedirectTo: window.location.origin,
-        data: { app_name: 'flowtranslate' },
-      },
-    }));
+    await waitFor(() =>
+      expect(signInWithOtp).toHaveBeenCalledWith({
+        email: 'juan@example.com',
+        options: {
+          emailRedirectTo: window.location.origin,
+          data: { app_name: 'flowtranslate' },
+        },
+      }),
+    );
+  });
+
+  it('frames guest account value before permanent methods and lets users continue as guest', async () => {
+    getSession.mockResolvedValue({ data: { session: guestSession } });
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByTitle('Cuenta'));
+
+    expect(
+      await screen.findByText('Guarda tus mejores respuestas'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/historial listo para reutilizar/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/learning personal desde tus mensajes reales/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/progreso y pro quedan ligados/i),
+    ).toBeInTheDocument();
+
+    const bodyText = document.body.textContent || '';
+    expect(bodyText.indexOf('Guarda tus mejores respuestas')).toBeLessThan(
+      bodyText.indexOf('Email'),
+    );
+    expect(
+      screen.queryByRole('button', { name: /cerrar sesion/i }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole('button', { name: /seguir como invitado/i }),
+    );
+    expect(
+      screen.queryByRole('heading', { name: 'Cuenta' }),
+    ).not.toBeInTheDocument();
+    expect(signOut).not.toHaveBeenCalled();
   });
 
   it('shows a permanent profile editor and saves context explicitly', async () => {
@@ -371,9 +432,7 @@ describe('account access UI', () => {
 
     fireEvent.click(screen.getByTitle('Perfil'));
 
-    expect(
-      await screen.findByText(/perfil profesional/i),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/perfil profesional/i)).toBeInTheDocument();
 
     const profileField = screen.getByLabelText(/contexto permanente/i);
     expect(profileField).toHaveValue('Soy PM en una agencia.');
@@ -477,9 +536,9 @@ describe('account access UI', () => {
         redirectTo: window.location.origin,
       },
     });
-    expect(localStorage.getItem('flowtranslate_pending_guest_sync_user_id')).toBe(
-      'guest-user',
-    );
+    expect(
+      localStorage.getItem('flowtranslate_pending_guest_sync_user_id'),
+    ).toBe('guest-user');
     expect(analyticsTrack).toHaveBeenCalledWith(
       'auth_guest_sync_requested',
       expect.objectContaining({
@@ -490,7 +549,10 @@ describe('account access UI', () => {
   });
 
   it('syncs pending guest history after returning as a permanent account', async () => {
-    localStorage.setItem('flowtranslate_pending_guest_sync_user_id', 'guest-user');
+    localStorage.setItem(
+      'flowtranslate_pending_guest_sync_user_id',
+      'guest-user',
+    );
     getSession.mockResolvedValue({ data: { session: permanentSession } });
 
     render(<App />);
@@ -505,9 +567,9 @@ describe('account access UI', () => {
     expect(
       await screen.findByText(/historial temporal sincronizado/i),
     ).toBeInTheDocument();
-    expect(localStorage.getItem('flowtranslate_pending_guest_sync_user_id')).toBe(
-      null,
-    );
+    expect(
+      localStorage.getItem('flowtranslate_pending_guest_sync_user_id'),
+    ).toBe(null);
     expect(analyticsTrack).toHaveBeenCalledWith(
       'auth_guest_sync_succeeded',
       expect.objectContaining({
@@ -518,7 +580,10 @@ describe('account access UI', () => {
   });
 
   it('can sync the same anonymous session again after returning to guest mode', async () => {
-    localStorage.setItem('flowtranslate_pending_guest_sync_user_id', 'guest-user');
+    localStorage.setItem(
+      'flowtranslate_pending_guest_sync_user_id',
+      'guest-user',
+    );
     getSession.mockResolvedValue({ data: { session: permanentSession } });
 
     render(<App />);
@@ -538,7 +603,10 @@ describe('account access UI', () => {
       screen.queryByText(/historial temporal sincronizado/i),
     ).not.toBeInTheDocument();
 
-    localStorage.setItem('flowtranslate_pending_guest_sync_user_id', 'guest-user');
+    localStorage.setItem(
+      'flowtranslate_pending_guest_sync_user_id',
+      'guest-user',
+    );
 
     act(() => authStateCallback?.('SIGNED_IN', permanentSession));
 
@@ -554,7 +622,9 @@ describe('account access UI', () => {
     render(<App />);
 
     await screen.findByText('Invitado');
-    expect(screen.queryByText(/Guarda tus respuestas/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/Guarda tus respuestas/i),
+    ).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText('Mensaje o idea'), {
       target: { value: 'me pasas el update?' },
@@ -562,14 +632,18 @@ describe('account access UI', () => {
     fireEvent.click(screen.getByTitle('Generar respuesta'));
 
     await waitFor(() =>
-      expect(screen.getAllByText('Hi, can you send me the update?').length).toBeGreaterThan(0),
+      expect(
+        screen.getAllByText('Hi, can you send me the update?').length,
+      ).toBeGreaterThan(0),
     );
 
     const resultCopyButton = () => screen.getByTitle('Copiar respuesta');
     fireEvent.click(resultCopyButton());
     fireEvent.click(resultCopyButton());
 
-    expect(await screen.findByText(/Guarda tus respuestas/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Guarda tus respuestas/i),
+    ).toBeInTheDocument();
     expect(analyticsTrack).toHaveBeenCalledWith(
       'account_connect_prompt_shown',
       expect.objectContaining({
@@ -601,7 +675,9 @@ describe('account access UI', () => {
     fireEvent.click(screen.getByTitle('Generar respuesta'));
 
     await waitFor(() =>
-      expect(screen.getAllByText('Hi, can you send me the update?').length).toBeGreaterThan(0),
+      expect(
+        screen.getAllByText('Hi, can you send me the update?').length,
+      ).toBeGreaterThan(0),
     );
 
     const resultCopyButton = () => screen.getByTitle('Copiar respuesta');
@@ -609,17 +685,15 @@ describe('account access UI', () => {
     fireEvent.click(resultCopyButton());
 
     expect(await screen.findByText(/Conecta una cuenta/i)).toBeInTheDocument();
-    expect(
-      screen.queryByText(/ARS 4\.999\/mes/i),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByText(/FlowTranslate Pro/i),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/ARS 4\.999\/mes/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/FlowTranslate Pro/i)).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /guardar historial/i }));
 
     expect(startFlowtranslateProCheckout).not.toHaveBeenCalled();
-    expect(await screen.findByRole('heading', { name: 'Cuenta' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'Cuenta' }),
+    ).toBeInTheDocument();
     expect(analyticsTrack).toHaveBeenCalledWith(
       'account_connect_prompt_clicked',
       expect.objectContaining({
@@ -679,7 +753,9 @@ describe('account access UI', () => {
     fireEvent.click(screen.getByRole('button', { name: /pasar a pro/i }));
 
     await waitFor(() =>
-      expect(startFlowtranslateProCheckout).toHaveBeenCalledWith('permanent-token'),
+      expect(startFlowtranslateProCheckout).toHaveBeenCalledWith(
+        'permanent-token',
+      ),
     );
     await waitFor(() =>
       expect(window.location.hash).toBe('#mercado-pago-checkout'),
@@ -695,7 +771,9 @@ describe('account access UI', () => {
     const checkoutStartedCall = analyticsTrack.mock.calls.find(
       ([event]) => event === 'checkout_started',
     );
-    expect(JSON.stringify(checkoutStartedCall)).not.toContain('juan@example.com');
+    expect(JSON.stringify(checkoutStartedCall)).not.toContain(
+      'juan@example.com',
+    );
   });
 
   it('shows active Pro entitlement state in account and quota UI', async () => {
@@ -729,9 +807,15 @@ describe('account access UI', () => {
     expect(await screen.findByText('Pro')).toBeInTheDocument();
     fireEvent.click(screen.getByTitle('FlowTranslate Pro'));
 
-    expect((await screen.findAllByText('FlowTranslate Pro')).length).toBeGreaterThan(0);
-    expect(screen.getByText(/pro activo para mas respuestas/i)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /pasar a pro/i })).not.toBeInTheDocument();
+    expect(
+      (await screen.findAllByText('FlowTranslate Pro')).length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getByText(/pro activo para mas respuestas/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /pasar a pro/i }),
+    ).not.toBeInTheDocument();
 
     await waitFor(() =>
       expect(analyticsTrack).toHaveBeenCalledWith(
@@ -814,10 +898,10 @@ describe('account access UI', () => {
     expect(await screen.findByText('Perfil')).toBeInTheDocument();
     fireEvent.click(screen.getByTitle('Perfil'));
 
-    expect((await screen.findAllByText('Pro en proceso')).length).toBeGreaterThan(0);
     expect(
-      screen.getByText(/podes reintentar checkout/i),
-    ).toBeInTheDocument();
+      (await screen.findAllByText('Pro en proceso')).length,
+    ).toBeGreaterThan(0);
+    expect(screen.getByText(/podes reintentar checkout/i)).toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: /reintentar checkout/i }),
     ).toBeInTheDocument();
@@ -833,7 +917,9 @@ describe('account access UI', () => {
 
     render(<App />);
 
-    expect(await screen.findByText(/volviste de mercado pago/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/volviste de mercado pago/i),
+    ).toBeInTheDocument();
     expect(
       screen.getByText(/pro se activa cuando mercado pago confirma/i),
     ).toBeInTheDocument();
@@ -880,11 +966,11 @@ describe('account access UI', () => {
       ],
       [
         '/pro/checkout/return?status=rejected',
-        /no pudimos confirmar el pago/i,
+        /pro no se activa hasta que mercado pago lo apruebe/i,
       ],
       [
         '/pro/checkout/return?status=cancelled',
-        /el checkout fue cancelado/i,
+        /el checkout se cerro sin activar pro/i,
       ],
     ] as const;
 
@@ -894,5 +980,99 @@ describe('account access UI', () => {
       expect(await screen.findByText(copy)).toBeInTheDocument();
       unmount();
     }
+  });
+
+  it('routes failed checkout retry to account access for guests without starting provider checkout', async () => {
+    window.history.pushState(
+      {},
+      '',
+      '/pro/checkout/return?status=rejected&payment_id=pay_secret&external_reference=entitybuilders:flowtranslate:pro:checkout_secret',
+    );
+    getSession.mockResolvedValue({ data: { session: guestSession } });
+
+    render(<App />);
+
+    expect(
+      await screen.findByText(
+        /pro no se activa hasta que mercado pago lo apruebe/i,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/pay_secret/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/checkout_secret/i)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /conectar cuenta/i }));
+
+    expect(startFlowtranslateProCheckout).not.toHaveBeenCalled();
+    expect(
+      await screen.findByText('Guarda tus mejores respuestas'),
+    ).toBeInTheDocument();
+    expect(analyticsTrack).toHaveBeenCalledWith(
+      'account_connect_prompt_shown',
+      expect.objectContaining({
+        reason: 'checkout_return_retry_requires_account',
+        account_kind: 'guest',
+      }),
+    );
+  });
+
+  it('lets permanent accounts retry Pro from a failed checkout return', async () => {
+    window.history.pushState({}, '', '/pro/checkout/return?status=rejected');
+    getSession.mockResolvedValue({ data: { session: permanentSession } });
+    profileMaybeSingle.mockResolvedValue({
+      data: {
+        user_id: 'permanent-user',
+        email: 'juan@example.com',
+        global_context: '',
+        current_streak: 0,
+        last_study_date: null,
+      },
+      error: null,
+    });
+
+    render(<App />);
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: /reintentar pro/i }),
+    );
+
+    await waitFor(() =>
+      expect(startFlowtranslateProCheckout).toHaveBeenCalledWith(
+        'permanent-token',
+      ),
+    );
+    expect(analyticsTrack).toHaveBeenCalledWith(
+      'checkout_return_retry_clicked',
+      expect.objectContaining({
+        checkout_return_state: 'failed',
+        requires_account: false,
+      }),
+    );
+  });
+
+  it('opens account review from cancelled checkout return recovery', async () => {
+    window.history.pushState({}, '', '/pro/checkout/return?status=cancelled');
+    getSession.mockResolvedValue({ data: { session: permanentSession } });
+    profileMaybeSingle.mockResolvedValue({
+      data: {
+        user_id: 'permanent-user',
+        email: 'juan@example.com',
+        global_context: '',
+        current_streak: 0,
+        last_study_date: null,
+      },
+      error: null,
+    });
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /ver cuenta/i }));
+
+    expect(await screen.findByText(/perfil profesional/i)).toBeInTheDocument();
+    expect(analyticsTrack).toHaveBeenCalledWith(
+      'checkout_return_account_clicked',
+      expect.objectContaining({
+        checkout_return_state: 'cancelled',
+      }),
+    );
   });
 });

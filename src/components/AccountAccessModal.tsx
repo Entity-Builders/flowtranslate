@@ -1,8 +1,7 @@
 import type { ReactNode } from 'react';
-import {
-  AccountAccessModal as SharedAccountAccessModal,
-} from '@eb-packages/auth-ui-web';
+import { AccountAccessModal as SharedAccountAccessModal } from '@eb-packages/auth-ui-web';
 import type { UsageSnapshot } from '@eb-packages/flowtranslate-core';
+import { EbButton } from '@eb-packages/ui-web';
 import {
   CheckCircle2,
   Clock3,
@@ -42,8 +41,7 @@ const billingNoticeCopy: Record<
 > = {
   guest: {
     label: 'Guarda tu progreso',
-    body:
-      'Conecta una cuenta para conservar historial y Learning.',
+    body: 'Conecta una cuenta para conservar historial y Learning.',
     toneClass: 'border-slate-200 bg-slate-50 text-slate-700',
     Icon: UserRound,
   },
@@ -55,8 +53,7 @@ const billingNoticeCopy: Record<
   },
   pro_pending: {
     label: 'Pro en proceso',
-    body:
-      'Estamos confirmando tu acceso Pro. Podes reintentar checkout.',
+    body: 'Estamos confirmando tu acceso Pro. Podes reintentar checkout.',
     toneClass: 'border-amber-200 bg-amber-50 text-amber-800',
     Icon: Clock3,
   },
@@ -68,15 +65,13 @@ const billingNoticeCopy: Record<
   },
   pro_failed: {
     label: 'Pago no confirmado',
-    body:
-      'No pudimos confirmar el pago. Podes reintentar checkout desde esta cuenta.',
+    body: 'No pudimos confirmar el pago. Podes reintentar checkout desde esta cuenta.',
     toneClass: 'border-rose-200 bg-rose-50 text-rose-800',
     Icon: XCircle,
   },
   pro_cancelled: {
     label: 'Pro cancelado',
-    body:
-      'Pro no esta activo. Reactiva checkout si queres seguir.',
+    body: 'Pro no esta activo. Reactiva checkout si queres seguir.',
     toneClass: 'border-slate-200 bg-white text-slate-700',
     Icon: XCircle,
   },
@@ -87,20 +82,29 @@ const BillingNotice = ({ account }: { account: FlowtranslateAccount }) => {
   const Icon = copy.Icon;
 
   return (
-    <div className={`flex gap-2 rounded-md border p-3 text-sm ${copy.toneClass}`}>
+    <div
+      className={`flex gap-2 rounded-md border p-3 text-sm ${copy.toneClass}`}
+    >
       <Icon size={17} className='mt-0.5 shrink-0' />
       <div className='min-w-0'>
         <div className='font-black'>{copy.label}</div>
         <p className='mt-1 leading-5'>{copy.body}</p>
         {account.billingState.requiresSupport ? (
           <p className='mt-1 text-xs font-semibold'>
-            Si pagaste y no aparece activo, revisamos el caso manualmente en 24-48h.
+            Si pagaste y no aparece activo, revisamos el caso manualmente en
+            24-48h.
           </p>
         ) : null}
       </div>
     </div>
   );
 };
+
+const guestValueItems = [
+  'Historial listo para reutilizar tus mejores respuestas.',
+  'Learning personal desde tus mensajes reales.',
+  'Progreso y Pro quedan ligados a tu cuenta.',
+];
 
 export const AccountAccessModal = ({
   account,
@@ -127,14 +131,16 @@ export const AccountAccessModal = ({
             </div>
           ) : null}
           {account.currentStreak > 0 && (
-          <div className='flex shrink-0 items-center gap-1.5 text-sm font-semibold text-orange-600'>
-            <Flame size={16} />
-            {account.currentStreak} dias seguidos
-          </div>
+            <div className='flex shrink-0 items-center gap-1.5 text-sm font-semibold text-orange-600'>
+              <Flame size={16} />
+              {account.currentStreak} dias seguidos
+            </div>
           )}
         </div>
       ) : null}
-      {account.billingState.id !== 'free' ? <BillingNotice account={account} /> : null}
+      {account.billingState.id !== 'free' ? (
+        <BillingNotice account={account} />
+      ) : null}
       <QuotaStatus
         usage={usage}
         compact
@@ -183,7 +189,11 @@ export const AccountAccessModal = ({
             }
             className='inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-md bg-slate-950 px-3 text-sm font-bold text-white hover:bg-slate-800 disabled:bg-slate-100 disabled:text-slate-400'
           >
-            {profileContextSaving ? <CheckCircle2 size={16} /> : <Save size={16} />}
+            {profileContextSaving ? (
+              <CheckCircle2 size={16} />
+            ) : (
+              <Save size={16} />
+            )}
             {profileContextSaving ? 'Guardando' : 'Guardar perfil'}
           </button>
         </div>
@@ -195,26 +205,57 @@ export const AccountAccessModal = ({
     </>
   ) : null;
 
-  const guestContent = account.canSyncExistingGoogleAccount ? (
-    <div className='space-y-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900'>
-      <div className='flex items-start gap-2'>
-        <Link2 size={17} className='mt-0.5 shrink-0' />
-        <div className='min-w-0'>
-          <div className='font-black'>Ese Google ya tiene cuenta</div>
-          <p className='mt-1 leading-5'>
-            Podes entrar con esa cuenta y traer tu historial temporal de esta sesion.
-          </p>
+  const guestContent = account.isGuest ? (
+    <div className='space-y-3'>
+      <div className='rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-950'>
+        <div className='flex items-start gap-2'>
+          <Save size={17} className='mt-0.5 shrink-0 text-emerald-700' />
+          <div className='min-w-0'>
+            <div className='font-black'>Guarda tus mejores respuestas</div>
+            <p className='mt-1 leading-5'>
+              Conecta una cuenta para que FlowTranslate recuerde lo que ya te
+              sirvio y lo use como base para practicar mejor.
+            </p>
+          </div>
         </div>
+        <ul className='mt-3 space-y-2'>
+          {guestValueItems.map((item) => (
+            <li key={item} className='flex gap-2 leading-5'>
+              <CheckCircle2
+                size={15}
+                className='mt-0.5 shrink-0 text-emerald-700'
+              />
+              <span>{item}</span>
+            </li>
+          ))}
+        </ul>
       </div>
-      <button
-        type='button'
-        onClick={() => void account.syncExistingGoogleAccount()}
-        disabled={account.busy || account.guestSyncLoading}
-        className='inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-slate-950 px-3 text-sm font-bold text-white hover:bg-slate-800 disabled:bg-slate-300'
-      >
-        <Link2 size={16} />
-        {account.guestSyncLoading ? 'Sincronizando' : 'Entrar y sincronizar'}
-      </button>
+
+      {account.canSyncExistingGoogleAccount ? (
+        <div className='space-y-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900'>
+          <div className='flex items-start gap-2'>
+            <Link2 size={17} className='mt-0.5 shrink-0' />
+            <div className='min-w-0'>
+              <div className='font-black'>Ese Google ya tiene cuenta</div>
+              <p className='mt-1 leading-5'>
+                Podes entrar con esa cuenta y traer tu historial temporal de
+                esta sesion.
+              </p>
+            </div>
+          </div>
+          <button
+            type='button'
+            onClick={() => void account.syncExistingGoogleAccount()}
+            disabled={account.busy || account.guestSyncLoading}
+            className='inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-slate-950 px-3 text-sm font-bold text-white hover:bg-slate-800 disabled:bg-slate-300'
+          >
+            <Link2 size={16} />
+            {account.guestSyncLoading
+              ? 'Sincronizando'
+              : 'Entrar y sincronizar'}
+          </button>
+        </div>
+      ) : null}
     </div>
   ) : null;
 
@@ -226,6 +267,11 @@ export const AccountAccessModal = ({
       slots={{
         accountSummary,
         guestContent,
+        guestContinuation: account.isGuest ? (
+          <EbButton fullWidth onClick={onClose} variant='ghost'>
+            Seguir como invitado
+          </EbButton>
+        ) : null,
         permanentContent,
       }}
     />

@@ -1,8 +1,10 @@
 import {
   AlertTriangle,
+  ArrowRight,
   CheckCircle2,
   Clock3,
   Languages,
+  UserRound,
   X,
   XCircle,
 } from 'lucide-react';
@@ -19,7 +21,11 @@ import type {
 type CheckoutReturnStatusProps = {
   info: CheckoutReturnInfo;
   onDismiss: () => void;
+  onOpenAccount: () => void;
+  onRetryCheckout: () => void;
   onReturnToResponder: () => void;
+  retryCheckoutBusy?: boolean;
+  retryCheckoutLabel?: string;
 };
 
 type CopyConfig = {
@@ -32,34 +38,31 @@ type CopyConfig = {
 const COPY: Record<CheckoutReturnState, CopyConfig> = {
   success: {
     title: 'Volviste de Mercado Pago',
-    body:
-      'Pro se activa cuando Mercado Pago confirma el pago de forma segura. Mientras tanto, podes seguir usando FlowTranslate.',
+    body: 'Pro se activa cuando Mercado Pago confirma el pago de forma segura. Mientras tanto, podes seguir usando FlowTranslate.',
     tone: 'success',
     Icon: CheckCircle2,
   },
   pending: {
     title: 'Pago pendiente',
-    body:
-      'Estamos esperando la confirmacion de Mercado Pago. Tu Pro se activara cuando el pago quede aprobado.',
+    body: 'Estamos esperando la confirmacion de Mercado Pago. Tu Pro se activara cuando el pago quede aprobado.',
     tone: 'warning',
     Icon: Clock3,
   },
   failed: {
     title: 'Pago no confirmado',
-    body: 'No pudimos confirmar el pago. Podes intentarlo de nuevo desde FlowTranslate.',
+    body: 'No pudimos confirmar el pago. Pro no se activa hasta que Mercado Pago lo apruebe; podes reintentar o revisar tu cuenta.',
     tone: 'danger',
     Icon: XCircle,
   },
   cancelled: {
     title: 'Checkout cancelado',
-    body: 'El checkout fue cancelado. No se realizo ningun cargo y tu cuenta sigue igual.',
+    body: 'El checkout se cerro sin activar Pro ni generar cargos nuevos. Podes reintentar cuando quieras o revisar tu cuenta.',
     tone: 'neutral',
     Icon: XCircle,
   },
   unknown: {
     title: 'Estamos revisando el estado',
-    body:
-      'Estamos esperando la confirmacion de Mercado Pago. Tu Pro se activara cuando el pago quede aprobado.',
+    body: 'Estamos esperando la confirmacion de Mercado Pago. Tu Pro se activara cuando el pago quede aprobado.',
     tone: 'info',
     Icon: AlertTriangle,
   },
@@ -68,25 +71,64 @@ const COPY: Record<CheckoutReturnState, CopyConfig> = {
 export const CheckoutReturnStatus = ({
   info,
   onDismiss,
+  onOpenAccount,
+  onRetryCheckout,
   onReturnToResponder,
+  retryCheckoutBusy = false,
+  retryCheckoutLabel = 'Reintentar Pro',
 }: CheckoutReturnStatusProps) => {
   const copy = COPY[info.state];
   const Icon = copy.Icon;
   const showSupportHint =
-    info.state === 'success' || info.state === 'pending' || info.state === 'unknown';
+    info.state === 'success' ||
+    info.state === 'pending' ||
+    info.state === 'unknown';
+  const showRecoveryActions =
+    info.state === 'failed' || info.state === 'cancelled';
 
   return (
     <EbStatusBanner
       actions={
         <>
-          <EbButton
-            leadingIcon={<Languages size={16} />}
-            onClick={onReturnToResponder}
-            size='sm'
-            variant='primary'
-          >
-            Responder
-          </EbButton>
+          {showRecoveryActions ? (
+            <>
+              <EbButton
+                disabled={retryCheckoutBusy}
+                leadingIcon={<ArrowRight size={16} />}
+                onClick={onRetryCheckout}
+                size='sm'
+                variant='primary'
+              >
+                {retryCheckoutBusy
+                  ? 'Abriendo Mercado Pago'
+                  : retryCheckoutLabel}
+              </EbButton>
+              <EbButton
+                leadingIcon={<UserRound size={16} />}
+                onClick={onOpenAccount}
+                size='sm'
+              >
+                Ver cuenta
+              </EbButton>
+              <EbButton
+                leadingIcon={<Languages size={16} />}
+                onClick={onReturnToResponder}
+                size='sm'
+                variant='ghost'
+              >
+                Responder
+              </EbButton>
+            </>
+          ) : (
+            <EbButton
+              leadingIcon={<Languages size={16} />}
+              onClick={onReturnToResponder}
+              size='sm'
+              variant='primary'
+            >
+              Responder
+            </EbButton>
+          )}
           <EbButton
             aria-label='Ocultar estado de checkout'
             onClick={onDismiss}

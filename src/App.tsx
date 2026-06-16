@@ -293,10 +293,14 @@ function App() {
         title: accountButtonTitle,
       }}
       checkoutReturn={billing.checkoutReturn}
+      checkoutReturnRetryBusy={billing.checkoutReturnRetryBusy}
+      checkoutReturnRetryLabel={billing.checkoutReturnRetryLabel}
       online={online}
       view={view}
       onDismissCheckoutReturn={billing.dismissCheckoutReturn}
       onOpenAccount={openAccount}
+      onOpenAccountFromCheckoutReturn={billing.openAccountFromCheckoutReturn}
+      onRetryCheckoutFromReturn={billing.retryCheckoutFromReturn}
       onReturnToResponderFromCheckout={billing.returnToResponderFromCheckout}
       onViewChange={setView}
     >
@@ -348,6 +352,7 @@ function App() {
             voice.listenPanel(translator.targetLanguage, translator.resultText)
           }
           onOpenAccountFromPrompt={responderAccountPrompt.openAccountFromPrompt}
+          onOpenLearning={() => setView('learning')}
           onQuotaSupport={billing.openQuotaSupport}
           onQuotaUpgrade={billing.upgradeQuota}
           onRequestStudy={(record) => void study.openStudyArticle(record)}

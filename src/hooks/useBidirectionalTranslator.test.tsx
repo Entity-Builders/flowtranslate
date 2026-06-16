@@ -99,11 +99,13 @@ const minimalBreakdown: ExpressionBreakdown = {
 
 const createDeferred = <TValue,>() => {
   let resolve: (value: TValue) => void = () => undefined;
-  const promise = new Promise<TValue>((nextResolve) => {
+  let reject: (reason?: unknown) => void = () => undefined;
+  const promise = new Promise<TValue>((nextResolve, nextReject) => {
     resolve = nextResolve;
+    reject = nextReject;
   });
 
-  return { promise, resolve };
+  return { promise, resolve, reject };
 };
 
 const responseFor = ({
@@ -986,6 +988,63 @@ describe('useBidirectionalTranslator', () => {
     expect(result.current.inputText).toBe('I need help');
     expect(result.current.resultText).toBe('Necesito ayuda.');
     expect(result.current.mode).toBe('translate_to_spanish');
+  });
+
+  it('ignores stale translation errors that return after a newer request', async () => {
+    const first = createDeferred<TranslateResponse>();
+    const second = createDeferred<TranslateResponse>();
+    vi.mocked(generateTranslation)
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(second.promise);
+
+    const { result } = renderHook(() =>
+      useBidirectionalTranslator({
+        accessToken: 'token',
+        online: true,
+        onUsage: vi.fn(),
+        onSavedTranslation: vi.fn(),
+      }),
+    );
+
+    let firstSubmit: Promise<void> = Promise.resolve();
+    let secondSubmit: Promise<void> = Promise.resolve();
+
+    act(() => {
+      result.current.editInput('hola como estas');
+      firstSubmit = result.current.translate();
+    });
+
+    act(() => {
+      result.current.editInput('I need help');
+      secondSubmit = result.current.translate('translate_to_spanish');
+    });
+
+    first.reject(new FlowtranslateApiError('Old request failed.', 503));
+    second.resolve(
+      responseFor({
+        id: 'new',
+        text: 'Necesito ayuda.',
+        mode: 'translate_to_spanish',
+        sourceLanguage: 'en',
+        targetLanguage: 'es',
+        createdAt: '2026-06-01T00:00:01.000Z',
+      }),
+    );
+
+    await act(async () => {
+      await firstSubmit;
+      await secondSubmit;
+    });
+
+    expect(result.current.inputText).toBe('I need help');
+    expect(result.current.resultText).toBe('Necesito ayuda.');
+    expect(result.current.status).toBe('idle');
+    expect(analyticsCaptureError).not.toHaveBeenCalledWith(
+      expect.any(FlowtranslateApiError),
+      expect.objectContaining({
+        action: 'generate_translation',
+      }),
+    );
   });
 
   it('tracks quota-blocked translation failures without source text', async () => {

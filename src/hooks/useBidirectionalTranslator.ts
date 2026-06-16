@@ -1,7 +1,6 @@
 import {
   DEFAULT_EXPRESSION_MODE,
   DEFAULT_TRANSLATION_PRESET_ID,
-  canApplyTranslationResponse,
   createExpressionDirection,
   detectExpressionMode,
   type ExpressionBreakdown,
@@ -14,41 +13,26 @@ import {
 } from '@eb-packages/flowtranslate-core';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { TRANSLATION_IDLE_DELAY_MS } from '../constants';
-import { analytics } from '../services/analytics';
+import { runBreakdownEnrichmentLifecycle } from '../features/responder/breakdownEnrichmentLifecycle';
 import {
-  FlowtranslateApiError,
-  enrichBreakdown,
-  generateTranslation,
-} from '../services/flowtranslate-api';
-
-type TranslatorStatus =
-  | 'idle'
-  | 'typing'
-  | 'translating'
-  | 'copied'
-  | 'error'
-  | 'offline'
-  | 'quota'
-  | 'auth';
-
-type TranslationTrigger =
-  | 'auto_idle'
-  | 'manual_generate'
-  | 'mode_selected'
-  | 'preset_selected'
-  | 'context_applied'
-  | 'input_to_spanish';
-
-type BreakdownTrigger = 'panel_opened';
-
-type TranslationBlockedReason =
-  | 'offline'
-  | 'auth'
-  | 'quota'
-  | 'ambiguous'
-  | 'mixed_input';
-
-type BreakdownStatus = 'idle' | 'enriching' | 'ready' | 'error';
+  createTranslationRequestKey,
+  fallbackDetection,
+  getTranslatorReadiness,
+  isConversationReplyMode,
+  isEnrichedBreakdown,
+  normalizeTranslatorText,
+  translationAnalyticsProperties,
+  type BreakdownStatus,
+  type BreakdownTrigger,
+  type TranslationBlockedReason,
+  type TranslationTrigger,
+  type TranslatorStatus,
+} from '../features/responder/translatorState';
+import { runSpanishInputTranslationLifecycle } from '../features/responder/spanishInputTranslationLifecycle';
+import { runTranslationRequestLifecycle } from '../features/responder/translationRequestLifecycle';
+import { usePendingTranslationHistoryRefresh } from '../features/responder/usePendingTranslationHistoryRefresh';
+import { analytics } from '../services/analytics';
+import { FlowtranslateApiError } from '../services/flowtranslate-api';
 
 type UseBidirectionalTranslatorParams = {
   accessToken: string;
@@ -59,64 +43,8 @@ type UseBidirectionalTranslatorParams = {
   onRefreshSavedTranslations?: () => Promise<TranslationRecord[]>;
 };
 
-const PENDING_HISTORY_REFRESH_DELAY_MS = 1800;
-
-const normalizeText = (value: string) =>
-  value.trim().replace(/\s+/g, ' ').toLocaleLowerCase();
-
-const createRequestKey = (
-  mode: ExpressionMode,
-  sourceText: string,
-  presetId: TranslationPresetId,
-  contextText = '',
-) => [mode, presetId, normalizeText(sourceText), normalizeText(contextText)].join(':');
-
 const currentTimeMs = () =>
   typeof performance === 'undefined' ? Date.now() : performance.now();
-
-const elapsedMs = (startedAt: number) =>
-  Math.max(0, Math.round(currentTimeMs() - startedAt));
-
-const translationAnalyticsProperties = (
-  mode: ExpressionMode,
-  sourceText: string,
-  presetId: TranslationPresetId,
-  trigger: TranslationTrigger | BreakdownTrigger,
-  contextText = '',
-) => {
-  const direction = createExpressionDirection(mode);
-
-  return {
-    mode,
-    preset_id: presetId,
-    trigger,
-    source_language: direction.sourceLanguage,
-    target_language: direction.targetLanguage,
-    input_chars: sourceText.trim().length,
-    has_context: Boolean(contextText.trim()),
-    context_chars: contextText.trim().length,
-  };
-};
-
-const isConversationReplyMode = (mode: ExpressionMode) =>
-  mode !== 'translate_to_spanish';
-
-const isEnrichedBreakdown = (value: ExpressionBreakdown | null) => {
-  if (!value) return false;
-  const hasTenses = Boolean(value.tenses?.length);
-  const hasStructure = Boolean(value.structure?.length);
-  const hasAlternatives = Boolean(value.alternatives?.length);
-  const hasMistake = Boolean(value.commonMistake?.trim());
-
-  return hasTenses || hasStructure || hasAlternatives || hasMistake;
-};
-
-const fallbackDetection = (mode: ExpressionMode): IntentDetectionResult => ({
-  mode,
-  confidence: 'low',
-  reason: 'manual',
-  automatic: false,
-});
 
 export const useBidirectionalTranslator = ({
   accessToken,
@@ -159,7 +87,6 @@ export const useBidirectionalTranslator = ({
     DEFAULT_TRANSLATION_PRESET_ID,
   );
   const timerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
-  const pendingHistoryTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
 
   const clearScheduledTranslation = useCallback(() => {
     if (!timerRef.current) return;
@@ -168,14 +95,6 @@ export const useBidirectionalTranslator = ({
   }, []);
 
   useEffect(() => clearScheduledTranslation, [clearScheduledTranslation]);
-
-  const clearPendingHistoryRefresh = useCallback(() => {
-    if (!pendingHistoryTimerRef.current) return;
-    window.clearTimeout(pendingHistoryTimerRef.current);
-    pendingHistoryTimerRef.current = null;
-  }, []);
-
-  useEffect(() => clearPendingHistoryRefresh, [clearPendingHistoryRefresh]);
 
   const updateMode = useCallback((nextMode: ExpressionMode) => {
     modeRef.current = nextMode;
@@ -189,101 +108,32 @@ export const useBidirectionalTranslator = ({
     setTranslationRecordId(nextId);
   }, []);
 
-  const schedulePendingHistoryRefresh = useCallback(
-    (params: {
-      requestSequence: number;
-      mode: ExpressionMode;
-      sourceText: string;
-      translatedText: string;
-      presetId: TranslationPresetId;
-      contextText: string;
-      trigger: TranslationTrigger;
-    }) => {
-      if (!onRefreshSavedTranslations) return;
-      clearPendingHistoryRefresh();
-
-      pendingHistoryTimerRef.current = window.setTimeout(() => {
-        pendingHistoryTimerRef.current = null;
-        void (async () => {
-          try {
-            const records = await onRefreshSavedTranslations();
-            const savedRecord = records.find((record) =>
-              normalizeText(record.sourceText) === normalizeText(params.sourceText) &&
-              normalizeText(record.translatedText) === normalizeText(params.translatedText) &&
-              (!record.mode || record.mode === params.mode)
-            );
-
-            if (!savedRecord) {
-              analytics.track('translation_pending_save_unresolved', {
-                ...translationAnalyticsProperties(
-                  params.mode,
-                  params.sourceText,
-                  params.presetId,
-                  params.trigger,
-                  params.contextText,
-                ),
-              });
-              return;
-            }
-
-            if (
-              !canApplyTranslationResponse({
-                requestSequence: params.requestSequence,
-                latestSequence: sequenceRef.current,
-                requestMode: params.mode,
-                latestMode: modeRef.current,
-                requestSourceText: params.sourceText,
-                latestSourceText: inputTextRef.current.trim(),
-                requestPresetId: params.presetId,
-                latestPresetId: presetIdRef.current,
-                requestContextText: params.contextText,
-                latestContextText: workContextTextRef.current,
-              })
-            ) {
-              return;
-            }
-
-            updateTranslationRecordId(savedRecord.id, savedRecord.createdAt);
-            setMessage('Guardado en tu historial.');
-            onSavedTranslation(savedRecord);
-            analytics.track('translation_pending_save_resolved', {
-              ...translationAnalyticsProperties(
-                params.mode,
-                params.sourceText,
-                params.presetId,
-                params.trigger,
-                params.contextText,
-              ),
-              record_id: savedRecord.id,
-            });
-          } catch (error) {
-            analytics.captureError(error, {
-              screen: 'translate',
-              action: 'refresh_pending_translation_history',
-              mode: params.mode,
-              trigger: params.trigger,
-            });
-            analytics.track('translation_pending_save_refresh_failed', {
-              ...translationAnalyticsProperties(
-                params.mode,
-                params.sourceText,
-                params.presetId,
-                params.trigger,
-                params.contextText,
-              ),
-              error_type: error instanceof Error ? error.name : 'unknown',
-            });
-          }
-        })();
-      }, PENDING_HISTORY_REFRESH_DELAY_MS);
-    },
-    [
-      clearPendingHistoryRefresh,
-      onRefreshSavedTranslations,
-      onSavedTranslation,
-      updateTranslationRecordId,
-    ],
+  const getLatestTranslationSnapshot = useCallback(
+    () => ({
+      latestSequence: sequenceRef.current,
+      latestMode: modeRef.current,
+      latestSourceText: inputTextRef.current.trim(),
+      latestPresetId: presetIdRef.current,
+      latestContextText: workContextTextRef.current,
+    }),
+    [],
   );
+
+  const resolvePendingSavedRecord = useCallback(
+    (savedRecord: TranslationRecord) => {
+      updateTranslationRecordId(savedRecord.id, savedRecord.createdAt);
+      setMessage('Guardado en tu historial.');
+    },
+    [updateTranslationRecordId],
+  );
+
+  const { clearPendingHistoryRefresh, schedulePendingHistoryRefresh } =
+    usePendingTranslationHistoryRefresh({
+      getLatestSnapshot: getLatestTranslationSnapshot,
+      onRefreshSavedTranslations,
+      onResolveSavedRecord: resolvePendingSavedRecord,
+      onSavedTranslation,
+    });
 
   const trackTranslationBlocked = useCallback(
     (
@@ -303,7 +153,7 @@ export const useBidirectionalTranslator = ({
         nextMode,
         nextPresetId,
         trigger,
-        normalizeText(contextText),
+        normalizeTranslatorText(contextText),
       ].join(':');
       if (lastBlockedAnalyticsKeyRef.current === analyticsKey) return;
 
@@ -339,101 +189,46 @@ export const useBidirectionalTranslator = ({
       const startedAt = currentTimeMs();
       setBreakdownStatus('enriching');
 
-      const isStillCurrent = () =>
-        translationRecordIdRef.current === params.recordId &&
-        canApplyTranslationResponse({
-          requestSequence: params.requestSequence,
+      const lifecycle = await runBreakdownEnrichmentLifecycle({
+        accessToken,
+        recordId: params.recordId,
+        requestSequence: params.requestSequence,
+        mode: params.mode,
+        sourceText: params.sourceText,
+        translatedText: params.translatedText,
+        presetId: params.presetId,
+        createdAt: params.createdAt,
+        startedAt,
+        getLatestSnapshot: () => ({
           latestSequence: sequenceRef.current,
-          requestMode: params.mode,
           latestMode: modeRef.current,
-          requestSourceText: params.sourceText,
           latestSourceText: inputTextRef.current.trim(),
-          requestPresetId: params.presetId,
           latestPresetId: presetIdRef.current,
-        });
+          latestRecordId: translationRecordIdRef.current,
+        }),
+      });
 
-      try {
-        const response = await enrichBreakdown(
-          { translationRecordId: params.recordId },
-          accessToken,
-        );
+      if (lifecycle.kind === 'stale') return;
 
-        if (!isStillCurrent()) return;
-
-        const nextBreakdown =
-          response.breakdown || response.translationRecord.breakdown || null;
-        if (!isEnrichedBreakdown(nextBreakdown)) {
-          setBreakdownStatus('error');
-          analytics.track('breakdown_enrichment_failed', {
-            ...translationAnalyticsProperties(
-              params.mode,
-              params.sourceText,
-              params.presetId,
-              params.trigger,
-            ),
-            latency_ms: elapsedMs(startedAt),
-            error_status: null,
-            remaining_quota: response.usage.remainingThisMonth,
-            reason: 'missing_enriched_breakdown',
-          });
-          return;
-        }
-
-        const responseDirection = createExpressionDirection(params.mode);
-        setBreakdown(nextBreakdown);
-        setBreakdownStatus('ready');
-        onUsage(response.usage);
-        onSavedTranslation({
-          id: params.recordId,
-          sourceLanguage:
-            response.translationRecord.sourceLanguage ||
-            responseDirection.sourceLanguage,
-          targetLanguage:
-            response.translationRecord.targetLanguage ||
-            responseDirection.targetLanguage,
-          sourceText: params.sourceText,
-          translatedText: params.translatedText,
-          mode: params.mode,
-          breakdown: nextBreakdown,
-          createdAt: response.translationRecord.createdAt || params.createdAt,
-        });
-        analytics.track('breakdown_enrichment_succeeded', {
+      if (lifecycle.kind === 'missing_breakdown') {
+        setBreakdownStatus('error');
+        analytics.track('breakdown_enrichment_failed', {
           ...translationAnalyticsProperties(
             params.mode,
             params.sourceText,
             params.presetId,
             params.trigger,
           ),
-          latency_ms: elapsedMs(startedAt),
-          charged: response.usage.charged,
-          cached: Boolean(response.cached),
-          remaining_quota: response.usage.remainingThisMonth,
+          latency_ms: lifecycle.latencyMs,
+          error_status: null,
+          remaining_quota: lifecycle.response.usage.remainingThisMonth,
+          reason: 'missing_enriched_breakdown',
         });
-        if (response.cached) {
-          analytics.track('breakdown_enrichment_cached', {
-            ...translationAnalyticsProperties(
-              params.mode,
-              params.sourceText,
-              params.presetId,
-              params.trigger,
-            ),
-          });
-        }
-        if (response.usage.charged) {
-          analytics.track('breakdown_enrichment_charged', {
-            ...translationAnalyticsProperties(
-              params.mode,
-              params.sourceText,
-              params.presetId,
-              params.trigger,
-            ),
-            estimated_tokens: response.usage.estimatedTokens,
-            remaining_quota: response.usage.remainingThisMonth,
-          });
-        }
-      } catch (error) {
-        if (!isStillCurrent()) return;
+        return;
+      }
 
+      if (lifecycle.kind === 'api_error' || lifecycle.kind === 'exception') {
+        const error = lifecycle.error;
         if (error instanceof FlowtranslateApiError && error.usage) {
           onUsage(error.usage);
         }
@@ -454,13 +249,54 @@ export const useBidirectionalTranslator = ({
             params.presetId,
             params.trigger,
           ),
-          latency_ms: elapsedMs(startedAt),
+          latency_ms: lifecycle.latencyMs,
           error_status:
             error instanceof FlowtranslateApiError ? error.status : null,
           remaining_quota:
             error instanceof FlowtranslateApiError
               ? error.usage?.remainingThisMonth ?? null
               : null,
+        });
+        return;
+      }
+
+      const { response } = lifecycle;
+      setBreakdown(lifecycle.breakdown);
+      setBreakdownStatus('ready');
+      onUsage(response.usage);
+      onSavedTranslation(lifecycle.savedRecord);
+      analytics.track('breakdown_enrichment_succeeded', {
+        ...translationAnalyticsProperties(
+          params.mode,
+          params.sourceText,
+          params.presetId,
+          params.trigger,
+        ),
+        latency_ms: lifecycle.latencyMs,
+        charged: response.usage.charged,
+        cached: Boolean(response.cached),
+        remaining_quota: response.usage.remainingThisMonth,
+      });
+      if (response.cached) {
+        analytics.track('breakdown_enrichment_cached', {
+          ...translationAnalyticsProperties(
+            params.mode,
+            params.sourceText,
+            params.presetId,
+            params.trigger,
+          ),
+        });
+      }
+      if (response.usage.charged) {
+        analytics.track('breakdown_enrichment_charged', {
+          ...translationAnalyticsProperties(
+            params.mode,
+            params.sourceText,
+            params.presetId,
+            params.trigger,
+          ),
+          estimated_tokens: response.usage.estimatedTokens,
+          remaining_quota: response.usage.remainingThisMonth,
         });
       }
     },
@@ -604,7 +440,7 @@ export const useBidirectionalTranslator = ({
         return;
       }
 
-      const requestKey = createRequestKey(
+      const requestKey = createTranslationRequestKey(
         nextMode,
         trimmedSource,
         nextPresetId,
@@ -665,44 +501,96 @@ export const useBidirectionalTranslator = ({
       }
 
       try {
-        const result = await generateTranslation(
-          {
-            mode: nextMode,
-            text: trimmedSource,
-            context: nextContextText.trim() || undefined,
-            presetId: nextPresetId,
-            clientRequestId: `${requestSequence}`,
-          },
+        const lifecycle = await runTranslationRequestLifecycle({
           accessToken,
-        );
+          requestSequence,
+          mode: nextMode,
+          sourceText: trimmedSource,
+          presetId: nextPresetId,
+          contextText: nextContextText,
+          startedAt,
+          getLatestSnapshot: getLatestTranslationSnapshot,
+        });
 
-        if (
-          !canApplyTranslationResponse({
-            requestSequence,
-            latestSequence: sequenceRef.current,
-            requestMode: nextMode,
-            latestMode: modeRef.current,
-            requestSourceText: trimmedSource,
-            latestSourceText: inputTextRef.current.trim(),
-            requestPresetId: nextPresetId,
-            latestPresetId: presetIdRef.current,
-            requestContextText: nextContextText,
-            latestContextText: workContextTextRef.current,
-          })
-        ) {
+        if (lifecycle.kind === 'stale') return;
+
+        if (lifecycle.kind === 'api_error') {
+          if (lifecycle.error.usage) onUsage(lifecycle.error.usage);
+          const errorProperties = {
+            ...translationAnalyticsProperties(
+              nextMode,
+              trimmedSource,
+              nextPresetId,
+              trigger,
+              nextContextText,
+            ),
+            latency_ms: lifecycle.latencyMs,
+            error_status: lifecycle.error.status,
+            remaining_quota:
+              lifecycle.error.usage?.remainingThisMonth ?? null,
+          };
+
+          if (lifecycle.error.status === 402) {
+            analytics.track('translation_blocked', {
+              ...errorProperties,
+              reason: 'quota',
+            });
+          } else if (lifecycle.error.status === 401) {
+            analytics.track('translation_blocked', {
+              ...errorProperties,
+              reason: 'auth',
+            });
+          } else {
+            analytics.captureError(lifecycle.error, {
+              screen: 'translate',
+              action: 'generate_translation',
+              mode: nextMode,
+              trigger,
+              http_status: lifecycle.error.status,
+            });
+            analytics.track('translation_failed', {
+              ...errorProperties,
+              error_type: 'api_error',
+            });
+          }
+          setStatus(lifecycle.status);
+          setMessage(lifecycle.message);
           return;
         }
 
-        const savedBreakdown =
-          result.breakdown || result.translationRecord.breakdown || null;
-        const displayBreakdown = isEnrichedBreakdown(savedBreakdown)
-          ? savedBreakdown
-          : null;
-        const responseMode = result.mode || result.translationRecord.mode || nextMode;
-        const responseDirection = createExpressionDirection(responseMode);
-        const isSavedRecord = result.translationRecord.saved !== false &&
-          Boolean(result.translationRecord.id);
-        const nextRecordId = isSavedRecord ? result.translationRecord.id : '';
+        if (lifecycle.kind === 'exception') {
+          analytics.captureError(lifecycle.error, {
+            screen: 'translate',
+            action: 'generate_translation',
+            mode: nextMode,
+            trigger,
+          });
+          analytics.track('translation_failed', {
+            ...translationAnalyticsProperties(
+              nextMode,
+              trimmedSource,
+              nextPresetId,
+              trigger,
+              nextContextText,
+            ),
+            latency_ms: lifecycle.latencyMs,
+            error_type: 'exception',
+          });
+          setStatus('error');
+          setMessage(lifecycle.message);
+          return;
+        }
+
+        const {
+          result,
+          responseMode,
+          responseDirection,
+          savedBreakdown,
+          displayBreakdown,
+          isSavedRecord,
+          nextRecordId,
+          latencyMs,
+        } = lifecycle;
 
         updateMode(responseMode);
         updateTranslationRecordId(
@@ -763,7 +651,7 @@ export const useBidirectionalTranslator = ({
             nextContextText,
           ),
           output_chars: result.text.trim().length,
-          latency_ms: elapsedMs(startedAt),
+          latency_ms: latencyMs,
           charged: result.usage.charged,
           reused: !result.usage.charged,
           save_pending: Boolean(result.translationRecord.pending),
@@ -781,80 +669,12 @@ export const useBidirectionalTranslator = ({
               nextContextText,
             ),
             output_chars: result.text.trim().length,
-            latency_ms: elapsedMs(startedAt),
+            latency_ms: latencyMs,
             charged: result.usage.charged,
             reused: !result.usage.charged,
             remaining_quota: result.usage.remainingThisMonth,
           });
         }
-
-      } catch (error) {
-        if (error instanceof FlowtranslateApiError) {
-          if (error.usage) onUsage(error.usage);
-          const errorProperties = {
-            ...translationAnalyticsProperties(
-              nextMode,
-              trimmedSource,
-              nextPresetId,
-              trigger,
-              nextContextText,
-            ),
-            latency_ms: elapsedMs(startedAt),
-            error_status: error.status,
-            remaining_quota: error.usage?.remainingThisMonth ?? null,
-          };
-
-          if (error.status === 402) {
-            analytics.track('translation_blocked', {
-              ...errorProperties,
-              reason: 'quota',
-            });
-          } else if (error.status === 401) {
-            analytics.track('translation_blocked', {
-              ...errorProperties,
-              reason: 'auth',
-            });
-          } else {
-            analytics.captureError(error, {
-              screen: 'translate',
-              action: 'generate_translation',
-              mode: nextMode,
-              trigger,
-              http_status: error.status,
-            });
-            analytics.track('translation_failed', {
-              ...errorProperties,
-              error_type: 'api_error',
-            });
-          }
-          setStatus(error.status === 402 ? 'quota' : error.status === 401 ? 'auth' : 'error');
-          setMessage(
-            error.status === 402
-              ? 'Llegaste al limite mensual.'
-              : error.message,
-          );
-          return;
-        }
-
-        analytics.captureError(error, {
-          screen: 'translate',
-          action: 'generate_translation',
-          mode: nextMode,
-          trigger,
-        });
-        analytics.track('translation_failed', {
-          ...translationAnalyticsProperties(
-            nextMode,
-            trimmedSource,
-            nextPresetId,
-            trigger,
-            nextContextText,
-          ),
-          latency_ms: elapsedMs(startedAt),
-          error_type: 'exception',
-        });
-        setStatus('error');
-        setMessage(error instanceof Error ? error.message : 'No pudimos generar la respuesta.');
       } finally {
         if (inFlightKeyRef.current === requestKey) inFlightKeyRef.current = '';
       }
@@ -866,6 +686,7 @@ export const useBidirectionalTranslator = ({
       onSavedTranslation,
       onUsage,
       clearPendingHistoryRefresh,
+      getLatestTranslationSnapshot,
       schedulePendingHistoryRefresh,
       trackTranslationBlocked,
       updateMode,
@@ -933,7 +754,7 @@ export const useBidirectionalTranslator = ({
         return;
       }
 
-      const requestKey = createRequestKey(
+      const requestKey = createTranslationRequestKey(
         nextMode,
         trimmedSource,
         nextPresetId,
@@ -1181,77 +1002,32 @@ export const useBidirectionalTranslator = ({
       ),
     });
 
-    try {
-      const result = await generateTranslation(
-        {
-          mode: nextMode,
-          text: trimmedSource,
-          context: nextContextText.trim() || undefined,
-          presetId: nextPresetId,
-          clientRequestId: `${requestSequence}`,
-        },
-        accessToken,
-      );
+    const lifecycle = await runSpanishInputTranslationLifecycle({
+      accessToken,
+      requestSequence,
+      sourceText: trimmedSource,
+      presetId: nextPresetId,
+      contextText: nextContextText,
+      startedAt,
+      getLatestSnapshot: () => ({
+        latestSequence: sequenceRef.current,
+        latestSourceText: inputTextRef.current,
+        latestPresetId: presetIdRef.current,
+        latestContextText: workContextTextRef.current,
+      }),
+    });
 
-      if (
-        requestSequence !== sequenceRef.current ||
-        normalizeText(inputTextRef.current) !== normalizeText(trimmedSource) ||
-        nextPresetId !== presetIdRef.current ||
-        normalizeText(nextContextText) !== normalizeText(workContextTextRef.current)
-      ) {
-        return;
-      }
+    if (lifecycle.kind === 'stale') return;
 
-      const translatedInput = result.text.trim();
-      if (!translatedInput) {
-        setStatus('error');
-        setMessage('No pudimos pasar el texto a espanol.');
-        return;
-      }
+    if (lifecycle.kind === 'empty_translation') {
+      setStatus('error');
+      setMessage('No pudimos pasar el texto a espanol.');
+      return;
+    }
 
-      const savedBreakdown =
-        result.breakdown || result.translationRecord.breakdown || null;
-      const responseDirection = createExpressionDirection(nextMode);
-      const isSavedRecord = result.translationRecord.saved !== false &&
-        Boolean(result.translationRecord.id);
-
-      inputTextRef.current = translatedInput;
-      setInputText(translatedInput);
-      updateMode('translate_to_english');
-      setModeDetection({
-        mode: 'translate_to_english',
-        confidence: 'high',
-        reason: 'manual',
-        automatic: false,
-      });
-      setResultText('');
-      setBreakdown(null);
-      setBreakdownStatus('idle');
-      setGrammarInsight(null);
-      updateTranslationRecordId('');
-      setStatus('typing');
-      setMessage('Texto pasado a espanol. Editalo o toca Responder.');
-      setHasPendingChanges(true);
-      onUsage(result.usage);
-
-      if (isSavedRecord) {
-        onSavedTranslation({
-          id: result.translationRecord.id,
-          sourceLanguage:
-            result.translationRecord.sourceLanguage ||
-            responseDirection.sourceLanguage,
-          targetLanguage:
-            result.translationRecord.targetLanguage ||
-            responseDirection.targetLanguage,
-          sourceText: trimmedSource,
-          translatedText: translatedInput,
-          mode: nextMode,
-          breakdown: savedBreakdown,
-          createdAt: result.translationRecord.createdAt,
-        });
-      }
-
-      analytics.track('translation_succeeded', {
+    if (lifecycle.kind === 'api_error') {
+      if (lifecycle.error.usage) onUsage(lifecycle.error.usage);
+      const errorProperties = {
         ...translationAnalyticsProperties(
           nextMode,
           trimmedSource,
@@ -1259,64 +1035,41 @@ export const useBidirectionalTranslator = ({
           trigger,
           nextContextText,
         ),
-        output_chars: translatedInput.length,
-        latency_ms: elapsedMs(startedAt),
-        charged: result.usage.charged,
-        reused: !result.usage.charged,
-        save_pending: Boolean(result.translationRecord.pending),
-        estimated_tokens: result.usage.estimatedTokens,
-        used_this_month: result.usage.usedThisMonth,
-        remaining_quota: result.usage.remainingThisMonth,
-      });
-    } catch (error) {
-      if (error instanceof FlowtranslateApiError) {
-        if (error.usage) onUsage(error.usage);
-        const errorProperties = {
-          ...translationAnalyticsProperties(
-            nextMode,
-            trimmedSource,
-            nextPresetId,
-            trigger,
-            nextContextText,
-          ),
-          latency_ms: elapsedMs(startedAt),
-          error_status: error.status,
-          remaining_quota: error.usage?.remainingThisMonth ?? null,
-        };
+        latency_ms: lifecycle.latencyMs,
+        error_status: lifecycle.error.status,
+        remaining_quota: lifecycle.error.usage?.remainingThisMonth ?? null,
+      };
 
-        if (error.status === 402) {
-          analytics.track('translation_blocked', {
-            ...errorProperties,
-            reason: 'quota',
-          });
-        } else if (error.status === 401) {
-          analytics.track('translation_blocked', {
-            ...errorProperties,
-            reason: 'auth',
-          });
-        } else {
-          analytics.captureError(error, {
-            screen: 'translate',
-            action: 'translate_input_to_spanish',
-            mode: nextMode,
-            trigger,
-            http_status: error.status,
-          });
-          analytics.track('translation_failed', {
-            ...errorProperties,
-            error_type: 'api_error',
-          });
-        }
-        setStatus(error.status === 402 ? 'quota' : error.status === 401 ? 'auth' : 'error');
-        setMessage(
-          error.status === 402
-            ? 'Llegaste al limite mensual.'
-            : error.message,
-        );
-        return;
+      if (lifecycle.error.status === 402) {
+        analytics.track('translation_blocked', {
+          ...errorProperties,
+          reason: 'quota',
+        });
+      } else if (lifecycle.error.status === 401) {
+        analytics.track('translation_blocked', {
+          ...errorProperties,
+          reason: 'auth',
+        });
+      } else {
+        analytics.captureError(lifecycle.error, {
+          screen: 'translate',
+          action: 'translate_input_to_spanish',
+          mode: nextMode,
+          trigger,
+          http_status: lifecycle.error.status,
+        });
+        analytics.track('translation_failed', {
+          ...errorProperties,
+          error_type: 'api_error',
+        });
       }
+      setStatus(lifecycle.status);
+      setMessage(lifecycle.message);
+      return;
+    }
 
-      analytics.captureError(error, {
+    if (lifecycle.kind === 'exception') {
+      analytics.captureError(lifecycle.error, {
         screen: 'translate',
         action: 'translate_input_to_spanish',
         mode: nextMode,
@@ -1330,12 +1083,76 @@ export const useBidirectionalTranslator = ({
           trigger,
           nextContextText,
         ),
-        latency_ms: elapsedMs(startedAt),
+        latency_ms: lifecycle.latencyMs,
         error_type: 'exception',
       });
       setStatus('error');
-      setMessage(error instanceof Error ? error.message : 'No pudimos pasar el texto a espanol.');
+      setMessage(lifecycle.message);
+      return;
     }
+
+    const {
+      result,
+      translatedInput,
+      savedBreakdown,
+      responseDirection,
+      isSavedRecord,
+      latencyMs,
+    } = lifecycle;
+
+    inputTextRef.current = translatedInput;
+    setInputText(translatedInput);
+    updateMode('translate_to_english');
+    setModeDetection({
+      mode: 'translate_to_english',
+      confidence: 'high',
+      reason: 'manual',
+      automatic: false,
+    });
+    setResultText('');
+    setBreakdown(null);
+    setBreakdownStatus('idle');
+    setGrammarInsight(null);
+    updateTranslationRecordId('');
+    setStatus('typing');
+    setMessage('Texto pasado a espanol. Editalo o toca Responder.');
+    setHasPendingChanges(true);
+    onUsage(result.usage);
+
+    if (isSavedRecord) {
+      onSavedTranslation({
+        id: result.translationRecord.id,
+        sourceLanguage:
+          result.translationRecord.sourceLanguage ||
+          responseDirection.sourceLanguage,
+        targetLanguage:
+          result.translationRecord.targetLanguage ||
+          responseDirection.targetLanguage,
+        sourceText: trimmedSource,
+        translatedText: translatedInput,
+        mode: nextMode,
+        breakdown: savedBreakdown,
+        createdAt: result.translationRecord.createdAt,
+      });
+    }
+
+    analytics.track('translation_succeeded', {
+      ...translationAnalyticsProperties(
+        nextMode,
+        trimmedSource,
+        nextPresetId,
+        trigger,
+        nextContextText,
+      ),
+      output_chars: translatedInput.length,
+      latency_ms: latencyMs,
+      charged: result.usage.charged,
+      reused: !result.usage.charged,
+      save_pending: Boolean(result.translationRecord.pending),
+      estimated_tokens: result.usage.estimatedTokens,
+      used_this_month: result.usage.usedThisMonth,
+      remaining_quota: result.usage.remainingThisMonth,
+    });
   }, [
     accessToken,
     authPending,
@@ -1349,24 +1166,13 @@ export const useBidirectionalTranslator = ({
     updateTranslationRecordId,
   ]);
 
-  const activeSourceText = inputText.trim();
-  const canTranslate =
-    Boolean(activeSourceText) &&
-    online &&
-    Boolean(accessToken) &&
-    status !== 'translating';
-
-  const translateDisabledReason = !activeSourceText
-    ? 'Agrega texto para responder.'
-    : !online
-      ? 'Estas offline. La IA necesita conexion.'
-      : !accessToken
-        ? authPending
-          ? 'Preparando modo invitado...'
-          : 'Conecta tu cuenta para guardar progreso y seguir.'
-        : status === 'translating'
-          ? 'Generacion en curso.'
-          : '';
+  const { canTranslate, translateDisabledReason } = getTranslatorReadiness({
+    sourceText: inputText,
+    online,
+    accessToken,
+    authPending,
+    status,
+  });
 
   const direction = createExpressionDirection(mode);
 

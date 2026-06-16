@@ -1,0 +1,1 @@
+export const ACCOUNT_PROMPT_COPY_THRESHOLD = 2;

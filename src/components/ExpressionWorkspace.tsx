@@ -417,10 +417,10 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
   );
 
   return (
-    <section className='mx-auto flex w-full max-w-5xl flex-1 flex-col gap-5 py-2 sm:gap-6 sm:py-5'>
+    <section className='mx-auto flex w-full min-w-0 max-w-5xl flex-1 flex-col gap-5 overflow-x-hidden py-2 sm:gap-6 sm:py-5'>
       {shouldShowLaunchPromise ? (
-        <div className='px-1 sm:px-2'>
-          <h2 className='text-3xl font-black leading-tight tracking-normal text-slate-950 sm:text-4xl'>
+        <div className='min-w-0 max-w-full px-1 sm:px-2'>
+          <h2 className='max-w-full break-words text-2xl font-black leading-[1.12] tracking-normal text-slate-950 [overflow-wrap:anywhere] sm:text-4xl sm:leading-tight'>
             Tu respuesta en ingles para trabajo, lista para mandar.
           </h2>
           <p className='mt-2 max-w-3xl text-sm font-semibold leading-6 text-slate-600 sm:text-base'>

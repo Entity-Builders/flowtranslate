@@ -28,6 +28,7 @@
     "@eb-packages/auth-ui-web": "workspace:*",
     "@eb-packages/billing-core": "workspace:*",
     "@eb-packages/flowtranslate-core": "workspace:*",
+    "@eb-packages/ui-web": "workspace:*",
     "@supabase/supabase-js": "^2.97.0",
     "lucide-react": "^0.564.0",
     "react": "^18.2.0",

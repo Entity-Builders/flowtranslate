@@ -21,17 +21,41 @@ const formatResetDate = (resetAt: string) =>
     day: 'numeric',
   }).format(new Date(resetAt));
 
+const formatCooldownWait = (cooldownUntil?: string) => {
+  if (!cooldownUntil) return 'un rato';
+
+  const remainingMs = new Date(cooldownUntil).getTime() - Date.now();
+  if (!Number.isFinite(remainingMs) || remainingMs <= 0) return 'unos minutos';
+
+  const remainingMinutes = Math.ceil(remainingMs / 60_000);
+  if (remainingMinutes <= 1) return '1 minuto';
+  if (remainingMinutes < 60) return `${remainingMinutes} minutos`;
+
+  const remainingHours = Math.ceil(remainingMinutes / 60);
+  if (remainingHours <= 1) return '1 hora';
+  if (remainingHours < 24) return `${remainingHours} horas`;
+
+  return 'mañana';
+};
+
+const formatCooldownResumeCopy = (cooldownUntil?: string) => {
+  const wait = formatCooldownWait(cooldownUntil);
+  return wait === 'mañana' ? 'mañana' : `en ${wait}`;
+};
+
 const getUsageLabel = (usage: UsageSnapshot | null) => {
-  if (!usage) return 'Ayuda de IA lista';
-  if (usage.remainingThisMonth <= 0) return 'Llegaste al limite mensual';
+  if (!usage) return 'Modo amigo listo';
+  if (usage.recovery?.state === 'cooldown') return 'Pausa de uso amigo';
+  if (usage.recovery?.state === 'monthly_cap') return 'Uso amigo completo';
+  if (usage.remainingThisMonth <= 0) return 'Gratis usado este mes';
 
   const ratio = usage.monthlyQuota > 0
     ? usage.remainingThisMonth / usage.monthlyQuota
     : 0;
 
-  if (ratio <= 0.2) return 'Te queda poco';
-  if (ratio <= 0.6) return 'Todavia tenes ayuda disponible';
-  return 'Tenes bastante ayuda disponible';
+  if (ratio <= 0.2) return 'Ultimas respuestas gratis';
+  if (ratio <= 0.6) return 'Te queda margen gratis';
+  return 'Modo amigo gratis';
 };
 
 const billingStateCopy: Record<
@@ -119,12 +143,18 @@ export const QuotaStatus = ({
           </div>
           {usage ? (
             <div className='mt-2 text-xs text-slate-500'>
-              Detalle tecnico: quedan {usage.remainingThisMonth.toLocaleString()} de{' '}
-              {usage.monthlyQuota.toLocaleString()} creditos mensuales de IA.
+              {usage.recovery?.state === 'cooldown'
+                ? `Volvés a tener uso amigo ${formatCooldownResumeCopy(
+                    usage.recovery.cooldownUntil,
+                  )}.`
+                : usage.recovery?.state === 'monthly_cap' ||
+                    usage.remainingThisMonth <= 0
+                  ? `Tu uso amigo vuelve el ${formatResetDate(usage.resetAt)}.`
+                  : `Se renueva el ${formatResetDate(usage.resetAt)}.`}
             </div>
           ) : (
             <div className='mt-2 text-xs text-slate-500'>
-              El detalle aparece despues de tu proxima respuesta con IA.
+              El estado aparece despues de tu proxima respuesta.
             </div>
           )}
           <div className='mt-1 text-xs font-semibold text-slate-500'>

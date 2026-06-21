@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { analytics } from '../../services/analytics';
+import {
+  analytics,
+  commercialAnalyticsProperties,
+} from '../../services/analytics';
 import type { useFlowtranslateAccount } from '../../hooks/useFlowtranslateAccount';
 
 type FlowtranslateAccount = ReturnType<typeof useFlowtranslateAccount>;
@@ -51,12 +54,15 @@ export const useFlowtranslateAccountPanel = ({
     if (accountKind !== 'guest' || !session) return;
 
     trackedGuestTrialRef.current = true;
-    analytics.track('guest_trial_started', {
-      source: 'anonymous_session',
-      account_kind: accountKind,
-      has_saved_history: historyCount > 0,
-      history_count: historyCount,
-    });
+    analytics.track(
+      'guest_trial_started',
+      commercialAnalyticsProperties({
+        source: 'anonymous_session',
+        account_kind: accountKind,
+        has_saved_history: historyCount > 0,
+        history_count: historyCount,
+      }),
+    );
   }, [accountKind, historyCount, session]);
 
   useEffect(() => {

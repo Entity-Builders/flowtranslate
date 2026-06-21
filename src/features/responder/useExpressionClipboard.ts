@@ -5,7 +5,10 @@ import type {
 } from '@eb-packages/flowtranslate-core';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FlowtranslateAccountKind } from '../../hooks/useFlowtranslateAccount';
-import { analytics } from '../../services/analytics';
+import {
+  analytics,
+  commercialAnalyticsProperties,
+} from '../../services/analytics';
 import { copyText } from '../../services/clipboard';
 
 export type CopiedTarget = 'input' | 'result' | null;
@@ -41,6 +44,19 @@ export const useExpressionClipboard = ({
       language: LanguageCode,
       text: string,
     ) => {
+      if (target === 'result') {
+        analytics.track(
+          'copy_intent_clicked',
+          commercialAnalyticsProperties({
+            target,
+            language,
+            text_length: text.length,
+            mode,
+            preset_id: presetId,
+            account_kind: accountKind,
+          }),
+        );
+      }
       const copied = await copyText(text);
       if (!copied) return;
 
@@ -53,13 +69,16 @@ export const useExpressionClipboard = ({
       });
       if (target === 'result') {
         setResultCopyCount((current) => current + 1);
-        analytics.track('conversation_reply_copied', {
-          language,
-          text_length: text.length,
-          mode,
-          preset_id: presetId,
-          account_kind: accountKind,
-        });
+        analytics.track(
+          'conversation_reply_copied',
+          commercialAnalyticsProperties({
+            language,
+            text_length: text.length,
+            mode,
+            preset_id: presetId,
+            account_kind: accountKind,
+          }),
+        );
       }
       copiedResetTimerRef.current = window.setTimeout(() => {
         copiedResetTimerRef.current = null;

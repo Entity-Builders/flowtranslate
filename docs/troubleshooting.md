@@ -72,6 +72,7 @@ The Edge Function environment requires:
 GEMINI_API_KEY=<server-side-key>
 FLOWTRANSLATE_FREE_MONTHLY_TOKENS=20000
 FLOWTRANSLATE_GUEST_MONTHLY_TOKENS=800
+FLOWTRANSLATE_FREE_RECOVERY_COOLDOWNS_MINUTES=5,30,120,1440
 FLOWTRANSLATE_TRANSLATE_MODEL=gemini-2.5-flash-lite
 FLOWTRANSLATE_PRACTICE_MODEL=gemini-2.5-flash
 # Optional legacy fallback for practice when FLOWTRANSLATE_PRACTICE_MODEL is not set.
@@ -80,6 +81,18 @@ FLOWTRANSLATE_GEMINI_MODEL=
 
 Users should never enter a Gemini key in the app.
 
+### Usage Recovery And Top-Ups
+
+FlowTranslate free limits should be explained as "uso amigo". A cooldown block
+is a temporary pause, not a full monthly lockout. The app should preserve the
+typed text, show when uso amigo returns, and offer Cafecito support or Pro.
+
+Use `eb-infra/supabase/snippets/flowtranslate_apply_usage_topup.sql` for
+operator-applied Cafecito top-ups. Do not store private payment payloads, payer
+emails, or checkout references in the top-up note. FlowTranslate Pro should be
+described as higher recurring usage plus Learning Path unless the backend plan
+is changed to a true unlimited policy.
+
 ## FlowTranslate Pro Billing Env
 
 Mercado Pago billing is server-side. The static FlowTranslate app should only
@@ -87,15 +100,17 @@ have public Supabase/PostHog Vite env vars. If checkout or paid-but-not-Pro
 support later fails, verify the Edge Function environment first:
 
 ```bash
+yarn env:sources
 yarn env:sync:local --dry-run
 ```
 
-For local development, the source should be `.env.source.local`, created from
-`.env.source.local.template`. For hosted Mercado Pago subscription checkout
+For local development, the canonical private source should be
+`.env.sources.json`; `yarn env:sources` generates `.env.source.local` and
+`.env.source.production` from it. For hosted Mercado Pago subscription checkout
 tests, use production `APP_USR-*` credentials from a Mercado Pago seller test
-account, not `TEST-*` credentials from a real account. For production, use
-`.env.source.production`; do not mix live provider tokens into the local source
-file.
+account, not `TEST-*` credentials from a real account. Keep live provider
+tokens in the `production` object and local/test credentials in the `local`
+object.
 
 For real local subscription tests, `ENTITY_BUILDERS_BILLING_WEBHOOK_URL` must
 be a public HTTPS tunnel that forwards to the local Supabase functions server.
@@ -137,7 +152,8 @@ an app, use that seller test account's production `APP_USR-*` credentials in
 the local Edge Function env, set
 `FLOWTRANSLATE_PRO_MERCADO_PAGO_TEST_ACCOUNT_MODE=true`, set
 `FLOWTRANSLATE_PRO_MERCADO_PAGO_TEST_PAYER_EMAIL` to the buyer test account
-email, then run `yarn env:sync:local` and restart `supabase functions serve`.
+email, then run `yarn env:sources`, `yarn env:sync:local`, and restart
+`supabase functions serve`.
 If Mercado Pago shows the buyer nickname as `TESTUSER123...`, use the email
 shape `test_user_123...@testuser.com` unless `/users/me` for that test account
 shows a different email. Open checkout in an incognito browser signed in as the
@@ -166,8 +182,8 @@ Reusable billing rule: Mercado Pago provider credentials are shared
 such as `FLOWTRANSLATE_PRO_*`. Future Entity Builders apps should add their own
 product-prefixed config instead of duplicating the provider integration.
 
-`env:sync --env local` writes app values to `apps/flowtranslate/.env.local`.
-`env:sync --env production` writes app values to
+`env:sync:local` writes app values to `apps/flowtranslate/.env.local`.
+`env:sync:production` writes app values to
 `apps/flowtranslate/.env.production`. Edge Function values use
 `eb-infra/supabase/functions/.env` for local function serve; production secrets
 must still be set in Supabase Cloud secrets.

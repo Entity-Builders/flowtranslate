@@ -789,7 +789,7 @@ describe('learning UI', () => {
 
     await waitFor(() =>
       expect(
-        screen.getAllByText('Respuesta en espanol').length,
+        screen.getAllByText('Versión en español').length,
       ).toBeGreaterThan(0),
     );
     expect(
@@ -864,7 +864,7 @@ describe('learning UI', () => {
     );
 
     expect(
-      screen.getByLabelText(/Uso de IA: Uso de IA disponible/i),
+      screen.getByLabelText(/Modo amigo gratis: Modo amigo gratis/i),
     ).toBeInTheDocument();
     expect(screen.queryByText(/96 de 100 creditos/i)).not.toBeInTheDocument();
     expect(

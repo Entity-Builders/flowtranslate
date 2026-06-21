@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  getUsageRecoveryCooldownBucket,
   LEARNING_HISTORY_PERSONALIZATION_THRESHOLD,
   type UsageSnapshot,
 } from '@eb-packages/flowtranslate-core';
@@ -11,6 +12,7 @@ import {
 } from '../../services/flowtranslate-api';
 import {
   analytics,
+  commercialAnalyticsProperties,
   safeCommercialAnalyticsProperties,
 } from '../../services/analytics';
 import {
@@ -87,11 +89,15 @@ export const useFlowtranslateBilling = ({
   } | null>(null);
   const trackedCheckoutReturnRef = useRef<string | null>(null);
   const trackedEntitlementStateRef = useRef<string | null>(null);
+  const trackedQuotaRecoveryRef = useRef<string | null>(null);
   const trackedUpgradePromptRef = useRef<Set<string>>(new Set());
 
+  const recoveryState = usage?.recovery?.state ?? null;
   const usagePressure =
     usage &&
-    (usage.remainingThisMonth <= 0 ||
+    (recoveryState === 'cooldown' ||
+      recoveryState === 'monthly_cap' ||
+      usage.remainingThisMonth <= 0 ||
       (usage.monthlyQuota > 0 &&
         usage.remainingThisMonth / usage.monthlyQuota <= 0.2));
   const shouldShowUsageUpgradePrompt =
@@ -116,7 +122,7 @@ export const useFlowtranslateBilling = ({
 
   const billingAnalyticsProperties = useCallback(
     (extra: Record<string, unknown> = {}) =>
-      safeCommercialAnalyticsProperties({
+      commercialAnalyticsProperties({
         account_kind: account.accountKind,
         billing_state: account.billingState.id,
         entitlement_source: account.billingState.source,
@@ -165,6 +171,7 @@ export const useFlowtranslateBilling = ({
       });
 
       analytics.track('upgrade_prompt_shown', properties);
+      analytics.track('paywall_exposed', properties);
       analytics.track('pricing_viewed', properties);
       trackCommercialExperimentExposure('ft_pro_value_copy', { surface });
     },
@@ -182,8 +189,11 @@ export const useFlowtranslateBilling = ({
     setDismissedUpgradePrompts((current) =>
       current.includes(surface) ? current : [...current, surface],
     );
-    analytics.track('upgrade_prompt_dismissed', { surface });
-  }, []);
+    analytics.track(
+      'upgrade_prompt_dismissed',
+      billingAnalyticsProperties({ surface }),
+    );
+  }, [billingAnalyticsProperties]);
 
   useEffect(() => {
     if (shouldShowSavedHistoryUpgradePrompt) {
@@ -214,6 +224,39 @@ export const useFlowtranslateBilling = ({
     showAccount,
     trackUpgradePromptShown,
     translatorStatus,
+  ]);
+
+  useEffect(() => {
+    const recovery = usage?.recovery;
+    if (translatorStatus !== 'quota' || !recovery) return;
+
+    const trackingKey = [
+      account.accountKind,
+      account.billingState.id,
+      recovery.state,
+      recovery.stage ?? 'no_stage',
+      recovery.cooldownUntil || recovery.monthlyCapReachedAt || 'no_time',
+    ].join(':');
+    if (trackedQuotaRecoveryRef.current === trackingKey) return;
+    trackedQuotaRecoveryRef.current = trackingKey;
+
+    analytics.track(
+      'quota_recovery_shown',
+      billingAnalyticsProperties({
+        surface: 'usage_limit',
+        recovery_state: recovery.state,
+        recovery_stage: recovery.stage ?? null,
+        cooldown_bucket: recovery.cooldownUntil
+          ? getUsageRecoveryCooldownBucket(recovery.cooldownUntil)
+          : null,
+      }),
+    );
+  }, [
+    account.accountKind,
+    account.billingState.id,
+    billingAnalyticsProperties,
+    translatorStatus,
+    usage?.recovery,
   ]);
 
   useEffect(() => {
@@ -289,13 +332,27 @@ export const useFlowtranslateBilling = ({
         requires_account: true,
       });
       analytics.track('account_connect_prompt_clicked', {
-        surface,
-        reason: 'pro_upgrade_requires_account',
-        account_kind: account.accountKind,
+        ...billingAnalyticsProperties({
+          surface,
+          reason: 'pro_upgrade_requires_account',
+        }),
       });
+      analytics.track(
+        'account_connection_started',
+        billingAnalyticsProperties({
+          surface,
+          reason: 'pro_upgrade_requires_account',
+          account_kind: account.accountKind,
+        }),
+      );
       openAccount();
     },
-    [account.accountKind, openAccount, proUpgradeAnalytics],
+    [
+      account.accountKind,
+      billingAnalyticsProperties,
+      openAccount,
+      proUpgradeAnalytics,
+    ],
   );
 
   const startProCheckout = useCallback(
@@ -307,11 +364,13 @@ export const useFlowtranslateBilling = ({
       });
 
       if (!account.accessToken || account.isGuest) {
-        analytics.track('account_connect_prompt_shown', {
-          surface,
-          reason: 'pro_checkout_requires_account',
-          account_kind: account.accountKind,
-        });
+        analytics.track(
+          'account_connect_prompt_shown',
+          billingAnalyticsProperties({
+            surface,
+            reason: 'pro_checkout_requires_account',
+          }),
+        );
         openAccount();
         return;
       }
@@ -321,7 +380,15 @@ export const useFlowtranslateBilling = ({
         const checkout = await startFlowtranslateProCheckout(
           account.accessToken,
         );
-        analytics.track('checkout_started', proUpgradeAnalytics(surface));
+        const checkoutProperties = proUpgradeAnalytics(surface);
+        analytics.track('checkout_started', {
+          ...checkoutProperties,
+          provider_checkout_status: checkout.status || 'pending',
+        });
+        analytics.track('checkout_pending', {
+          ...checkoutProperties,
+          provider_checkout_status: checkout.status || 'pending',
+        });
         window.location.assign(checkout.checkoutUrl);
       } catch (error) {
         captureFlowtranslateError(error, {
@@ -415,9 +482,10 @@ export const useFlowtranslateBilling = ({
 
     if (!account.accessToken || account.isGuest) {
       analytics.track('account_connect_prompt_shown', {
-        surface: 'profile_preferences',
-        reason: 'checkout_return_retry_requires_account',
-        account_kind: account.accountKind,
+        ...billingAnalyticsProperties({
+          surface: 'profile_preferences',
+          reason: 'checkout_return_retry_requires_account',
+        }),
       });
       openAccount();
       return;
@@ -436,12 +504,12 @@ export const useFlowtranslateBilling = ({
 
   const checkoutReturnRetryLabel =
     !account.accessToken || account.isGuest
-      ? 'Conectar cuenta'
+      ? 'Conectar cuenta y ver Pro'
       : 'Reintentar Pro';
 
   const quotaUpgradeLabel =
     account.accountKind !== 'permanent'
-      ? 'Conectar cuenta'
+      ? 'Conectar cuenta y ver Pro'
       : account.billingState.hasProAccess
         ? 'Ver Pro'
         : account.billingState.canRetryCheckout &&
@@ -449,7 +517,7 @@ export const useFlowtranslateBilling = ({
           ? 'Reintentar Pro'
           : account.billingState.shouldWaitForProvider
             ? 'Ver cuenta'
-            : 'Pasar a Pro';
+            : 'Activar Pro';
 
   const upgradeQuota = useCallback(() => {
     if (

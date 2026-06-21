@@ -61,7 +61,7 @@ export const ProUpgradePrompt = ({
   const copy = surfaceCopy[surface];
   const needsAccount = accountKind !== 'permanent';
   const resolvedActionLabel =
-    actionLabel ?? (needsAccount ? 'Conectar cuenta' : 'Pasar a Pro');
+    actionLabel ?? (needsAccount ? 'Conectar cuenta y ver Pro' : 'Activar Pro');
   const priceCopy = 'ARS 4.999/mes. Cancela cuando quieras.';
 
   return (

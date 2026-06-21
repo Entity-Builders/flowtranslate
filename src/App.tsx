@@ -10,6 +10,7 @@ import { FlowtranslateAppShell } from './app/FlowtranslateAppShell';
 import { useFlowtranslateScreenTracking } from './app/useFlowtranslateScreenTracking';
 import { useFlowtranslateView } from './app/useFlowtranslateView';
 import { AccountAccessModal } from './components/AccountAccessModal';
+import type { LandingExample } from './components/LandingHero';
 import { ProUpgradePrompt } from './components/ProUpgradePrompt';
 import { LearningRoute } from './features/learning/LearningRoute';
 import { ResponderRoute } from './features/responder/ResponderRoute';
@@ -22,6 +23,11 @@ import {
 import { useFlowtranslateAccountPanel } from './features/account/useFlowtranslateAccountPanel';
 import { useResponderAccountPrompt } from './features/account/useResponderAccountPrompt';
 import { useFlowtranslateBilling } from './features/billing/useFlowtranslateBilling';
+import {
+  FLOWTRANSLATE_LAUNCH_PATH,
+  LaunchLandingRoute,
+  type LaunchLandingContext,
+} from './features/commercial/LaunchLandingRoute';
 import { useFlowtranslateCommercialExperiments } from './features/commercial/useFlowtranslateCommercialExperiments';
 import { useFlowtranslateLearning } from './features/learning/useFlowtranslateLearning';
 import { useLearningStudyTools } from './features/learning/useLearningStudyTools';
@@ -42,9 +48,41 @@ const captureFlowtranslateError = (
   analytics.captureError(error, safeCommercialAnalyticsProperties(context));
 };
 
+const LAUNCH_LANDING_PATHS = new Set([
+  FLOWTRANSLATE_LAUNCH_PATH,
+  '/work-english',
+  '/campaign/work-english',
+]);
+
+type LaunchLandingExample = LandingExample;
+
+const isLaunchLandingPath = () => {
+  if (typeof window === 'undefined') return false;
+  return LAUNCH_LANDING_PATHS.has(window.location.pathname);
+};
+
+const getLaunchUrlContext = (): LaunchLandingContext => {
+  if (typeof window === 'undefined') return {};
+
+  const url = new URL(window.location.href);
+  return {
+    campaignId:
+      url.searchParams.get('campaign_id') ||
+      url.searchParams.get('utm_campaign') ||
+      undefined,
+    variantId:
+      url.searchParams.get('variant_id') ||
+      url.searchParams.get('utm_content') ||
+      undefined,
+  };
+};
+
 function App() {
   const account = useFlowtranslateAccount();
   const { view, setView } = useFlowtranslateView();
+  const [isLaunchLanding, setIsLaunchLanding] = useState(isLaunchLandingPath);
+  const [landingContext, setLandingContext] =
+    useState<LaunchLandingContext | null>(null);
   const { hasSeenResponderPromise, markResponderPromiseSeen } =
     useResponderPromiseState();
   const { trackCommercialExperimentExposure } =
@@ -158,6 +196,49 @@ function App() {
     onReturnToResponder: returnToResponder,
   });
 
+  useEffect(() => {
+    const handlePopState = () => {
+      setIsLaunchLanding(isLaunchLandingPath());
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  const openResponderFromLanding = useCallback(
+    (nextContext: LaunchLandingContext = {}) => {
+      setLandingContext({
+        ...getLaunchUrlContext(),
+        ...nextContext,
+      });
+      setView('translate');
+      window.history.pushState({}, '', '/');
+      setIsLaunchLanding(false);
+    },
+    [setView],
+  );
+
+  const startBlankFromLanding = useCallback(() => {
+    openResponderFromLanding({
+      sourceSituation: 'Mensaje propio',
+    });
+  }, [openResponderFromLanding]);
+
+  const selectLandingExample = useCallback(
+    (example: LaunchLandingExample) => {
+      translator.editInput(example.rawInput);
+      openResponderFromLanding({
+        selectedExampleId: example.id,
+        selectedExampleLabel: example.label,
+        sourceSituation: example.context,
+      });
+      window.setTimeout(() => {
+        void translator.translate();
+      }, 80);
+    },
+    [openResponderFromLanding, translator],
+  );
+
   const shouldSuppressResponderPromise =
     hasSeenResponderPromise ||
     account.accountKind === 'permanent' ||
@@ -270,12 +351,18 @@ function App() {
     : account.session
       ? 'signed-in'
       : 'settings';
+  const quotaStatusText =
+    usage?.recovery?.state === 'cooldown'
+      ? 'Pausa de uso amigo'
+      : usage?.recovery?.state === 'monthly_cap'
+        ? 'Uso amigo completo'
+        : 'Llegaste al limite mensual';
   const expressionStatusText = translator.status === 'translating'
     ? 'Generando respuesta...'
     : translator.status === 'typing'
       ? 'Listo, espero una pausa'
     : translator.status === 'quota'
-      ? 'Llegaste al limite mensual'
+      ? quotaStatusText
     : translator.hasPendingChanges
       ? 'Listo para responder'
       : translator.message || undefined;
@@ -287,6 +374,16 @@ function App() {
       translator.status === 'offline' ||
       translator.status === 'auth' ||
       Boolean(translator.resultText.trim()));
+
+  if (isLaunchLanding) {
+    return (
+      <LaunchLandingRoute
+        onStartBlank={startBlankFromLanding}
+        onSelectExample={selectLandingExample}
+        onTrackExperimentExposure={trackCommercialExperimentExposure}
+      />
+    );
+  }
 
   return (
     <FlowtranslateAppShell
@@ -316,6 +413,7 @@ function App() {
           dictationUnavailableReason={voice.dictationUnavailableReason}
           expressionStatusText={expressionStatusText}
           history={history}
+          landingContext={landingContext}
           shouldReserveMobileResultSheet={shouldReserveMobileResultSheet}
           shouldShowAccountPrompt={responderAccountPrompt.shouldShowAccountPrompt}
           shouldShowSavedHistoryUpgradePrompt={

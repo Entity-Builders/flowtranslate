@@ -25,6 +25,7 @@ import {
   UserRound,
   Volume2,
   X,
+  Zap,
 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { TRANSLATION_INPUT_MAX_CHARS } from '../constants';
@@ -67,6 +68,12 @@ type ExpressionWorkspaceProps = {
   dictatingLanguage: LanguageCode | null;
   dictationUnavailableReason: string;
   statusText?: string;
+  landingContext?: {
+    selectedExampleLabel?: string;
+    sourceSituation?: string;
+    campaignId?: string;
+    variantId?: string;
+  } | null;
   quotaUsage?: UsageSnapshot | null;
   quotaUpgradeLabel?: string;
   quotaUpgradeBusy?: boolean;
@@ -95,27 +102,31 @@ const responsePlaceholder = (mode: ExpressionMode) => {
   }
 
   if (mode === 'improve_english') {
-    return 'Tu ingles mejorado va a aparecer aca, listo para copiar.';
+    return 'Tu ingles profesional va a aparecer aca, listo para copiar.';
   }
 
-  return 'Tu respuesta en ingles va a aparecer aca, lista para copiar.';
+  return 'Tu respuesta profesional en ingles va a aparecer aca, lista para copiar.';
 };
 
 const zeroStateSuggestions = [
   {
-    label: 'Responder Slack',
-    prompt:
-      'Hola equipo, queria saber si hay novedades. Quedo atento a cualquier update.',
+    label: 'Reagendar una call',
+    prompt: 'Sorry, hoy no llego a la call. Can we move it to tomorrow same time?',
   },
   {
-    label: 'Avisar demora a cliente',
+    label: 'Avisar demora',
     prompt:
       'El reporte se demora hasta manana. Ya estamos revisando los datos y te mando una version clara apenas este lista.',
   },
   {
-    label: 'Contestar LinkedIn',
+    label: 'Mejorar un update',
     prompt:
-      'Gracias por escribirme. Me interesa la propuesta y podemos coordinar una llamada corta la semana que viene.',
+      'I finish most part but still need check numbers. I send final today afternoon.',
+  },
+  {
+    label: 'Pedir contexto',
+    prompt:
+      'Can you send me more context? porque con esto no puedo estimate bien.',
   },
 ] satisfies SuggestionChip[];
 
@@ -127,10 +138,32 @@ const translationLoadingMessages = [
 
 const formatQuotaResetDate = (resetAt?: string) => {
   if (!resetAt) return '';
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat('es', {
     month: 'long',
     day: 'numeric',
   }).format(new Date(resetAt));
+};
+
+const formatCooldownWait = (cooldownUntil?: string) => {
+  if (!cooldownUntil) return 'un rato';
+
+  const remainingMs = new Date(cooldownUntil).getTime() - Date.now();
+  if (!Number.isFinite(remainingMs) || remainingMs <= 0) return 'unos minutos';
+
+  const remainingMinutes = Math.ceil(remainingMs / 60_000);
+  if (remainingMinutes <= 1) return '1 minuto';
+  if (remainingMinutes < 60) return `${remainingMinutes} minutos`;
+
+  const remainingHours = Math.ceil(remainingMinutes / 60);
+  if (remainingHours <= 1) return '1 hora';
+  if (remainingHours < 24) return `${remainingHours} horas`;
+
+  return 'mañana';
+};
+
+const formatCooldownResumeCopy = (cooldownUntil?: string) => {
+  const wait = formatCooldownWait(cooldownUntil);
+  return wait === 'mañana' ? 'mañana' : `en ${wait}`;
 };
 
 const USAGE_PIP_COUNT = 5;
@@ -138,6 +171,7 @@ const USAGE_PIP_COUNT = 5;
 const getUsageSummary = (usage?: UsageSnapshot | null) => {
   if (!usage || usage.monthlyQuota <= 0) return null;
 
+  const recovery = usage.recovery;
   const quota = Math.max(0, usage.monthlyQuota);
   const remaining = Math.max(0, usage.remainingThisMonth);
   const remainingRatio = quota > 0 ? remaining / quota : 0;
@@ -149,13 +183,24 @@ const getUsageSummary = (usage?: UsageSnapshot | null) => {
           Math.max(1, Math.ceil(remainingRatio * USAGE_PIP_COUNT)),
         );
   const label =
-    remaining <= 0
-      ? 'Limite mensual alcanzado'
-      : remainingRatio <= 0.2
-        ? 'Te queda poco uso de IA'
-        : remainingRatio <= 0.5
-          ? 'Uso de IA moderado'
-          : 'Uso de IA disponible';
+    recovery?.state === 'cooldown'
+      ? 'Pausa de uso amigo'
+      : recovery?.state === 'monthly_cap'
+        ? 'Uso amigo completo'
+        : remaining <= 0
+          ? 'Gratis usado este mes'
+          : remainingRatio <= 0.2
+            ? 'Últimas respuestas gratis'
+            : remainingRatio <= 0.5
+              ? 'Te queda margen gratis'
+              : 'Modo amigo gratis';
+  const resetDate = formatQuotaResetDate(usage.resetAt);
+  const detail =
+    recovery?.state === 'cooldown'
+      ? `Vuelve ${formatCooldownResumeCopy(recovery.cooldownUntil)}.`
+      : (recovery?.state === 'monthly_cap' || remaining <= 0) && resetDate
+        ? `Vuelve el ${resetDate}. Pasá a Pro para seguir ahora.`
+        : 'Uso amigo gratis para probar FlowTranslate.';
   const pipClass =
     remaining <= 0
       ? 'bg-slate-300'
@@ -165,6 +210,7 @@ const getUsageSummary = (usage?: UsageSnapshot | null) => {
 
   return {
     label,
+    detail,
     availablePips,
     pipClass,
   };
@@ -177,8 +223,8 @@ const UsagePips = ({ usage }: { usage?: UsageSnapshot | null }) => {
   return (
     <div
       className='inline-flex h-10 min-w-0 items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 text-xs font-black text-slate-600'
-      aria-label={`Uso de IA: ${summary.label}`}
-      title={`Uso de IA: ${summary.label}`}
+      aria-label={`Modo amigo gratis: ${summary.label}`}
+      title={summary.detail}
     >
       <span className='hidden max-w-[13rem] truncate xl:inline'>
         {summary.label}
@@ -265,10 +311,44 @@ const PostCopyNudge = ({
   );
 };
 
+const QuotaPulseIcon = ({ isCooldown }: { isCooldown: boolean }) => {
+  const tone = isCooldown
+    ? {
+        ring: 'border-amber-200',
+        halo: 'border-amber-200',
+        surface: 'bg-amber-50 text-amber-700 ring-amber-200',
+      }
+    : {
+        ring: 'border-indigo-200',
+        halo: 'border-indigo-200',
+        surface: 'bg-indigo-50 text-indigo-600 ring-indigo-200',
+      };
+
+  return (
+    <div
+      className='relative flex h-14 w-14 shrink-0 items-center justify-center'
+      aria-hidden='true'
+    >
+      <span
+        className={`absolute inset-1 rounded-full border ${tone.halo} opacity-60 motion-safe:animate-ping`}
+      />
+      <span
+        className={`absolute inset-0 rounded-full border ${tone.ring} opacity-40 motion-safe:animate-ping`}
+        style={{ animationDelay: '420ms' }}
+      />
+      <span
+        className={`relative z-10 flex h-11 w-11 items-center justify-center rounded-full ring-1 ${tone.surface}`}
+      >
+        <Zap size={20} fill='currentColor' className='motion-safe:animate-pulse' />
+      </span>
+    </div>
+  );
+};
+
 const QuotaExhaustedState = ({
   usage,
   compact = false,
-  upgradeLabel = 'Pasar a Pro',
+  upgradeLabel = 'Activar Pro',
   upgradeBusy = false,
   onUpgrade,
   onSupport,
@@ -281,65 +361,120 @@ const QuotaExhaustedState = ({
   onSupport?: () => void;
 }) => {
   const resetLabel = formatQuotaResetDate(usage?.resetAt);
+  const resetCopy = resetLabel
+    ? `Tu uso amigo vuelve el ${resetLabel}.`
+    : 'Tu uso amigo vuelve cuando se reinicie tu ciclo gratis.';
+  const isCooldown = usage?.recovery?.state === 'cooldown';
+  const cooldownResumeCopy = formatCooldownResumeCopy(
+    usage?.recovery?.cooldownUntil,
+  );
+  const eyebrow = isCooldown ? 'Pausa de uso amigo' : 'Uso amigo completo';
+  const title = isCooldown
+    ? `Te damos más respuestas ${cooldownResumeCopy}`
+    : 'Elegí cómo seguir';
+  const bodyCopy = isCooldown
+    ? `Tu texto sigue acá. Podés esperar ${cooldownResumeCopy}, apoyar con un cafecito y te recargamos uso amigo, o activar Pro para seguir sin esta pausa.`
+    : 'Tu texto sigue acá. Podés apoyar con un cafecito y te recargamos créditos de uso amigo, o activar Pro para más margen mensual y Learning Path.';
+  const waitCopy = isCooldown
+    ? `También podés esperar: volvés a tener uso amigo ${cooldownResumeCopy}.`
+    : `También podés esperar: ${resetCopy}`;
+  const supportDescription = isCooldown
+    ? 'Si necesitás seguir ahora, apoyá el proyecto y te recargamos uso amigo.'
+    : 'Apoyá el proyecto y te recargamos créditos de uso amigo para seguir respondiendo hoy.';
+  const proDescription = isCooldown
+    ? 'Evitá estas pausas con más margen mensual, aprendizaje guiado y menos fricción cuando necesitás responder.'
+    : 'Suscribite para tener más margen mensual, aprendizaje guiado y menos fricción cuando necesitás responder.';
 
   return (
     <div
-      className={`relative overflow-hidden rounded-lg border border-amber-200 bg-amber-50 text-amber-950 ${
-        compact ? 'p-4' : 'p-6'
+      className={`relative overflow-hidden rounded-lg border border-slate-100 bg-white text-slate-700 shadow-[0_2px_16px_rgba(15,23,42,0.06)] ${
+        compact ? 'p-4' : 'p-5'
       }`}
     >
-      <div className='absolute inset-x-0 top-0 h-1 overflow-hidden bg-amber-100'>
-        <div className='h-full w-1/2 animate-pulse bg-emerald-500' />
-      </div>
-      <div className='flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between'>
+      <div className='flex flex-col gap-5'>
         <div className='min-w-0'>
-          <div className='mb-4 flex items-center gap-3'>
-            <div className='relative flex h-12 w-12 shrink-0 items-center justify-center rounded-md bg-white text-amber-700 shadow-sm ring-1 ring-amber-200'>
-              <Sparkles size={22} className='motion-safe:animate-bounce' />
-            </div>
+          <div className='mb-4 flex items-center gap-4'>
+            <QuotaPulseIcon isCooldown={isCooldown} />
             <div className='min-w-0'>
-              <p className='text-xs font-black uppercase tracking-normal text-amber-700'>
-                Limite de prueba alcanzado
+              <p
+                className={`text-xs font-black uppercase tracking-[0.18em] ${
+                  isCooldown ? 'text-amber-600' : 'text-slate-400'
+                }`}
+              >
+                {eyebrow}
               </p>
-              <h3 className='mt-1 text-2xl font-black leading-tight text-slate-950'>
-                Segui respondiendo hoy
+              <h3 className='mt-1 text-lg font-black leading-tight text-slate-950 sm:text-xl'>
+                {title}
               </h3>
+              <p className='mt-1 text-xs font-semibold leading-5 text-slate-500'>
+                {waitCopy}
+              </p>
             </div>
           </div>
-          <p className='max-w-2xl text-sm font-semibold leading-6 text-amber-900 sm:text-base'>
-            Llegaste al limite mensual de IA para esta prueba. Tu texto sigue
-            aca; podes pasar a Pro para continuar ahora o apoyar el proyecto con
-            un cafecito si FlowTranslate te salvo una respuesta.
+          <p className='max-w-2xl text-sm font-semibold leading-6 text-slate-600'>
+            {bodyCopy}
           </p>
-          {resetLabel ? (
-            <p className='mt-3 text-xs font-bold text-amber-800'>
-              Tu cuota se renueva el {resetLabel}.
-            </p>
-          ) : null}
         </div>
 
-        <div className='flex shrink-0 flex-col gap-2 sm:min-w-52'>
-          <button
-            type='button'
-            onClick={onUpgrade}
-            disabled={!onUpgrade || upgradeBusy}
-            className='inline-flex h-11 items-center justify-center gap-2 rounded-md bg-slate-950 px-4 text-sm font-black text-white transition-colors hover:bg-slate-800 disabled:bg-slate-300'
-          >
-            {upgradeBusy ? (
-              <Loader2 size={16} className='animate-spin' />
-            ) : null}
-            {upgradeLabel}
-            {!upgradeBusy ? <ArrowRight size={16} /> : null}
-          </button>
-          <button
-            type='button'
-            onClick={onSupport}
-            disabled={!onSupport}
-            className='inline-flex h-10 items-center justify-center gap-2 rounded-md border border-amber-300 bg-white px-4 text-sm font-black text-amber-900 transition-colors hover:bg-amber-100 disabled:text-amber-300'
-          >
-            <Coffee size={16} />
-            Invitar un cafecito
-          </button>
+        <div className='grid gap-2.5 min-[440px]:grid-cols-2'>
+          <div className='flex min-w-0 flex-col justify-between gap-4 rounded-md border border-slate-200 bg-white p-4 text-left transition-colors hover:border-indigo-300 hover:bg-indigo-50/70'>
+            <div className='flex min-w-0 gap-3'>
+              <div className='flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-slate-50 text-slate-700 ring-1 ring-slate-200'>
+                <Coffee size={18} />
+              </div>
+              <div className='min-w-0'>
+                <p className='text-xs font-black uppercase tracking-normal text-slate-400'>
+                  Opción 1
+                </p>
+                <h4 className='mt-1 text-sm font-black leading-tight text-slate-950 sm:text-base'>
+                  Cafecito + recarga
+                </h4>
+                <p className='mt-2 text-xs font-semibold leading-5 text-slate-500 sm:text-sm'>
+                  {supportDescription}
+                </p>
+              </div>
+            </div>
+            <button
+              type='button'
+              onClick={onSupport}
+              disabled={!onSupport}
+              className='inline-flex h-10 w-full items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 transition-colors hover:border-indigo-300 hover:bg-white hover:text-indigo-700 disabled:text-slate-300'
+            >
+              <Coffee size={16} />
+              Apoyar con cafecito
+            </button>
+          </div>
+
+          <div className='flex min-w-0 flex-col justify-between gap-4 rounded-md bg-gradient-to-br from-indigo-600 to-violet-700 p-4 text-left text-white shadow-[0_4px_16px_rgba(79,70,229,0.22)]'>
+            <div className='flex min-w-0 gap-3'>
+              <div className='flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-white/15 text-white ring-1 ring-white/20'>
+                <BookOpen size={18} />
+              </div>
+              <div className='min-w-0'>
+                <p className='text-xs font-black uppercase tracking-normal text-indigo-100/80'>
+                  Opción 2
+                </p>
+                <h4 className='mt-1 text-sm font-black leading-tight text-white sm:text-base'>
+                  Pro + Learning Path
+                </h4>
+                <p className='mt-2 text-xs font-semibold leading-5 text-indigo-100 sm:text-sm'>
+                  {proDescription}
+                </p>
+              </div>
+            </div>
+            <button
+              type='button'
+              onClick={onUpgrade}
+              disabled={!onUpgrade || upgradeBusy}
+              className='inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-white px-4 text-sm font-black text-indigo-700 transition-colors hover:bg-indigo-50 disabled:bg-white/40 disabled:text-white/60'
+            >
+              {upgradeBusy ? (
+                <Loader2 size={16} className='animate-spin' />
+              ) : null}
+              {upgradeLabel}
+              {!upgradeBusy ? <ArrowRight size={16} /> : null}
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -400,6 +535,7 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
     dictatingLanguage,
     dictationUnavailableReason,
     statusText,
+    landingContext,
     quotaUsage,
     quotaUpgradeLabel,
     quotaUpgradeBusy = false,
@@ -473,7 +609,16 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
       : hasResult
         ? statusText || 'Listo para mandar'
         : 'Listo para mandar';
-  const responseLanguageLabel = targetLanguage === 'en' ? 'ingles' : 'espanol';
+  const resultFrameLabel =
+    targetLanguage === 'en'
+      ? 'Inglés profesional listo para copiar'
+      : 'Versión en español';
+  const confidenceCues =
+    targetLanguage === 'en'
+      ? ['Profesional', 'Natural', 'Listo para copiar']
+      : ['Claro', 'En español', 'Listo para entender'];
+  const landingContextLabel =
+    landingContext?.selectedExampleLabel || landingContext?.sourceSituation;
   const shouldShowPostCopyNudge =
     showPostCopyNudge &&
     hasResult &&
@@ -633,15 +778,25 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
       {shouldShowLaunchPromise ? (
         <div className='min-w-0 max-w-full px-1 sm:px-2'>
           <h2 className='max-w-full break-words text-2xl font-black leading-[1.12] tracking-normal text-slate-950 [overflow-wrap:anywhere] sm:text-4xl sm:leading-tight'>
-            Tu respuesta en ingles para trabajo, lista para mandar.
+            Escribí como te salga. Mandá inglés profesional.
           </h2>
           <p className='mt-2 max-w-3xl text-sm font-semibold leading-6 text-slate-600 sm:text-base'>
-            Pega un Slack, DM, email o mensaje para cliente. Pensalo en espanol;
-            mandalo en ingles natural.
+            Pegá una idea en español, Spanglish o inglés inseguro. FlowTranslate
+            la convierte en una respuesta natural lista para copiar.
           </p>
           <p className='mt-2 max-w-2xl text-xs font-bold leading-5 text-slate-500 sm:text-sm'>
             Probalo sin cuenta. Conecta despues para guardar historial y
             desbloquear Learning personal.
+          </p>
+        </div>
+      ) : null}
+
+      {landingContextLabel && !hasResult && !isTranslating ? (
+        <div className='mx-1 flex min-w-0 items-start gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-900 sm:mx-2'>
+          <Sparkles size={16} className='mt-0.5 shrink-0 text-emerald-700' />
+          <p className='min-w-0 break-words leading-5 [overflow-wrap:anywhere]'>
+            Continuás desde {landingContextLabel}. Podés editar este texto o
+            pegar tu propio mensaje real.
           </p>
         </div>
       ) : null}
@@ -658,7 +813,7 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
                 if (canTranslate) onTranslate();
               }
             }}
-            placeholder='Pega un chat de trabajo o escribi la idea que queres responder en ingles...'
+            placeholder='Escribí en español, Spanglish o inglés inseguro...'
             className='min-h-[132px] w-full min-w-0 resize-none overflow-hidden break-words bg-transparent py-5 pl-5 pr-14 text-lg leading-relaxed text-slate-950 outline-none [overflow-wrap:anywhere] placeholder:text-slate-300 sm:py-6 sm:pl-7 sm:pr-16 sm:text-xl'
             spellCheck
             aria-label='Mensaje o idea'
@@ -834,7 +989,7 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
                 {readyText}
               </div>
               <p className='mt-1 text-xs font-bold uppercase tracking-normal text-slate-400'>
-                Respuesta en {responseLanguageLabel}
+                {resultFrameLabel}
               </p>
             </div>
 
@@ -912,6 +1067,18 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
 
         {shouldEmphasizeResponse && status !== 'quota' ? (
           <div className='mt-7 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
+            {hasResult ? (
+              <div className='flex min-w-0 flex-wrap items-center gap-2'>
+                {confidenceCues.map((cue) => (
+                  <span
+                    key={cue}
+                    className='inline-flex min-h-8 items-center rounded-full bg-slate-50 px-3 text-xs font-black text-slate-600 ring-1 ring-slate-100'
+                  >
+                    {cue}
+                  </span>
+                ))}
+              </div>
+            ) : null}
             <button
               type='button'
               onClick={onCopyResult}
@@ -997,7 +1164,7 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
                 </span>
                 {hasResult && isMobileResultOpen ? (
                   <span className='mt-0.5 block text-sm font-bold text-slate-500'>
-                    Respuesta en {responseLanguageLabel}
+                    {resultFrameLabel}
                   </span>
                 ) : !hasResult ? (
                   <span className='mt-0.5 block truncate text-base font-black text-slate-950'>
@@ -1043,9 +1210,23 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
                       onSupport={onQuotaSupport}
                     />
                   ) : (
-                    <p className='max-w-full break-words text-xl font-semibold leading-[1.28] text-slate-950 [overflow-wrap:anywhere]'>
-                      {resultText}
-                    </p>
+                    <div className='space-y-3'>
+                      <p className='max-w-full break-words text-xl font-semibold leading-[1.28] text-slate-950 [overflow-wrap:anywhere]'>
+                        {resultText}
+                      </p>
+                      {hasResult ? (
+                        <div className='flex flex-wrap gap-2'>
+                          {confidenceCues.map((cue) => (
+                            <span
+                              key={cue}
+                              className='inline-flex min-h-7 items-center rounded-full bg-slate-50 px-2.5 text-xs font-black text-slate-600 ring-1 ring-slate-100'
+                            >
+                              {cue}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
                   )}
 
                   {status !== 'quota' ? (

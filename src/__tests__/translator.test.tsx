@@ -15,12 +15,15 @@ vi.mock('../services/analytics', () => ({
     captureError: analyticsCaptureError,
     getFeatureFlag: analyticsGetFeatureFlag,
   },
+  commercialAnalyticsProperties: (properties: Record<string, unknown>) =>
+    properties,
   safeCommercialAnalyticsProperties: (properties: Record<string, unknown>) => properties,
 }));
 
 describe('translator UI', () => {
   beforeEach(() => {
     localStorage.clear();
+    window.history.pushState({}, '', '/');
     vi.clearAllMocks();
     analyticsGetFeatureFlag.mockReturnValue(undefined);
   });
@@ -30,11 +33,11 @@ describe('translator UI', () => {
 
     expect(
       screen.getByRole('heading', {
-        name: /tu respuesta en ingles para trabajo, lista para mandar/i,
+        name: /escribí como te salga/i,
       }),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/pega un Slack, DM, email o mensaje para cliente/i),
+      screen.getByText(/español, Spanglish o inglés inseguro/i),
     ).toBeInTheDocument();
     expect(screen.getByText(/probalo sin cuenta/i)).toBeInTheDocument();
     expect(screen.getByLabelText('Mensaje o idea')).toBeInTheDocument();
@@ -61,13 +64,13 @@ describe('translator UI', () => {
 
     expect(screen.getByLabelText('Mensaje o idea')).toHaveValue('');
     expect(
-      screen.getByPlaceholderText(/pega un chat de trabajo/i),
+      screen.getByPlaceholderText(/escribí en español, Spanglish/i),
     ).toBeInTheDocument();
     expect(
       screen.queryByText(/sin login para probar/i),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByRole('button', { name: /contestar linkedin/i }),
+      screen.getByRole('button', { name: /reagendar una call/i }),
     ).toBeInTheDocument();
     expect(analyticsTrack).not.toHaveBeenCalledWith(
       'landing_example_selected',
@@ -80,7 +83,7 @@ describe('translator UI', () => {
 
     expect(
       screen.getByRole('heading', {
-        name: /tu respuesta en ingles para trabajo, lista para mandar/i,
+        name: /escribí como te salga/i,
       }),
     ).toBeInTheDocument();
 
@@ -90,7 +93,7 @@ describe('translator UI', () => {
 
     expect(
       screen.queryByRole('heading', {
-        name: /tu respuesta en ingles para trabajo, lista para mandar/i,
+        name: /escribí como te salga/i,
       }),
     ).not.toBeInTheDocument();
     expect(screen.queryByText(/probalo sin cuenta/i)).not.toBeInTheDocument();
@@ -128,7 +131,7 @@ describe('translator UI', () => {
     expect(screen.getByLabelText('Mensaje o idea')).toHaveValue('');
     expect(
       screen.queryByRole('heading', {
-        name: /tu respuesta en ingles para trabajo, lista para mandar/i,
+        name: /escribí como te salga/i,
       }),
     ).not.toBeInTheDocument();
     expect(screen.queryByText(/probalo sin cuenta/i)).not.toBeInTheDocument();
@@ -140,21 +143,51 @@ describe('translator UI', () => {
     const input = screen.getByLabelText('Mensaje o idea');
 
     expect(
-      screen.getByRole('button', { name: /responder slack/i }),
+      screen.getByRole('button', { name: /reagendar una call/i }),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole('button', { name: /let me double check/i }),
     ).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /avisar demora a cliente/i }));
+    fireEvent.click(screen.getByRole('button', { name: /avisar demora/i }));
 
     expect(input).toHaveValue(
       'El reporte se demora hasta manana. Ya estamos revisando los datos y te mando una version clara apenas este lista.',
     );
     expect((input as HTMLTextAreaElement).value).not.toMatch(/decile/i);
     expect(
-      screen.queryByRole('button', { name: /avisar demora a cliente/i }),
+      screen.queryByRole('button', { name: /avisar demora/i }),
     ).not.toBeInTheDocument();
+  });
+
+  it('renders the canonical launch landing and continues into the responder with an example', () => {
+    window.history.pushState(
+      {},
+      '',
+      '/respuestas-en-ingles?utm_campaign=launch-test&utm_content=spanglish',
+    );
+
+    render(<App />);
+
+    expect(
+      screen.getByRole('heading', {
+        name: /respondé en inglés profesional/i,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/escribí en español, Spanglish o inglés inseguro/i),
+    ).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getAllByRole('button', { name: /probar este ejemplo/i })[0],
+    );
+
+    expect(screen.getByLabelText('Mensaje o idea')).toHaveValue(
+      'El reporte se demora hasta mañana. Ya estamos revisando los datos y te mando una version clara apenas este lista.',
+    );
+    expect(
+      screen.getByText(/continuás desde Avisar una demora/i),
+    ).toBeInTheDocument();
   });
 
   it('presents brief as a tone instead of a more-short command', () => {

@@ -36,7 +36,10 @@ import {
 import { runSpanishInputTranslationLifecycle } from '../features/responder/spanishInputTranslationLifecycle';
 import { runTranslationRequestLifecycle } from '../features/responder/translationRequestLifecycle';
 import { usePendingTranslationHistoryRefresh } from '../features/responder/usePendingTranslationHistoryRefresh';
-import { analytics } from '../services/analytics';
+import {
+  analytics,
+  commercialAnalyticsProperties,
+} from '../services/analytics';
 import { FlowtranslateApiError } from '../services/flowtranslate-api';
 
 type UseBidirectionalTranslatorParams = {
@@ -91,6 +94,7 @@ export const useBidirectionalTranslator = ({
   const presetIdRef = useRef<TranslationPresetId>(
     DEFAULT_TRANSLATION_PRESET_ID,
   );
+  const trackedComposerStartedRef = useRef(false);
   const timerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
 
   const clearScheduledTranslation = useCallback(() => {
@@ -536,25 +540,19 @@ export const useBidirectionalTranslator = ({
       setTranslationRecordId('');
       setStatus('translating');
       setMessage('Generando respuesta...');
-      analytics.track('translation_submitted', {
-        ...translationAnalyticsProperties(
+      const submissionProperties = commercialAnalyticsProperties(
+        translationAnalyticsProperties(
           nextMode,
           trimmedSource,
           nextPresetId,
           trigger,
           nextContextText,
         ),
-      });
+      );
+      analytics.track('translation_submitted', submissionProperties);
       if (isConversationReplyMode(nextMode)) {
-        analytics.track('conversation_reply_requested', {
-          ...translationAnalyticsProperties(
-            nextMode,
-            trimmedSource,
-            nextPresetId,
-            trigger,
-            nextContextText,
-          ),
-        });
+        analytics.track('raw_idea_submitted', submissionProperties);
+        analytics.track('conversation_reply_requested', submissionProperties);
       }
 
       try {
@@ -699,7 +697,7 @@ export const useBidirectionalTranslator = ({
             trigger,
           });
         }
-        analytics.track('translation_succeeded', {
+        const successProperties = commercialAnalyticsProperties({
           ...translationAnalyticsProperties(
             responseMode,
             trimmedSource,
@@ -716,21 +714,10 @@ export const useBidirectionalTranslator = ({
           used_this_month: result.usage.usedThisMonth,
           remaining_quota: result.usage.remainingThisMonth,
         });
+        analytics.track('translation_succeeded', successProperties);
         if (isConversationReplyMode(responseMode)) {
-          analytics.track('conversation_reply_generated', {
-            ...translationAnalyticsProperties(
-              responseMode,
-              trimmedSource,
-              nextPresetId,
-              trigger,
-              nextContextText,
-            ),
-            output_chars: result.text.trim().length,
-            latency_ms: latencyMs,
-            charged: result.usage.charged,
-            reused: !result.usage.charged,
-            remaining_quota: result.usage.remainingThisMonth,
-          });
+          analytics.track('professional_reply_generated', successProperties);
+          analytics.track('conversation_reply_generated', successProperties);
         }
       } finally {
         if (inFlightKeyRef.current === requestKey) inFlightKeyRef.current = '';
@@ -875,6 +862,20 @@ export const useBidirectionalTranslator = ({
 
       if (nextDetection.automatic) updateMode(nextMode);
       setModeDetection({ ...nextDetection, mode: nextMode });
+      const inputChars = countTranslationInputCharacters(value);
+      if (!value.trim()) {
+        trackedComposerStartedRef.current = false;
+      } else if (!trackedComposerStartedRef.current) {
+        trackedComposerStartedRef.current = true;
+        analytics.track(
+          'composer_started',
+          commercialAnalyticsProperties({
+            mode: nextMode,
+            preset_id: presetIdRef.current,
+            input_chars: inputChars,
+          }),
+        );
+      }
       scheduleTranslation(
         value,
         nextMode,

@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { analytics } from '../../services/analytics';
+import {
+  analytics,
+  commercialAnalyticsProperties,
+} from '../../services/analytics';
 import type { FlowtranslateAccountKind } from '../../hooks/useFlowtranslateAccount';
 import { ACCOUNT_PROMPT_COPY_THRESHOLD } from './accountPrompt';
 
@@ -26,22 +29,27 @@ export const useResponderAccountPrompt = ({
     if (trackedAccountPromptRef.current) return;
 
     trackedAccountPromptRef.current = true;
-    analytics.track('account_connect_prompt_shown', {
-      surface: 'translate_soft_banner',
-      reason: 'copied_replies',
-      copy_count: resultCopyCount,
-      account_kind: accountKind,
-    });
+    analytics.track(
+      'account_connect_prompt_shown',
+      commercialAnalyticsProperties({
+        surface: 'translate_soft_banner',
+        reason: 'copied_replies',
+        copy_count: resultCopyCount,
+        account_kind: accountKind,
+      }),
+    );
   }, [accountKind, resultCopyCount, shouldShowAccountPrompt]);
 
   const openAccountFromPrompt = useCallback(
     (reason = 'copied_replies') => {
-      analytics.track('account_connect_prompt_clicked', {
+      const properties = commercialAnalyticsProperties({
         surface: 'translate_soft_banner',
         reason,
         copy_count: resultCopyCount,
         account_kind: accountKind,
       });
+      analytics.track('account_connect_prompt_clicked', properties);
+      analytics.track('account_connection_started', properties);
       openAccount();
     },
     [accountKind, openAccount, resultCopyCount],

@@ -12,6 +12,7 @@ import {
 } from '../../components/ProUpgradePrompt';
 import type { useBidirectionalTranslator } from '../../hooks/useBidirectionalTranslator';
 import type { FlowtranslateAccountKind } from '../../hooks/useFlowtranslateAccount';
+import type { LaunchLandingContext } from '../commercial/LaunchLandingRoute';
 
 type CopiedTarget = 'input' | 'result' | null;
 type Translator = ReturnType<typeof useBidirectionalTranslator>;
@@ -28,6 +29,7 @@ type ResponderRouteProps = {
   dictationUnavailableReason: string;
   expressionStatusText?: string;
   history: TranslationRecord[];
+  landingContext?: LaunchLandingContext | null;
   shouldReserveMobileResultSheet: boolean;
   shouldShowAccountPrompt: boolean;
   shouldShowSavedHistoryUpgradePrompt: boolean;
@@ -66,6 +68,7 @@ export const ResponderRoute = ({
   dictationUnavailableReason,
   expressionStatusText,
   history,
+  landingContext,
   shouldReserveMobileResultSheet,
   shouldShowAccountPrompt,
   shouldShowSavedHistoryUpgradePrompt,
@@ -129,6 +132,7 @@ export const ResponderRoute = ({
       dictatingLanguage={dictatingLanguage}
       dictationUnavailableReason={dictationUnavailableReason}
       statusText={expressionStatusText}
+      landingContext={landingContext}
       quotaUsage={usage}
       quotaUpgradeLabel={quotaUpgradeLabel}
       quotaUpgradeBusy={quotaUpgradeBusy}

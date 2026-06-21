@@ -84,6 +84,7 @@ Function environment lives in `eb-infra/supabase/functions/.env`:
 GEMINI_API_KEY=<server-side-key>
 FLOWTRANSLATE_FREE_MONTHLY_TOKENS=20000
 FLOWTRANSLATE_GUEST_MONTHLY_TOKENS=800
+FLOWTRANSLATE_FREE_RECOVERY_COOLDOWNS_MINUTES=5,30,120,1440
 FLOWTRANSLATE_TRANSLATE_MODEL=gemini-2.5-flash-lite
 FLOWTRANSLATE_PRACTICE_MODEL=gemini-2.5-flash
 # Optional legacy fallback for practice when FLOWTRANSLATE_PRACTICE_MODEL is not set.
@@ -91,20 +92,22 @@ FLOWTRANSLATE_GEMINI_MODEL=
 ```
 
 FlowTranslate Pro billing uses Mercado Pago through server-side Supabase Edge
-Functions only. For local development, copy `.env.source.local.template` to
-`.env.source.local`, fill local Supabase and Mercado Pago test credentials, then
-sync both the Vite app and Edge Function env:
+Functions only. For local development, put local Supabase and Mercado Pago test
+credentials in the gitignored `.env.sources.json` vault, generate the derived
+source files, then sync both the Vite app and Edge Function env:
 
 ```bash
+yarn env:sources
 yarn env:sync:local
 ```
 
 That writes browser-safe values to `apps/flowtranslate/.env.local` and
 server-side values to `eb-infra/supabase/functions/.env`. For production,
-copy `.env.source.template` to `.env.source.production`, fill production
-values, and use:
+put production values in the `production` object inside `.env.sources.json`,
+then use:
 
 ```bash
+yarn env:sources
 yarn env:sync:production
 ```
 
@@ -164,8 +167,9 @@ de prueba". Then set `FLOWTRANSLATE_PRO_MERCADO_PAGO_TEST_ACCOUNT_MODE=true`
 and `FLOWTRANSLATE_PRO_MERCADO_PAGO_TEST_PAYER_EMAIL` to the separate buyer
 test account email. Mercado Pago may show the buyer as `TESTUSER123...`, but
 the email expected by `/preapproval` is usually `test_user_123...@testuser.com`.
-Run `yarn env:sync:local`, restart the local functions server, and complete
-checkout in an incognito browser signed in as the buyer test account.
+Run `yarn env:sources`, then `yarn env:sync:local`, restart the local functions
+server, and complete checkout in an incognito browser signed in as the buyer
+test account.
 
 ## Data And Runtime
 
@@ -175,10 +179,19 @@ Flowtranslate vNext stores durable app data in the dedicated
 - `flowtranslate.profiles`
 - `flowtranslate.translation_records`
 - `flowtranslate.usage_events`
+- `flowtranslate.usage_recovery_state`
+- `flowtranslate.usage_topups`
 
 The browser app is a thin PWA interface. Gemini calls, quota preflight,
 translation history writes, and practice generation all run through
 `flowtranslate-generate`.
+
+Free usage is framed to users as "uso amigo", not raw tokens. When a free user
+hits a tiered recovery threshold, the app should show a short "Pausa de uso
+amigo" with the expected wait, keep their text in place, and offer two active
+paths: Cafecito support with an operator-applied usage top-up, or FlowTranslate
+Pro for higher recurring usage plus Learning Path. Only promise unlimited usage
+if the backend policy and product plan explicitly change.
 
 Direct translation and Learning practice can use separate Gemini models. Keep
 `FLOWTRANSLATE_TRANSLATE_MODEL` on the fastest acceptable model for short text,

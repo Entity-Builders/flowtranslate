@@ -22,6 +22,8 @@ vi.mock('../services/analytics', () => ({
     track: analyticsTrack,
     captureError: analyticsCaptureError,
   },
+  commercialAnalyticsProperties: (properties: Record<string, unknown>) =>
+    properties,
 }));
 
 vi.mock('../services/flowtranslate-api', () => ({

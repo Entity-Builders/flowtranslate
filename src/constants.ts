@@ -1,5 +1,6 @@
 export const STORAGE_KEYS = {
   activeView: 'flowtranslate_active_view',
+  commercialAttribution: 'flowtranslate_commercial_attribution',
   guestDeviceId: 'flowtranslate_guest_device_id',
   pendingGuestSyncUserId: 'flowtranslate_pending_guest_sync_user_id',
   responderPromiseSeen: 'flowtranslate_responder_promise_seen',

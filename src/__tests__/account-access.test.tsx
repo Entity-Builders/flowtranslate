@@ -35,6 +35,8 @@ vi.mock('../services/analytics', () => ({
     captureError: analyticsCaptureError,
     getFeatureFlag: analyticsGetFeatureFlag,
   },
+  commercialAnalyticsProperties: (properties: Record<string, unknown>) =>
+    properties,
   safeCommercialAnalyticsProperties: (properties: Record<string, unknown>) =>
     properties,
 }));
@@ -750,7 +752,7 @@ describe('account access UI', () => {
       }),
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /pasar a pro/i }));
+    fireEvent.click(screen.getByRole('button', { name: /activar pro/i }));
 
     await waitFor(() =>
       expect(startFlowtranslateProCheckout).toHaveBeenCalledWith(
@@ -871,7 +873,7 @@ describe('account access UI', () => {
     expect(screen.getByLabelText('Mensaje o idea')).toBeInTheDocument();
     expect(
       screen.queryByRole('heading', {
-        name: /tu respuesta en ingles para trabajo, lista para mandar/i,
+        name: /escribí como te salga/i,
       }),
     ).not.toBeInTheDocument();
     expect(screen.queryByText(/probalo sin cuenta/i)).not.toBeInTheDocument();

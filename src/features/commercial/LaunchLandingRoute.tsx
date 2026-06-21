@@ -1,4 +1,4 @@
-import { CheckCircle2, Copy, Languages, ShieldCheck } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { useCallback, useEffect, useRef } from 'react';
 import {
   LandingHero,
@@ -20,70 +20,140 @@ export type LaunchLandingContext = {
   variantId?: string;
 };
 
-export const LAUNCH_LANDING_EXAMPLES: LandingExample[] = [
-  {
-    id: 'client-delay',
-    label: 'Avisar una demora',
-    context: 'Demora con cliente',
-    rawInput:
-      'El reporte se demora hasta mañana. Ya estamos revisando los datos y te mando una version clara apenas este lista.',
-    output:
-      "The report will be delayed until tomorrow. We're already reviewing the data, and I'll send you a clear version as soon as it's ready.",
-  },
+const LAUNCH_LANDING_EXAMPLES: LandingExample[] = [
   {
     id: 'spanglish-reschedule',
-    label: 'Reagendar una call',
+    label: 'Reagendar call',
+    channel: 'Slack',
     context: 'Reunión de trabajo',
-    rawInput: 'Sorry, hoy no llego a la call. Can we move it to tomorrow same time?',
+    rawInput:
+      'No puedo llegar a la call de mañana, algo surgió. Can we move it to Thursday?',
     output:
-      "Sorry, I won't be able to make today's call. Could we move it to tomorrow at the same time?",
+      "Hi — something came up and I won't be able to make tomorrow's call. Would Thursday work for you? Happy to find whatever time fits.",
   },
   {
     id: 'rough-status',
-    label: 'Mejorar un update',
+    label: 'Update de proyecto',
+    channel: 'Email',
     context: 'Status para manager',
     rawInput:
-      'I finish most part but still need check numbers. I send final today afternoon.',
+      'El reporte tarda, I still need to check numbers, lo mando antes de las 5 pm de todas formas',
     output:
-      "I've finished most of it, but I still need to review the numbers. I'll send the final version this afternoon.",
+      "Quick update — the report is running a bit behind. I still need to verify a few numbers, but I'll have it to you before 5 PM today.",
   },
   {
     id: 'client-boundary',
-    label: 'Poner un límite',
+    label: 'Límite de alcance',
+    channel: 'Email',
     context: 'Cambio de alcance',
     rawInput:
-      'Esto no estaba incluido en el scope inicial. Lo puedo hacer pero necesitaria ajustar presupuesto.',
+      'Eso está fuera del scope original del proyecto, lo podemos hacer pero con costo extra',
     output:
-      "This wasn't included in the original scope. I can take care of it, but we would need to adjust the budget accordingly.",
+      "That falls outside the original project scope. We can absolutely include it, but it would require additional work and come with an extra cost. Let me know if you'd like a separate quote.",
   },
   {
     id: 'linkedin-dm',
-    label: 'Responder LinkedIn',
+    label: 'Respuesta LinkedIn',
+    channel: 'LinkedIn',
     context: 'Oportunidad laboral',
     rawInput:
-      'Gracias por escribir. Me interesa saber mas del role, podemos coordinar una llamada corta?',
+      'Gracias por escribir, me interesa saber más del rol, podemos agendar una llamada corta esta semana?',
     output:
-      "Thanks for reaching out. I'd be interested in learning more about the role. Could we schedule a short call?",
+      "Thanks for reaching out — I'm definitely interested in learning more about the role. Would you be open to a quick call this week? I'm flexible on timing.",
+  },
+  {
+    id: 'client-whatsapp',
+    label: 'WhatsApp cliente',
+    channel: 'WhatsApp',
+    context: 'Demora con cliente',
+    rawInput:
+      'Sorry voy tarde con la entrega, hubo un problema técnico que no vi venir, lo tengo mañana a primera hora',
+    output:
+      "Apologies for the delay — an unexpected technical issue came up on my end. I'll have everything ready for you first thing tomorrow morning.",
   },
 ];
 
 type LaunchLandingRouteProps = {
   onStartBlank: () => void;
-  onSelectExample: (example: LandingExample) => void;
   onTrackExperimentExposure?: (
     experimentKey: CommercialExperimentKey,
     properties?: Record<string, unknown>,
   ) => void;
 };
 
-const LANDING_TITLE = 'FlowTranslate - Respuestas de trabajo en inglés';
+const LANDING_TITLE = 'FlowTranslate - Respondé mensajes de trabajo en inglés';
 const LANDING_DESCRIPTION =
-  'Escribí tu idea en español, Spanglish o inglés inseguro y convertíla en una respuesta profesional en inglés lista para copiar.';
+  'Escribí tu idea en español, Spanglish o inglés inseguro y convertíla en un mensaje profesional en inglés listo para mandar.';
 const LANDING_URL = `https://flowtranslate.app${FLOWTRANSLATE_LAUNCH_PATH}`;
 const DEFAULT_TITLE = 'FlowTranslate | Respuestas de trabajo en inglés';
 const DEFAULT_DESCRIPTION =
-  'Escribí tu idea en español, Spanglish o inglés inseguro y convertíla en una respuesta profesional en inglés lista para copiar.';
+  'Escribí tu idea en español, Spanglish o inglés inseguro y convertíla en un mensaje profesional en inglés listo para mandar.';
 const DEFAULT_URL = 'https://flowtranslate.app/';
+
+type ToneExample = {
+  tone: string;
+  label: string;
+  raw: string;
+  output: string;
+};
+
+const toneExamples: ToneExample[] = [
+  {
+    tone: 'Formal',
+    label: 'Para un cliente corporativo',
+    raw: 'No puedo llegar a la reunión de mañana, algo surgió de último momento',
+    output:
+      "I regret to inform you that I will be unable to attend tomorrow's meeting due to an unforeseen matter. I would appreciate the opportunity to reschedule at your earliest convenience.",
+  },
+  {
+    tone: 'Muy breve',
+    label: 'Para un colega en Slack',
+    raw: 'El reporte va a tardar un poco más, lo mando antes de las 5',
+    output: 'Report running a bit late — will send before 5 PM.',
+  },
+  {
+    tone: 'Amigable',
+    label: 'Para un cliente habitual',
+    raw: 'Gracias por el feedback, vamos a tenerlo en cuenta para la próxima versión',
+    output:
+      'Thanks so much for the feedback — really appreciate it! We will definitely keep that in mind for the next version.',
+  },
+  {
+    tone: 'Directo',
+    label: 'Para marcar un límite de scope',
+    raw: 'Eso está fuera de lo que acordamos, si lo quieren hacer hay que presupuestarlo aparte',
+    output:
+      'That falls outside the agreed scope. If you want to include it, we will need to price it separately.',
+  },
+];
+
+const toneClassName: Record<string, string> = {
+  Formal: 'bg-[#1e3a5f] text-white',
+  'Muy breve': 'bg-[#374151] text-white',
+  Amigable: 'bg-[#7c3aed] text-white',
+  Directo: 'bg-[#059669] text-white',
+};
+
+const improvementSteps = [
+  {
+    step: '01',
+    title: 'Escribís como puedas',
+    body:
+      'En español, en spanglish, o en inglés inseguro. No hay forma incorrecta de empezar.',
+  },
+  {
+    step: '02',
+    title: 'Ves la respuesta lista',
+    body:
+      'Con el tono exacto que necesitabas. Copiás y pegás. Listo para enviar.',
+  },
+  {
+    step: '03',
+    title: 'La próxima vez ya sabés',
+    body:
+      'Los patrones se quedan. Cada mensaje que generás te entrena el oído.',
+  },
+];
 
 const setMetaByName = (name: string, content: string) => {
   let element = document.head.querySelector<HTMLMetaElement>(
@@ -119,9 +189,18 @@ const setCanonical = (href: string) => {
   element.href = href;
 };
 
+const ToneBadge = ({ tone }: { tone: string }) => (
+  <span
+    className={`inline-flex items-center rounded px-2 py-0.5 text-[11px] font-semibold tracking-wide ${
+      toneClassName[tone] ?? 'bg-slate-200 text-slate-800'
+    }`}
+  >
+    {tone}
+  </span>
+);
+
 export const LaunchLandingRoute = ({
   onStartBlank,
-  onSelectExample,
   onTrackExperimentExposure,
 }: LaunchLandingRouteProps) => {
   const trackedLandingViewRef = useRef(false);
@@ -189,183 +268,107 @@ export const LaunchLandingRoute = ({
     [onStartBlank, trackLandingCta],
   );
 
-  const selectExampleFromSurface = useCallback(
-    (example: LandingExample, surface: string) => {
-      trackLandingCta('example_selected', {
-        surface,
-        example_id: example.id,
-        source_situation: example.context,
-      });
-      onSelectExample(example);
-    },
-    [onSelectExample, trackLandingCta],
-  );
-
   return (
-    <main className='min-h-[100dvh] overflow-x-hidden bg-slate-50 text-slate-950'>
-      <header className='border-b border-slate-200/80 bg-white/95 px-4 py-3 backdrop-blur sm:px-6 lg:px-8'>
-        <div className='mx-auto flex max-w-6xl items-center justify-between gap-3'>
-          <div className='flex min-w-0 items-center gap-3'>
-            <div className='flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-600 text-white shadow-sm ring-1 ring-emerald-500/30'>
-              <Languages size={20} />
-            </div>
-            <div className='min-w-0'>
-              <p className='truncate text-base font-black leading-none'>
-                FlowTranslate
-              </p>
-              <p className='mt-1 hidden text-xs font-bold text-slate-500 sm:block'>
-                Inglés profesional desde ideas mezcladas
-              </p>
-            </div>
-          </div>
+    <main className='min-h-[100dvh] overflow-x-hidden bg-white text-slate-950'>
+      <header className='border-b border-slate-200 bg-white'>
+        <div className='mx-auto flex h-14 max-w-5xl items-center justify-between px-5'>
+          <span className='text-base font-bold tracking-tight text-slate-950'>
+            Flow<span className='text-emerald-600'>Translate</span>
+          </span>
           <button
             type='button'
             onClick={() => startBlankFromSurface('header')}
-            className='inline-flex h-10 shrink-0 items-center justify-center rounded-md bg-slate-950 px-3 text-sm font-black text-white transition-colors hover:bg-slate-800 sm:px-4'
+            className='rounded bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90'
           >
             Probar gratis
           </button>
         </div>
       </header>
 
-      <LandingHero
-        examples={LAUNCH_LANDING_EXAMPLES}
-        onStartBlank={() => startBlankFromSurface('hero')}
-        onSelectExample={(example) => selectExampleFromSurface(example, 'hero')}
-      />
+      <LandingHero examples={LAUNCH_LANDING_EXAMPLES} />
 
-      <section className='bg-white px-4 py-12 sm:px-6 lg:px-8'>
-        <div className='mx-auto grid max-w-6xl gap-8 lg:grid-cols-[0.9fr_1.1fr]'>
-          <div>
-            <p className='text-xs font-black uppercase tracking-normal text-emerald-700'>
-              Situaciones de trabajo
-            </p>
-            <h2 className='mt-3 max-w-2xl text-3xl font-black leading-tight text-slate-950 sm:text-4xl'>
-              Para mensajes que querés mandar bien, no solamente traducir.
-            </h2>
-          </div>
-          <div className='grid gap-3 sm:grid-cols-2'>
-            {[
-              'Responder a un cliente sin sonar brusco',
-              'Avisar una demora y mantener confianza',
-              'Pedir más contexto antes de comprometerte',
-              'Responder LinkedIn, recruiters o propuestas',
-              'Poner límites de alcance con tono profesional',
-              'Compartir un update claro con tu equipo',
-            ].map((item) => (
-              <div
-                key={item}
-                className='rounded-md border border-slate-200 bg-slate-50 p-4'
-              >
-                <CheckCircle2 size={18} className='text-emerald-600' />
-                <p className='mt-3 text-sm font-bold leading-6 text-slate-700'>
-                  {item}
-                </p>
+      <section className='border-t border-slate-200 bg-white'>
+        <div className='mx-auto max-w-5xl px-5 py-10'>
+          <p className='mb-2 text-xs font-semibold uppercase tracking-widest text-slate-500'>
+            El mismo mensaje, el tono que necesitás
+          </p>
+          <p className='mb-6 text-sm font-medium text-slate-500'>
+            No solo lo traduce — lo adapta al registro exacto de la situación.
+          </p>
+
+          <div className='grid grid-cols-1 gap-4 sm:grid-cols-2'>
+            {toneExamples.map((example) => (
+              <div key={example.tone} className='space-y-2'>
+                <div className='mb-1 flex items-center gap-2'>
+                  <ToneBadge tone={example.tone} />
+                  <span className='text-xs font-medium text-slate-500'>
+                    {example.label}
+                  </span>
+                </div>
+                <div className='rounded border border-slate-200 bg-white px-3 py-2.5'>
+                  <p className='text-xs italic leading-relaxed text-slate-500'>
+                    &quot;{example.raw}&quot;
+                  </p>
+                </div>
+                <div className='flex items-center gap-1.5 text-slate-500'>
+                  <ArrowRight size={12} />
+                  <span className='text-[11px] text-slate-500'>
+                    {example.tone}
+                  </span>
+                </div>
+                <div className='rounded border border-slate-200 bg-white px-3 py-2.5'>
+                  <p className='text-xs font-medium leading-relaxed text-slate-950'>
+                    &quot;{example.output}&quot;
+                  </p>
+                </div>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      <section id='ejemplos' className='px-4 py-12 sm:px-6 lg:px-8'>
-        <div className='mx-auto max-w-6xl'>
-          <div className='max-w-3xl'>
-            <p className='text-xs font-black uppercase tracking-normal text-emerald-700'>
-              Antes y después
-            </p>
-            <h2 className='mt-3 text-3xl font-black leading-tight text-slate-950 sm:text-4xl'>
-              Escribí como puedas. Copiá una respuesta que suena profesional.
-            </h2>
-          </div>
-
-          <div className='mt-7 grid gap-4 lg:grid-cols-2'>
-            {LAUNCH_LANDING_EXAMPLES.map((example) => (
-              <article
-                key={example.id}
-                className='overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm'
-              >
-                <div className='border-b border-slate-100 p-4'>
-                  <p className='text-xs font-black uppercase tracking-normal text-slate-400'>
-                    {example.context}
+      <section className='border-t border-slate-200'>
+        <div className='mx-auto max-w-5xl px-5 py-10'>
+          <p className='mb-6 text-xs font-semibold uppercase tracking-widest text-slate-500'>
+            Cómo mejorás con el tiempo
+          </p>
+          <div className='grid grid-cols-1 gap-6 sm:grid-cols-3'>
+            {improvementSteps.map((item) => (
+              <div key={item.step} className='flex gap-4'>
+                <span className='mt-0.5 shrink-0 text-3xl font-black leading-none text-slate-200'>
+                  {item.step}
+                </span>
+                <div>
+                  <p className='mb-1 text-sm font-semibold text-slate-950'>
+                    {item.title}
                   </p>
-                  <p className='mt-2 break-words text-base font-semibold leading-7 text-slate-950 [overflow-wrap:anywhere]'>
-                    {example.rawInput}
+                  <p className='text-xs font-medium leading-relaxed text-slate-500'>
+                    {item.body}
                   </p>
                 </div>
-                <div className='bg-slate-950 p-4 text-white'>
-                  <p className='text-xs font-black uppercase tracking-normal text-emerald-300'>
-                    Inglés profesional
-                  </p>
-                  <p className='mt-2 break-words text-base font-semibold leading-7 [overflow-wrap:anywhere]'>
-                    {example.output}
-                  </p>
-                  <button
-                    type='button'
-                    onClick={() =>
-                      selectExampleFromSurface(example, 'before_after')
-                    }
-                    className='mt-4 inline-flex h-10 items-center gap-2 rounded-md bg-emerald-500 px-3 text-sm font-black text-white transition-colors hover:bg-emerald-400'
-                  >
-                    <Copy size={16} />
-                    Probar este ejemplo
-                  </button>
-                </div>
-              </article>
+              </div>
             ))}
           </div>
         </div>
       </section>
 
-      <section className='bg-white px-4 py-12 sm:px-6 lg:px-8'>
-        <div className='mx-auto grid max-w-6xl gap-6 lg:grid-cols-3'>
-          <div className='rounded-lg border border-slate-200 bg-slate-50 p-5'>
-            <ShieldCheck size={22} className='text-emerald-600' />
-            <h3 className='mt-4 text-lg font-black text-slate-950'>
-              Mensajes privados
-            </h3>
-            <p className='mt-2 text-sm font-semibold leading-6 text-slate-600'>
-              Tus textos de trabajo no se envían a analytics. Medimos acciones,
-              no el contenido que escribís.
+      <section className='border-t border-slate-200'>
+        <div className='mx-auto flex max-w-5xl flex-col items-start justify-between gap-4 px-5 py-10 sm:flex-row sm:items-center'>
+          <div>
+            <p className='font-semibold text-slate-950'>Gratis para probar.</p>
+            <p className='mt-0.5 text-sm font-medium text-slate-500'>
+              Sin tarjeta de crédito. Sin registro. Solo tu próximo mensaje.
             </p>
           </div>
-          <div className='rounded-lg border border-slate-200 bg-slate-50 p-5'>
-            <CheckCircle2 size={22} className='text-emerald-600' />
-            <h3 className='mt-4 text-lg font-black text-slate-950'>
-              Gratis para probar
-            </h3>
-            <p className='mt-2 text-sm font-semibold leading-6 text-slate-600'>
-              Probalo con tus propios mensajes antes de crear una cuenta.
-              Conectá después para guardar historial.
-            </p>
-          </div>
-          <div className='rounded-lg border border-slate-200 bg-slate-50 p-5'>
-            <Copy size={22} className='text-emerald-600' />
-            <h3 className='mt-4 text-lg font-black text-slate-950'>
-              Pro para uso frecuente
-            </h3>
-            <p className='mt-2 text-sm font-semibold leading-6 text-slate-600'>
-              Más respuestas, historial persistente y Learning personalizado
-              desde conversaciones reales.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      <footer className='px-4 py-10 sm:px-6 lg:px-8'>
-        <div className='mx-auto flex max-w-6xl flex-col gap-4 border-t border-slate-200 pt-8 sm:flex-row sm:items-center sm:justify-between'>
-          <p className='max-w-2xl text-sm font-semibold leading-6 text-slate-600'>
-            FlowTranslate ayuda a escribir inglés de trabajo más claro. No
-            reemplaza revisión legal, contractual, HR o compliance.
-          </p>
           <button
             type='button'
             onClick={() => startBlankFromSurface('footer')}
-            className='inline-flex h-11 items-center justify-center rounded-md bg-slate-950 px-4 text-sm font-black text-white transition-colors hover:bg-slate-800'
+            className='rounded bg-emerald-600 px-6 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90'
           >
-            Crear mi respuesta
+            Crear mi primera respuesta
           </button>
         </div>
-      </footer>
+      </section>
     </main>
   );
 };

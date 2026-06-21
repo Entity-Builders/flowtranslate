@@ -160,7 +160,7 @@ describe('translator UI', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('renders the canonical launch landing and continues into the responder with an example', () => {
+  it('renders the canonical launch landing demo and continues into the responder from the CTA', () => {
     window.history.pushState(
       {},
       '',
@@ -171,22 +171,42 @@ describe('translator UI', () => {
 
     expect(
       screen.getByRole('heading', {
-        name: /respondé en inglés profesional/i,
+        name: /tu idea en español/i,
       }),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/escribí en español, Spanglish o inglés inseguro/i),
+      screen.getByText(/escribí como te salga — en español, en spanglish/i),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText('Mensaje del demo')).toHaveValue(
+      'No puedo llegar a la call de mañana, algo surgió. Can we move it to Thursday?',
+    );
+    expect(
+      screen.queryByText(/Would Thursday work for you/i),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole('button', { name: /convertir a inglés profesional/i }),
+    );
+
+    expect(
+      screen.getByText(/Would Thursday work for you/i),
     ).toBeInTheDocument();
 
     fireEvent.click(
-      screen.getAllByRole('button', { name: /probar este ejemplo/i })[0],
+      screen.getByRole('button', { name: /update de proyecto/i }),
     );
-
-    expect(screen.getByLabelText('Mensaje o idea')).toHaveValue(
-      'El reporte se demora hasta mañana. Ya estamos revisando los datos y te mando una version clara apenas este lista.',
+    expect(screen.getByLabelText('Mensaje del demo')).toHaveValue(
+      'El reporte tarda, I still need to check numbers, lo mando antes de las 5 pm de todas formas',
     );
     expect(
-      screen.getByText(/continuás desde Avisar una demora/i),
+      screen.queryByText(/Would Thursday work for you/i),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /probar gratis/i }));
+
+    expect(screen.getByLabelText('Mensaje o idea')).toHaveValue('');
+    expect(
+      screen.getByText(/continuás desde Mensaje propio/i),
     ).toBeInTheDocument();
   });
 

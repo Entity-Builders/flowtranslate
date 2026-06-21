@@ -10,7 +10,6 @@ import { FlowtranslateAppShell } from './app/FlowtranslateAppShell';
 import { useFlowtranslateScreenTracking } from './app/useFlowtranslateScreenTracking';
 import { useFlowtranslateView } from './app/useFlowtranslateView';
 import { AccountAccessModal } from './components/AccountAccessModal';
-import type { LandingExample } from './components/LandingHero';
 import { ProUpgradePrompt } from './components/ProUpgradePrompt';
 import { LearningRoute } from './features/learning/LearningRoute';
 import { ResponderRoute } from './features/responder/ResponderRoute';
@@ -53,8 +52,6 @@ const LAUNCH_LANDING_PATHS = new Set([
   '/work-english',
   '/campaign/work-english',
 ]);
-
-type LaunchLandingExample = LandingExample;
 
 const isLaunchLandingPath = () => {
   if (typeof window === 'undefined') return false;
@@ -224,21 +221,6 @@ function App() {
     });
   }, [openResponderFromLanding]);
 
-  const selectLandingExample = useCallback(
-    (example: LaunchLandingExample) => {
-      translator.editInput(example.rawInput);
-      openResponderFromLanding({
-        selectedExampleId: example.id,
-        selectedExampleLabel: example.label,
-        sourceSituation: example.context,
-      });
-      window.setTimeout(() => {
-        void translator.translate();
-      }, 80);
-    },
-    [openResponderFromLanding, translator],
-  );
-
   const shouldSuppressResponderPromise =
     hasSeenResponderPromise ||
     account.accountKind === 'permanent' ||
@@ -379,7 +361,6 @@ function App() {
     return (
       <LaunchLandingRoute
         onStartBlank={startBlankFromLanding}
-        onSelectExample={selectLandingExample}
         onTrackExperimentExposure={trackCommercialExperimentExposure}
       />
     );

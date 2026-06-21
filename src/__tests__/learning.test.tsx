@@ -864,8 +864,12 @@ describe('learning UI', () => {
     );
 
     expect(
-      screen.getByLabelText(/Uso de IA: Quedan 96 de 100 creditos/i),
+      screen.getByLabelText(/Uso de IA: Uso de IA disponible/i),
     ).toBeInTheDocument();
+    expect(screen.queryByText(/96 de 100 creditos/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText(/96 de 100 creditos/i),
+    ).not.toBeInTheDocument();
 
     expect(await screen.findAllByText('Respuesta copiada.')).not.toHaveLength(0);
 

@@ -101,6 +101,7 @@ export type BreakdownEnrichmentResponse = {
     | 'createdAt'
   >;
   cached?: boolean;
+  generatedFrom?: 'gemini' | 'fallback';
   usage: FlowtranslateUsage;
 };
 

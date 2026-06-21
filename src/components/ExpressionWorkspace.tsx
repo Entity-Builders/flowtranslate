@@ -139,22 +139,34 @@ const getUsageSummary = (usage?: UsageSnapshot | null) => {
   if (!usage || usage.monthlyQuota <= 0) return null;
 
   const quota = Math.max(0, usage.monthlyQuota);
-  const used = Math.max(0, Math.min(usage.usedThisMonth, quota));
   const remaining = Math.max(0, usage.remainingThisMonth);
-  const usedRatio = quota > 0 ? used / quota : 0;
-  const usedPips =
+  const remainingRatio = quota > 0 ? remaining / quota : 0;
+  const availablePips =
     remaining <= 0
-      ? USAGE_PIP_COUNT
-      : used <= 0
-        ? 0
+      ? 0
       : Math.min(
           USAGE_PIP_COUNT,
-          Math.max(1, Math.ceil(usedRatio * USAGE_PIP_COUNT)),
+          Math.max(1, Math.ceil(remainingRatio * USAGE_PIP_COUNT)),
         );
+  const label =
+    remaining <= 0
+      ? 'Limite mensual alcanzado'
+      : remainingRatio <= 0.2
+        ? 'Te queda poco uso de IA'
+        : remainingRatio <= 0.5
+          ? 'Uso de IA moderado'
+          : 'Uso de IA disponible';
+  const pipClass =
+    remaining <= 0
+      ? 'bg-slate-300'
+      : remainingRatio <= 0.2
+        ? 'bg-amber-500'
+        : 'bg-emerald-500';
 
   return {
-    label: `Quedan ${remaining.toLocaleString()} de ${quota.toLocaleString()} creditos`,
-    usedPips,
+    label,
+    availablePips,
+    pipClass,
   };
 };
 
@@ -168,7 +180,7 @@ const UsagePips = ({ usage }: { usage?: UsageSnapshot | null }) => {
       aria-label={`Uso de IA: ${summary.label}`}
       title={`Uso de IA: ${summary.label}`}
     >
-      <span className='hidden truncate min-[420px]:inline'>
+      <span className='hidden max-w-[13rem] truncate xl:inline'>
         {summary.label}
       </span>
       <span className='inline-flex items-center gap-1' aria-hidden='true'>
@@ -176,7 +188,7 @@ const UsagePips = ({ usage }: { usage?: UsageSnapshot | null }) => {
           <span
             key={index}
             className={`h-1.5 w-4 rounded-full ${
-              index < summary.usedPips ? 'bg-emerald-500' : 'bg-slate-200'
+              index < summary.availablePips ? summary.pipClass : 'bg-slate-200'
             }`}
           />
         ))}
@@ -476,6 +488,11 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
     }, 50);
   };
 
+  const clearInputText = useCallback(() => {
+    onInputChange('');
+    inputTextareaRef.current?.focus();
+  }, [onInputChange]);
+
   useEffect(() => {
     if (!trimmedResultText) {
       previousResultTextRef.current = '';
@@ -630,23 +647,37 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
       ) : null}
 
       <div className='overflow-hidden rounded-lg bg-white shadow-[0_18px_70px_rgba(15,23,42,0.08)] ring-1 ring-slate-200/80'>
-        <textarea
-          ref={inputTextareaRef}
-          value={inputText}
-          onChange={(event) => onInputChange(event.target.value)}
-          onKeyDown={(event) => {
-            if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
-              event.preventDefault();
-              if (canTranslate) onTranslate();
-            }
-          }}
-          placeholder='Pega un chat de trabajo o escribi la idea que queres responder en ingles...'
-          className='min-h-[132px] w-full min-w-0 resize-none overflow-hidden break-words bg-transparent px-5 py-5 text-lg leading-relaxed text-slate-950 outline-none [overflow-wrap:anywhere] placeholder:text-slate-300 sm:px-7 sm:py-6 sm:text-xl'
-          spellCheck
-          aria-label='Mensaje o idea'
-        />
+        <div className='relative'>
+          <textarea
+            ref={inputTextareaRef}
+            value={inputText}
+            onChange={(event) => onInputChange(event.target.value)}
+            onKeyDown={(event) => {
+              if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+                event.preventDefault();
+                if (canTranslate) onTranslate();
+              }
+            }}
+            placeholder='Pega un chat de trabajo o escribi la idea que queres responder en ingles...'
+            className='min-h-[132px] w-full min-w-0 resize-none overflow-hidden break-words bg-transparent py-5 pl-5 pr-14 text-lg leading-relaxed text-slate-950 outline-none [overflow-wrap:anywhere] placeholder:text-slate-300 sm:py-6 sm:pl-7 sm:pr-16 sm:text-xl'
+            spellCheck
+            aria-label='Mensaje o idea'
+          />
 
-        <div className='flex min-h-16 flex-col gap-3 border-t border-slate-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6'>
+          {inputText ? (
+            <button
+              type='button'
+              onClick={clearInputText}
+              className='absolute right-3 top-3 inline-flex h-9 w-9 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 sm:right-4 sm:top-4'
+              aria-label='Limpiar texto ingresado'
+              title='Limpiar texto'
+            >
+              <X size={18} />
+            </button>
+          ) : null}
+        </div>
+
+        <div className='flex min-h-16 flex-col gap-3 border-t border-slate-100 px-4 py-3 lg:flex-row lg:items-center lg:justify-between sm:px-6'>
           <div className='flex min-w-0 flex-wrap items-center gap-2'>
             {canListen ? (
               <button
@@ -726,7 +757,9 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
                 Pasar a espanol
               </button>
             ) : null}
+          </div>
 
+          <div className='flex min-w-0 flex-wrap items-center gap-2'>
             <UsagePips usage={quotaUsage} />
 
             <span
@@ -742,32 +775,33 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
             >
               {inputCharacterCount}/{TRANSLATION_INPUT_MAX_CHARS}
             </span>
-          </div>
 
-          <button
-            type='button'
-            onClick={onTranslate}
-            disabled={!canTranslate}
-            className={`inline-flex h-11 items-center justify-center gap-2 rounded-md px-4 text-sm font-black transition-colors sm:min-w-32 ${
-              canTranslate
-                ? 'bg-slate-950 text-white hover:bg-slate-800'
-                : 'bg-slate-100 text-slate-400'
-            }`}
-            title={
-              canTranslate
-                ? isSpanishTranslationMode
-                  ? 'Generar en espanol'
-                  : 'Generar respuesta'
-                : translateDisabledReason
-            }
-          >
-            {isTranslating ? (
-              <Loader2 size={17} className='animate-spin' />
-            ) : (
-              <Send size={17} />
-            )}
-            {primaryActionLabel}
-          </button>
+            <button
+              type='button'
+              onClick={onTranslate}
+              disabled={!canTranslate}
+              className={`inline-flex h-11 min-w-0 flex-1 items-center justify-center gap-2 rounded-md px-4 text-sm font-black transition-colors min-[480px]:flex-none sm:w-11 sm:px-0 ${
+                canTranslate
+                  ? 'bg-slate-950 text-white hover:bg-slate-800'
+                  : 'bg-slate-100 text-slate-400'
+              }`}
+              aria-label={primaryActionLabel}
+              title={
+                canTranslate
+                  ? isSpanishTranslationMode
+                    ? 'Generar en espanol'
+                    : 'Generar respuesta'
+                  : translateDisabledReason
+              }
+            >
+              {isTranslating ? (
+                <Loader2 size={17} className='animate-spin' />
+              ) : (
+                <Send size={17} />
+              )}
+              <span className='sm:sr-only'>{primaryActionLabel}</span>
+            </button>
+          </div>
         </div>
       </div>
 

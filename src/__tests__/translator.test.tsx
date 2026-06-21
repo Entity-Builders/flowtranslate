@@ -96,6 +96,30 @@ describe('translator UI', () => {
     expect(screen.queryByText(/probalo sin cuenta/i)).not.toBeInTheDocument();
   });
 
+  it('clears the responder input from the inline X button', () => {
+    render(<App />);
+
+    const input = screen.getByLabelText('Mensaje o idea');
+    expect(
+      screen.queryByRole('button', { name: /limpiar texto ingresado/i }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.change(input, {
+      target: { value: 'El reporte se demora hasta manana.' },
+    });
+
+    const clearButton = screen.getByRole('button', {
+      name: /limpiar texto ingresado/i,
+    });
+    fireEvent.click(clearButton);
+
+    expect(input).toHaveValue('');
+    expect(input).toHaveFocus();
+    expect(
+      screen.queryByRole('button', { name: /limpiar texto ingresado/i }),
+    ).not.toBeInTheDocument();
+  });
+
   it('does not show the launch promise again for returning responder users', () => {
     localStorage.setItem(STORAGE_KEYS.responderPromiseSeen, 'true');
 

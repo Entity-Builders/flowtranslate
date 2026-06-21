@@ -320,6 +320,7 @@ export const useBidirectionalTranslator = ({
         latency_ms: lifecycle.latencyMs,
         charged: response.usage.charged,
         cached: Boolean(response.cached),
+        generated_from: response.generatedFrom || 'gemini',
         remaining_quota: response.usage.remainingThisMonth,
       });
       if (response.cached) {

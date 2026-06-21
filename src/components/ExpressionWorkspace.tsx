@@ -27,6 +27,8 @@ import {
   X,
 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { TRANSLATION_INPUT_MAX_CHARS } from '../constants';
+import { countTranslationInputCharacters } from '../features/responder/translatorState';
 import { ExpressionBreakdownDetails } from './ExpressionBreakdownDetails';
 import { TranslationPresetControl } from './TranslationPresetControl';
 import { SuggestionChips, type SuggestionChip } from './SuggestionChips';
@@ -418,6 +420,10 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
   const breakdownKey = translationRecordId || resultText.trim();
   const trimmedInputText = inputText.trim();
   const trimmedResultText = resultText.trim();
+  const inputCharacterCount = countTranslationInputCharacters(inputText);
+  const isInputOverLimit = inputCharacterCount > TRANSLATION_INPUT_MAX_CHARS;
+  const isInputNearLimit =
+    inputCharacterCount > Math.floor(TRANSLATION_INPUT_MAX_CHARS * 0.9);
   const hasResult = Boolean(trimmedResultText);
   const hasAttentionState =
     status === 'error' ||
@@ -722,6 +728,20 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
             ) : null}
 
             <UsagePips usage={quotaUsage} />
+
+            <span
+              className={`inline-flex h-10 items-center rounded-full px-2.5 text-xs font-black ${
+                isInputOverLimit
+                  ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-100'
+                  : isInputNearLimit
+                    ? 'bg-amber-50 text-amber-800 ring-1 ring-amber-100'
+                    : 'bg-slate-50 text-slate-500 ring-1 ring-slate-100'
+              }`}
+              aria-label={`Caracteres del mensaje: ${inputCharacterCount} de ${TRANSLATION_INPUT_MAX_CHARS}`}
+              title={`Caracteres: ${inputCharacterCount}/${TRANSLATION_INPUT_MAX_CHARS}`}
+            >
+              {inputCharacterCount}/{TRANSLATION_INPUT_MAX_CHARS}
+            </span>
           </div>
 
           <button

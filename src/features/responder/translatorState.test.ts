@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ExpressionBreakdown } from '@eb-packages/flowtranslate-core';
+import { TRANSLATION_INPUT_MAX_CHARS } from '../../constants';
 import {
   createTranslationRequestKey,
   fallbackDetection,
@@ -78,6 +79,27 @@ describe('translatorState', () => {
         status: 'idle',
       }).translateDisabledReason,
     ).toBe('Estas offline. La IA necesita conexion.');
+  });
+
+  it('blocks translation readiness above the input safety limit', () => {
+    const longText = 'a'.repeat(TRANSLATION_INPUT_MAX_CHARS + 1);
+
+    expect(
+      getTranslatorReadiness({
+        sourceText: longText,
+        online: true,
+        accessToken: 'token',
+        authPending: false,
+        status: 'idle',
+      }),
+    ).toMatchObject({
+      activeSourceText: longText,
+      sourceCharacterCount: TRANSLATION_INPUT_MAX_CHARS + 1,
+      isSourceTooLong: true,
+      canTranslate: false,
+      translateDisabledReason:
+        'FlowTranslate acepta hasta 500 caracteres por traduccion. Tu texto tiene 501.',
+    });
   });
 
   it('keeps analytics properties privacy-safe and mode-derived', () => {

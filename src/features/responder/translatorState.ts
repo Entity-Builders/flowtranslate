@@ -5,6 +5,7 @@ import {
   type IntentDetectionResult,
   type TranslationPresetId,
 } from '@eb-packages/flowtranslate-core';
+import { TRANSLATION_INPUT_MAX_CHARS } from '../../constants';
 
 export type TranslatorStatus =
   | 'idle'
@@ -30,6 +31,7 @@ export type TranslationBlockedReason =
   | 'offline'
   | 'auth'
   | 'quota'
+  | 'input_too_long'
   | 'ambiguous'
   | 'mixed_input';
 
@@ -37,6 +39,15 @@ export type BreakdownStatus = 'idle' | 'enriching' | 'ready' | 'error';
 
 export const normalizeTranslatorText = (value: string) =>
   value.trim().replace(/\s+/g, ' ').toLocaleLowerCase();
+
+export const countTranslationInputCharacters = (value: string) =>
+  Array.from(value.trim()).length;
+
+export const buildTranslationInputLimitMessage = (
+  characterCount: number,
+  maxCharacters = TRANSLATION_INPUT_MAX_CHARS,
+) =>
+  `FlowTranslate acepta hasta ${maxCharacters} caracteres por traduccion. Tu texto tiene ${characterCount}.`;
 
 export const createTranslationRequestKey = (
   mode: ExpressionMode,
@@ -100,22 +111,29 @@ export const getTranslatorReadiness = ({
   accessToken,
   authPending,
   status,
+  maxCharacters = TRANSLATION_INPUT_MAX_CHARS,
 }: {
   sourceText: string;
   online: boolean;
   accessToken: string;
   authPending: boolean;
   status: TranslatorStatus;
+  maxCharacters?: number;
 }) => {
   const activeSourceText = sourceText.trim();
+  const sourceCharacterCount = countTranslationInputCharacters(sourceText);
+  const isSourceTooLong = sourceCharacterCount > maxCharacters;
   const canTranslate =
     Boolean(activeSourceText) &&
+    !isSourceTooLong &&
     online &&
     Boolean(accessToken) &&
     status !== 'translating';
 
   const translateDisabledReason = !activeSourceText
     ? 'Agrega texto para responder.'
+    : isSourceTooLong
+      ? buildTranslationInputLimitMessage(sourceCharacterCount, maxCharacters)
     : !online
       ? 'Estas offline. La IA necesita conexion.'
       : !accessToken
@@ -128,6 +146,8 @@ export const getTranslatorReadiness = ({
 
   return {
     activeSourceText,
+    sourceCharacterCount,
+    isSourceTooLong,
     canTranslate,
     translateDisabledReason,
   };

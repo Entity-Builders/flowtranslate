@@ -283,6 +283,9 @@ function App() {
     view === 'translate' &&
     (translator.status === 'translating' ||
       translator.status === 'quota' ||
+      translator.status === 'error' ||
+      translator.status === 'offline' ||
+      translator.status === 'auth' ||
       Boolean(translator.resultText.trim()));
 
   return (

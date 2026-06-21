@@ -12,9 +12,14 @@ import {
   type GrammarInsight,
 } from '@eb-packages/flowtranslate-core';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { TRANSLATION_IDLE_DELAY_MS } from '../constants';
+import {
+  TRANSLATION_IDLE_DELAY_MS,
+  TRANSLATION_INPUT_MAX_CHARS,
+} from '../constants';
 import { runBreakdownEnrichmentLifecycle } from '../features/responder/breakdownEnrichmentLifecycle';
 import {
+  buildTranslationInputLimitMessage,
+  countTranslationInputCharacters,
   createTranslationRequestKey,
   fallbackDetection,
   getTranslatorReadiness,
@@ -171,6 +176,46 @@ export const useBidirectionalTranslator = ({
       });
     },
     [],
+  );
+
+  const blockTranslationInputLimit = useCallback(
+    (
+      nextMode: ExpressionMode,
+      trimmedSource: string,
+      nextPresetId: TranslationPresetId,
+      trigger: TranslationTrigger,
+      nextContextText = '',
+    ) => {
+      const sourceCharacterCount = countTranslationInputCharacters(trimmedSource);
+      const message = buildTranslationInputLimitMessage(sourceCharacterCount);
+
+      trackTranslationBlocked(
+        'input_too_long',
+        nextMode,
+        trimmedSource,
+        nextPresetId,
+        trigger,
+        nextContextText,
+        {
+          input_chars: sourceCharacterCount,
+          max_chars: TRANSLATION_INPUT_MAX_CHARS,
+        },
+      );
+      setResultText('');
+      setBreakdown(null);
+      setBreakdownStatus('idle');
+      setGrammarInsight(null);
+      updateTranslationRecordId('');
+      setStatus('error');
+      setMessage(message);
+      setHasPendingChanges(false);
+      clearPendingHistoryRefresh();
+    },
+    [
+      clearPendingHistoryRefresh,
+      trackTranslationBlocked,
+      updateTranslationRecordId,
+    ],
   );
 
   const enrichSavedBreakdown = useCallback(
@@ -402,6 +447,17 @@ export const useBidirectionalTranslator = ({
         setMessage('');
         setHasPendingChanges(false);
         lastBlockedAnalyticsKeyRef.current = '';
+        return;
+      }
+
+      if (countTranslationInputCharacters(trimmedSource) > TRANSLATION_INPUT_MAX_CHARS) {
+        blockTranslationInputLimit(
+          nextMode,
+          trimmedSource,
+          nextPresetId,
+          trigger,
+          nextContextText,
+        );
         return;
       }
 
@@ -682,6 +738,7 @@ export const useBidirectionalTranslator = ({
     [
       accessToken,
       authPending,
+      blockTranslationInputLimit,
       online,
       onSavedTranslation,
       onUsage,
@@ -719,6 +776,17 @@ export const useBidirectionalTranslator = ({
       }
 
       setHasPendingChanges(true);
+
+      if (countTranslationInputCharacters(trimmedSource) > TRANSLATION_INPUT_MAX_CHARS) {
+        blockTranslationInputLimit(
+          nextMode,
+          trimmedSource,
+          nextPresetId,
+          trigger,
+          nextContextText,
+        );
+        return;
+      }
 
       if (!online) {
         trackTranslationBlocked(
@@ -784,6 +852,7 @@ export const useBidirectionalTranslator = ({
     [
       accessToken,
       authPending,
+      blockTranslationInputLimit,
       clearScheduledTranslation,
       online,
       runTranslation,
@@ -941,6 +1010,17 @@ export const useBidirectionalTranslator = ({
       setStatus('idle');
       setMessage('');
       setHasPendingChanges(false);
+      return;
+    }
+
+    if (countTranslationInputCharacters(trimmedSource) > TRANSLATION_INPUT_MAX_CHARS) {
+      blockTranslationInputLimit(
+        nextMode,
+        trimmedSource,
+        nextPresetId,
+        trigger,
+        nextContextText,
+      );
       return;
     }
 
@@ -1156,6 +1236,7 @@ export const useBidirectionalTranslator = ({
   }, [
     accessToken,
     authPending,
+    blockTranslationInputLimit,
     clearPendingHistoryRefresh,
     clearScheduledTranslation,
     online,

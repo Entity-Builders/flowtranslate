@@ -19,7 +19,7 @@
     "test": "vitest run",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
-    "deploy:prod": "npm run build -- --mode production && npx wrangler deploy"
+    "deploy:prod": "node scripts/validate-public-env.mjs && npm run build -- --mode production && npx wrangler deploy"
   },
   "dependencies": {
     "@eb-packages/analytics": "1.0.0",

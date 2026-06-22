@@ -5,10 +5,9 @@ import {
   waitFor,
   within,
 } from '@testing-library/react';
-import type { StudyArticle } from '@eb-packages/flowtranslate-core';
-import { STARTER_LEARNING_SITUATIONS } from '@eb-packages/flowtranslate-core';
+import type { StudyArticle, TranslationRecord } from '@eb-packages/flowtranslate-core';
 import type { ComponentProps } from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../App';
 import { ExpressionBreakdownDetails } from '../components/ExpressionBreakdownDetails';
 import { ExpressionWorkspace } from '../components/ExpressionWorkspace';
@@ -21,42 +20,85 @@ const renderLearningView = (
   const defaultProps: ComponentProps<typeof LearningView> = {
     history: [],
     accountKind: 'permanent',
-    starterSituations: STARTER_LEARNING_SITUATIONS,
-    learningSessions: [],
-    savedPhrases: [],
-    activeSession: null,
-    progressLoading: false,
-    progressError: '',
-    sessionLoading: false,
-    sessionError: '',
-    selectedBestOptionId: '',
-    attemptLoading: false,
-    attemptError: '',
-    latestAttempt: null,
-    studyArticle: null,
-    studyLoading: false,
-    studyError: '',
-    selectedStudyRecordId: null,
-    upgradePrompt: null,
-    onStartSession: () => undefined,
-    onResumeSession: () => undefined,
-    onLeaveSession: () => undefined,
-    onSelectBestOption: () => undefined,
-    onSubmitAttempt: () => undefined,
-    onSavePhrase: () => undefined,
-    onArchivePhrase: () => undefined,
-    onCompleteSession: () => undefined,
-    onUsePhraseInResponder: () => undefined,
-    onOpenStudy: () => undefined,
-    onCloseStudy: () => undefined,
-    onDelete: () => undefined,
-    onClear: () => undefined,
   };
 
   return render(<LearningView {...defaultProps} {...props} />);
 };
 
+const historyWithBreakdown: TranslationRecord[] = [
+  {
+    id: 'record-1',
+    sourceLanguage: 'es',
+    targetLanguage: 'en',
+    sourceText: 'Ellos van a comer en el restaurante',
+    translatedText: 'They are going to eat at the restaurant.',
+    mode: 'translate_to_english',
+    createdAt: '2026-06-05T12:00:00.000Z',
+    breakdown: {
+      changed: true,
+      confidence: 'high',
+      feedback: ['La version usa una estructura natural de plan futuro.'],
+      tense: 'Near future',
+      structure: [
+        {
+          text: 'They',
+          role: 'subject',
+          note: 'Quien hace la accion.',
+        },
+        {
+          text: 'are going to eat',
+          role: 'verb',
+          note: 'Plan futuro cercano.',
+        },
+        {
+          text: 'at the restaurant',
+          role: 'complement',
+          note: 'Lugar donde pasa la accion.',
+        },
+      ],
+      whyThisWorks:
+        'Going to funciona bien para planes concretos que ya estan decididos.',
+    },
+  },
+  {
+    id: 'record-2',
+    sourceLanguage: 'es',
+    targetLanguage: 'en',
+    sourceText: 'Necesito revisar esto antes de mandarlo',
+    translatedText: 'I need to review this before sending it.',
+    mode: 'translate_to_english',
+    createdAt: '2026-06-05T13:00:00.000Z',
+    breakdown: null,
+  },
+  {
+    id: 'record-3',
+    sourceLanguage: 'en',
+    targetLanguage: 'en',
+    sourceText: 'I need review this before send it.',
+    translatedText: 'I need to review this before sending it.',
+    mode: 'improve_english',
+    createdAt: '2026-06-05T14:00:00.000Z',
+    breakdown: {
+      changed: true,
+      confidence: 'high',
+      feedback: ["Después de 'need' va 'to + verb': 'need to review'."],
+      whatWentWell:
+        "La intención es clara y elegiste bien 'need' para expresar necesidad.",
+      commonMistake:
+        "Después de 'need' va 'to + verb': 'need to review'.",
+      whyThisWorks:
+        'En inglés, algunos verbos necesitan una forma fija después.',
+      reusablePattern: 'I need to + verb + before + -ing.',
+    },
+  },
+];
+
 describe('learning UI', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    window.history.replaceState({}, '', '/');
+  });
+
   it('keeps Learning in a separate view with empty history state', () => {
     render(<App />);
 
@@ -68,17 +110,13 @@ describe('learning UI', () => {
     ).toBeInTheDocument();
     expect(screen.getByTitle('Cuenta')).toBeInTheDocument();
 
-    fireEvent.click(within(mainNav).getByRole('button', { name: /aprender/i }));
+    fireEvent.click(within(mainNav).getByRole('button', { name: /historial/i }));
 
-    expect(screen.getByText('Hoy en tu ingles')).toBeInTheDocument();
+    expect(window.location.pathname).toBe('/aprender');
+    expect(screen.getByText('Historial de traducciones')).toBeInTheDocument();
     expect(
-      screen.getByRole('heading', { name: /Avisar una demora/i }),
+      screen.getByText(/va a aparecer acá con el texto original/i),
     ).toBeInTheDocument();
-    expect(
-      screen.getAllByRole('button', { name: /Empezar practica/i }).length,
-    ).toBeGreaterThan(0);
-    expect(screen.getAllByText('Frases guardadas').length).toBeGreaterThan(0);
-    expect(screen.getByText('Fuentes recientes')).toBeInTheDocument();
     expect(
       screen.queryByRole('heading', { name: 'Panel de Learning' }),
     ).not.toBeInTheDocument();
@@ -88,310 +126,232 @@ describe('learning UI', () => {
     expect(
       screen.queryByRole('heading', { name: 'Practice' }),
     ).not.toBeInTheDocument();
+    expect(screen.queryByText('Empezar practica')).not.toBeInTheDocument();
+
+    fireEvent.click(within(mainNav).getByRole('button', { name: /responder/i }));
+
+    expect(window.location.pathname).toBe('/');
+    expect(screen.getByLabelText('Mensaje o idea')).toBeInTheDocument();
   });
 
-  it('renders a contextual Pro prompt in the Learning progress area', () => {
-    renderLearningView({
-      upgradePrompt: (
-        <div>
-          FlowTranslate Pro suma mas sesiones de Learning y frases guardadas.
-        </div>
-      ),
-    });
+  it('opens Aprender from the canonical route', () => {
+    window.history.replaceState({}, '', '/aprender');
 
-    expect(
-      screen.getByText(/FlowTranslate Pro suma mas sesiones de Learning/i),
-    ).toBeInTheDocument();
+    render(<App />);
+
+    expect(window.location.pathname).toBe('/aprender');
+    expect(screen.getByText('Historial de traducciones')).toBeInTheDocument();
   });
 
-  it('shows a continue action when the recommended practice already exists', () => {
-    renderLearningView({
-      learningSessions: [
-        {
-          id: 'session-1',
-          situationId: 'delay-update',
-          catalogVersion: 'flowtranslate:learning-situations:v1',
-          status: 'active',
-          sourceRecordIds: [],
-          createdAt: '2026-06-05T12:00:00.000Z',
-          content: {
-            situationTitle: 'Avisar una demora sin sonar defensivo',
-            anchorPhrase: 'The report is taking a bit longer than expected.',
-            whyItWorks: 'Shows ownership without sounding defensive.',
-            grammarNotes: [],
-            bestOption: {
-              prompt: 'Which option sounds best?',
-              choices: [],
-            },
-            rewritePrompt: 'Tell the client the report will be ready tomorrow.',
-            suggestedPhrases: [],
-          },
-        },
-      ],
-    });
+  it('normalizes the English Learning alias to Aprender', async () => {
+    window.history.replaceState({}, '', '/learning');
 
-    expect(
-      screen.getByRole('button', { name: /Continuar practica/i }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getAllByRole('button', { name: /Empezar practica/i }).length,
-    ).toBeGreaterThan(0);
+    render(<App />);
+
+    expect(screen.getByText('Historial de traducciones')).toBeInTheDocument();
+    await waitFor(() => expect(window.location.pathname).toBe('/aprender'));
   });
 
-  it('shows completed recommended practice as review instead of continue', () => {
-    renderLearningView({
-      learningSessions: [
-        {
-          id: 'old-active-session',
-          situationId: 'delay-update',
-          catalogVersion: 'flowtranslate:learning-situations:v1',
-          status: 'active',
-          sourceRecordIds: [],
-          createdAt: '2026-06-05T12:00:00.000Z',
-          content: {
-            situationTitle: 'Avisar una demora sin sonar defensivo',
-            anchorPhrase: 'The report is taking a bit longer than expected.',
-            whyItWorks: 'Shows ownership without sounding defensive.',
-            grammarNotes: [],
-            bestOption: {
-              prompt: 'Which option sounds best?',
-              choices: [],
-            },
-            rewritePrompt: 'Tell the client the report will be ready tomorrow.',
-            suggestedPhrases: [],
-          },
-        },
-        {
-          id: 'completed-session',
-          situationId: 'delay-update',
-          catalogVersion: 'flowtranslate:learning-situations:v1',
-          status: 'completed',
-          sourceRecordIds: [],
-          createdAt: '2026-06-05T12:30:00.000Z',
-          completedAt: '2026-06-05T12:40:00.000Z',
-          content: {
-            situationTitle: 'Avisar una demora sin sonar defensivo',
-            anchorPhrase: 'The report is taking a bit longer than expected.',
-            whyItWorks: 'Shows ownership without sounding defensive.',
-            grammarNotes: [],
-            bestOption: {
-              prompt: 'Which option sounds best?',
-              choices: [],
-            },
-            rewritePrompt: 'Tell the client the report will be ready tomorrow.',
-            suggestedPhrases: [],
-          },
-        },
-      ],
-    });
+  it('renders saved translation history with source text visible', () => {
+    renderLearningView({ history: historyWithBreakdown });
 
+    expect(screen.getByText('Historial de traducciones')).toBeInTheDocument();
     expect(
-      screen.getByRole('button', { name: /Repasar practica/i }),
+      screen.getByText('Ellos van a comer en el restaurante'),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole('button', { name: /Continuar practica/i }),
-    ).not.toBeInTheDocument();
+      screen.getByText('They are going to eat at the restaurant.'),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Traducciones')).toBeInTheDocument();
     expect(screen.queryByText('Tus practicas')).not.toBeInTheDocument();
+    expect(screen.queryByText('Frases guardadas')).not.toBeInTheDocument();
+    expect(screen.queryByText('Empezar practica')).not.toBeInTheDocument();
   });
 
-  it('keeps practice cards unique and labels completed sessions as review', () => {
+  it('toggles grammar labels and shows tense information for saved breakdowns', () => {
+    renderLearningView({ history: historyWithBreakdown });
+
+    expect(screen.queryByText('Tiempo: Near future')).not.toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: /ver análisis gramatical de traducción record-1/i,
+      }),
+    );
+
+    expect(screen.getByText('Tiempo: Near future')).toBeInTheDocument();
+    fireEvent.mouseEnter(screen.getByText('They'));
+
+    expect(screen.getByRole('tooltip')).toHaveTextContent('Sujeto');
+    expect(screen.getByRole('tooltip')).toHaveTextContent(
+      'Quien hace la accion.',
+    );
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: /ocultar análisis gramatical de traducción record-1/i,
+      }),
+    );
+
+    expect(screen.queryByText('Tiempo: Near future')).not.toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: /ver análisis gramatical de traducción record-1/i,
+      }),
+    );
+
+    expect(screen.getByText('Tiempo: Near future')).toBeInTheDocument();
+  });
+
+  it('omits the grammar control when a saved translation has no breakdown', () => {
+    renderLearningView({ history: historyWithBreakdown });
+
+    expect(
+      screen.queryByRole('button', {
+        name: /ver análisis gramatical de traducción record-2/i,
+      }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText('I need to review this before sending it.'),
+    ).toBeInTheDocument();
+  });
+
+  it('renders English attempts with diff and focused feedback', () => {
+    renderLearningView({ history: historyWithBreakdown });
+
+    expect(screen.getByText('Inglés corregido')).toBeInTheDocument();
+    expect(screen.getByText('Tu intento')).toBeInTheDocument();
+    expect(
+      screen.getByText('I need review this before send it.'),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Versión más natural')).toBeInTheDocument();
+    expect(screen.getByText('to')).toHaveClass('text-emerald-700');
+    expect(screen.getByText('send')).toHaveClass('line-through');
+    expect(screen.getByText('sending')).toHaveClass('text-emerald-700');
+
+    fireEvent.click(
+      screen.getByRole('button', { name: /aprende de este intento/i }),
+    );
+
+    expect(screen.getByText('Qué hiciste bien')).toBeInTheDocument();
+    expect(
+      screen.getByText(/La intención es clara y elegiste bien 'need'/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Ajuste clave')).toBeInTheDocument();
+    expect(
+      screen.getByText("Después de 'need' va 'to + verb': 'need to review'."),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Por qué importa')).toBeInTheDocument();
+    expect(screen.getByText('Patrón para reutilizar')).toBeInTheDocument();
+    expect(
+      screen.getByText('I need to + verb + before + -ing.'),
+    ).toBeInTheDocument();
+  });
+
+  it('keeps corrective feedback out of what went well', () => {
     renderLearningView({
-      learningSessions: [
+      history: [
         {
-          id: 'recommended-completed-session',
-          situationId: 'delay-update',
-          catalogVersion: 'flowtranslate:learning-situations:v1',
-          status: 'completed',
-          sourceRecordIds: [],
-          createdAt: '2026-06-05T12:00:00.000Z',
-          completedAt: '2026-06-05T12:20:00.000Z',
-          content: {
-            situationTitle: 'Avisar una demora sin sonar defensivo',
-            anchorPhrase: 'The report is taking a bit longer than expected.',
-            whyItWorks: 'Shows ownership without sounding defensive.',
-            grammarNotes: [],
-            bestOption: {
-              prompt: 'Which option sounds best?',
-              choices: [],
-            },
-            rewritePrompt: 'Tell the client the report will be ready tomorrow.',
-            suggestedPhrases: [],
-          },
-        },
-        {
-          id: 'follow-up-old-active',
-          situationId: 'follow-up',
-          catalogVersion: 'flowtranslate:learning-situations:v1',
-          status: 'active',
-          sourceRecordIds: [],
-          createdAt: '2026-06-05T12:10:00.000Z',
-          content: {
-            situationTitle: 'Hacer seguimiento sin presionar',
-            anchorPhrase: 'Just checking in on this.',
-            whyItWorks: 'Keeps the follow-up light.',
-            grammarNotes: [],
-            bestOption: {
-              prompt: 'Which option sounds best?',
-              choices: [],
-            },
-            rewritePrompt: 'Follow up on a proposal.',
-            suggestedPhrases: [],
-          },
-        },
-        {
-          id: 'follow-up-completed',
-          situationId: 'follow-up',
-          catalogVersion: 'flowtranslate:learning-situations:v1',
-          status: 'completed',
-          sourceRecordIds: [],
-          createdAt: '2026-06-05T12:30:00.000Z',
-          completedAt: '2026-06-05T12:45:00.000Z',
-          content: {
-            situationTitle: 'Hacer seguimiento sin presionar',
-            anchorPhrase: 'Just checking in on this.',
-            whyItWorks: 'Keeps the follow-up light.',
-            grammarNotes: [],
-            bestOption: {
-              prompt: 'Which option sounds best?',
-              choices: [],
-            },
-            rewritePrompt: 'Follow up on a proposal.',
-            suggestedPhrases: [],
+          id: 'record-correction-only',
+          sourceLanguage: 'en',
+          targetLanguage: 'en',
+          sourceText: 'Poor messi, He loss a penalty.',
+          translatedText: 'Poor Messi, he missed a penalty.',
+          mode: 'improve_english',
+          createdAt: '2026-06-05T15:00:00.000Z',
+          breakdown: {
+            changed: true,
+            confidence: 'high',
+            feedback: [
+              "El uso de 'loss' como verbo es incorrecto; se usó correctamente 'missed'.",
+            ],
+            whyThisWorks:
+              "El verbo correcto para fallar una oportunidad es 'to miss'.",
+            reusablePattern: 'Subject + missed + object',
           },
         },
       ],
     });
 
-    expect(screen.getByText('Tus practicas')).toBeInTheDocument();
-    expect(screen.getAllByText('Hacer seguimiento sin presionar')).toHaveLength(
-      1,
+    fireEvent.click(
+      screen.getByRole('button', { name: /aprende de este intento/i }),
     );
-    expect(screen.getByText('Completada')).toBeInTheDocument();
-    expect(screen.getByText('Repasar')).toBeInTheDocument();
+
+    const wellDoneSection = screen
+      .getByText('Qué hiciste bien')
+      .closest('div');
+    const issueSection = screen.getByText('Ajuste clave').closest('div');
+
+    expect(wellDoneSection).toHaveTextContent(
+      'La intención se entiende y ya estás construyendo la idea en inglés.',
+    );
+    expect(wellDoneSection).not.toHaveTextContent(
+      "El uso de 'loss' como verbo es incorrecto",
+    );
+    expect(issueSection).toHaveTextContent(
+      "El uso de 'loss' como verbo es incorrecto",
+    );
   });
 
-  it('opens a selected history conversation as a dedicated study surface', () => {
-    const history = [
-      {
-        id: 'record-1',
-        sourceLanguage: 'es' as const,
-        targetLanguage: 'en' as const,
-        sourceText: 'Ellos van a comer en el restaurante',
-        translatedText: 'They are going to eat at the restaurant',
-        createdAt: '2026-06-05T12:00:00.000Z',
-      },
-    ];
-
+  it('uses Spanglish-specific fallback feedback', () => {
     renderLearningView({
-      history,
-      studyArticle: {
-        translationRecordId: 'record-1',
-        sourceLanguage: 'es',
-        targetLanguage: 'en',
-        sourceText: history[0].sourceText,
-        translatedText: history[0].translatedText,
-        mode: 'translate_to_english',
-        title: 'Talking about Plans',
-        summary: 'A near-future phrase in context.',
-        articleVersion: 'markdown-v3',
-        lessonFocus: ['near future', 'movement verb'],
-        estimatedReadingMinutes: 4,
-        markdown: [
-          '# Talking about Plans',
-          '',
-          '## Syntactic breakdown',
-          '| Part | Role |',
-          '| --- | --- |',
-          '| Ellos | Subject |',
-          '| van a comer | Verb phrase |',
-          '',
-          '## Common mistakes',
-          '- Ellos van comer.',
-        ].join('\n'),
-      },
-      selectedStudyRecordId: 'record-1',
-    });
-
-    expect(
-      screen.getByRole('heading', { name: 'Articulo de estudio' }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText('Leccion: Talking about Plans'),
-    ).toBeInTheDocument();
-    expect(screen.getByText(history[0].sourceText)).toBeInTheDocument();
-    expect(
-      screen.queryByRole('heading', { name: /Hoy en tu ingles/i }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole('heading', { name: 'Historial' }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole('heading', { name: 'Practice' }),
-    ).not.toBeInTheDocument();
-  });
-
-  it('preloads the saved Spanish breakdown when a history record opens for study', () => {
-    const history = [
-      {
-        id: 'record-1',
-        sourceLanguage: 'en' as const,
-        targetLanguage: 'es' as const,
-        sourceText:
-          'When I lived in Toronto I use to buy weed every weekend in a store near me house.',
-        translatedText:
-          'Cuando vivia en Toronto solia comprar marihuana todos los fines de semana en una tienda cerca de mi casa.',
-        mode: 'translate_to_spanish' as const,
-        breakdown: {
-          changed: true,
-          confidence: 'high' as const,
-          feedback: [
-            "Se corrigio la conjugacion del verbo 'use' a 'used' para el pasado habitual.",
-          ],
-          tense: 'Past habitual',
-          structure: [
-            {
-              text: 'When I lived in Toronto',
-              role: 'modifier' as const,
-              note: 'Introductory time clause.',
-            },
-            {
-              text: 'used to buy',
-              role: 'verb' as const,
-              note: 'Past habit.',
-            },
-          ],
-          whyThisWorks:
-            "La estructura 'used to + infinitivo' expresa habitos pasados.",
-          commonMistake:
-            "Uso incorrecto de 'use to' en lugar de 'used to' para habitos pasados.",
-          alternatives: [
-            {
-              label: 'More casual',
-              text: "Back when I was in Toronto, I'd buy weed every weekend.",
-              note: "Usa 'would' para habitos pasados en un tono mas casual.",
-            },
-          ],
+      history: [
+        {
+          id: 'record-spanglish',
+          sourceLanguage: 'en',
+          targetLanguage: 'en',
+          sourceText:
+            'Sorry, hoy no llego a la call. Can we move it to tomorrow same time?',
+          translatedText:
+            "Sorry, I can't make it to the call today. Can we move it to tomorrow at the same time?",
+          mode: 'improve_english',
+          createdAt: '2026-06-05T16:00:00.000Z',
+          breakdown: {
+            changed: true,
+            confidence: 'high',
+            feedback: [],
+            reusablePattern: "I can't make it to + event + today.",
+          },
         },
-        createdAt: '2026-06-05T12:00:00.000Z',
-      },
-    ];
-
-    renderLearningView({
-      history,
-      studyLoading: true,
-      selectedStudyRecordId: 'record-1',
+      ],
     });
 
-    expect(screen.getByText('Desglose')).toBeInTheDocument();
-    expect(screen.getByText('Ajustado')).toBeInTheDocument();
-    expect(screen.getByText('Past habitual')).toBeInTheDocument();
-    expect(screen.getByText('used to buy')).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole('button', { name: /aprende de este intento/i }),
+    );
+
     expect(
-      screen.getByText(/Se corrigio la conjugacion del verbo/),
+      screen.getByText(/Ya combinaste una disculpa y una propuesta concreta/i),
     ).toBeInTheDocument();
     expect(
-      screen.getByText('Generando articulo de estudio'),
+      screen.getByText(/Convertí los fragmentos en español/i),
     ).toBeInTheDocument();
+    expect(
+      screen.getByText(/En Spanglish la idea ya está clara/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("I can't make it to + event + today."),
+    ).toBeInTheDocument();
+  });
+
+  it('lets users copy history records without responder or delete actions', () => {
+    renderLearningView({ history: historyWithBreakdown });
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Copiar' })[0]);
+
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+      'They are going to eat at the restaurant.',
+    );
+    expect(
+      screen.queryByRole('button', { name: /usar en responder/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /borrar/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /limpiar/i }),
+    ).not.toBeInTheDocument();
   });
 
   it('renders multiple tense notes when a phrase mixes clauses', () => {
@@ -972,155 +932,6 @@ describe('learning UI', () => {
       'true',
     );
     expect(screen.getByText('Simple present')).toBeInTheDocument();
-  });
-
-  it('lets the user ask AI questions about a saved Spanish breakdown', async () => {
-    const history = [
-      {
-        id: 'record-1',
-        sourceLanguage: 'en' as const,
-        targetLanguage: 'en' as const,
-        sourceText: 'I need help',
-        translatedText: 'I need some help.',
-        mode: 'improve_english' as const,
-        breakdown: {
-          changed: true,
-          confidence: 'high' as const,
-          feedback: ['"some help" suaviza la frase.'],
-          tense: 'Simple present',
-          whyThisWorks:
-            'La frase mantiene el sentido pero suena mas natural en ingles.',
-        },
-        createdAt: '2026-06-05T12:00:00.000Z',
-      },
-    ];
-    const askBreakdownQuestion = vi
-      .fn()
-      .mockResolvedValue(
-        'Si dices "I need help with this", agregas contexto y sigue sonando natural.',
-      );
-
-    renderLearningView({
-      history,
-      selectedStudyRecordId: 'record-1',
-      onAskBreakdownQuestion: askBreakdownQuestion,
-    });
-
-    fireEvent.change(screen.getByLabelText('Preguntar sobre este desglose'), {
-      target: { value: 'What if I said "I need help with this"?' },
-    });
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Enviar pregunta del desglose' }),
-    );
-
-    expect(
-      await screen.findByText(/agregas contexto y sigue sonando natural/),
-    ).toBeInTheDocument();
-    expect(askBreakdownQuestion).toHaveBeenCalledWith(
-      history[0],
-      'What if I said "I need help with this"?',
-      [],
-    );
-  });
-
-  it('renders a focused learning session with feedback and actions', () => {
-    const onSelectBestOption = vi.fn();
-    const onSubmitAttempt = vi.fn();
-    const onCompleteSession = vi.fn();
-    const session = {
-      id: 'session-1',
-      situationId: 'delay-update',
-      catalogVersion: 'flowtranslate:learning-situations:v1',
-      status: 'active' as const,
-      sourceRecordIds: [],
-      createdAt: '2026-06-05T12:00:00.000Z',
-      content: {
-        situationTitle: 'Avisar una demora sin sonar defensivo',
-        anchorPhrase: 'The report is taking a bit longer than expected.',
-        whyItWorks: 'Shows ownership without sounding defensive.',
-        grammarNotes: [
-          {
-            label: 'Present continuous',
-            text: 'is taking',
-            note: 'Marca algo que sigue en proceso.',
-          },
-        ],
-        bestOption: {
-          prompt: 'Which option sounds best?',
-          choices: [
-            {
-              id: 'preferred',
-              text: 'The report is taking a bit longer than expected.',
-              preferred: true,
-              feedback: 'Clear and calm.',
-            },
-            {
-              id: 'rough',
-              text: 'The report is delayed.',
-              preferred: false,
-              feedback: 'A bit flat.',
-            },
-          ],
-        },
-        rewritePrompt: 'Tell the client the report will be ready tomorrow.',
-        suggestedPhrases: ['I will send you a clean version tomorrow.'],
-      },
-    };
-
-    renderLearningView({
-      activeSession: session,
-      selectedBestOptionId: 'preferred',
-      latestAttempt: {
-        id: 'attempt-1',
-        sessionId: 'session-1',
-        userAnswer: 'I will send the report tomorrow.',
-        createdAt: '2026-06-05T12:05:00.000Z',
-        feedback: {
-          naturalness: 'close',
-          summary: 'Good, just soften it a bit.',
-          improvedVersion: 'I will send you a clean version tomorrow.',
-          notes: [
-            {
-              label: 'Chunk',
-              text: 'clean version',
-              note: 'Sounds more useful than just report.',
-            },
-          ],
-        },
-      },
-      onSelectBestOption,
-      onSubmitAttempt,
-      onCompleteSession,
-    });
-
-    expect(screen.getByText('Practica enfocada')).toBeInTheDocument();
-    expect(screen.getByText('Present continuous')).toBeInTheDocument();
-    expect(screen.getByText('Clear and calm.')).toBeInTheDocument();
-    expect(screen.getByText('Version mejorada')).toBeInTheDocument();
-    expect(
-      screen.getAllByText('I will send you a clean version tomorrow.').length,
-    ).toBeGreaterThan(0);
-
-    fireEvent.click(
-      screen.getByRole('button', { name: /The report is delayed/i }),
-    );
-    expect(onSelectBestOption).toHaveBeenCalledWith('rough');
-
-    fireEvent.change(screen.getByLabelText('Tu version en ingles'), {
-      target: { value: 'I will send it tomorrow.' },
-    });
-    fireEvent.click(
-      screen.getByRole('button', { name: /Revisar mi version/i }),
-    );
-    expect(onSubmitAttempt).toHaveBeenCalledWith('I will send it tomorrow.');
-
-    fireEvent.click(
-      screen.getByRole('button', { name: /Completar practica/i }),
-    );
-    expect(onCompleteSession).toHaveBeenCalledTimes(1);
-    expect(
-      screen.queryByRole('heading', { name: 'Practice' }),
-    ).not.toBeInTheDocument();
   });
 
   it('renders a markdown study article with syntax and exercises', () => {

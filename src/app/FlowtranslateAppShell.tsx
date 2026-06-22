@@ -1,12 +1,5 @@
 import type { ReactNode } from 'react';
-import {
-  BookOpen,
-  Languages,
-  Settings,
-  ShieldCheck,
-  UserRound,
-  WifiOff,
-} from 'lucide-react';
+import { BookOpen, WifiOff } from 'lucide-react';
 import { CheckoutReturnStatus } from '../components/CheckoutReturnStatus';
 import type { CheckoutReturnInfo } from '../services/checkout-return';
 import type { AppView } from './useFlowtranslateView';
@@ -35,11 +28,28 @@ type FlowtranslateAppShellProps = {
   onViewChange: (view: AppView) => void;
 };
 
-const renderAccountIcon = (icon: AccountButtonIcon) => {
-  if (icon === 'guest') return <UserRound size={17} />;
-  if (icon === 'signed-in') return <ShieldCheck size={17} />;
-  return <Settings size={17} />;
-};
+const FlowMarkIcon = () => (
+  <svg width='10' height='10' viewBox='0 0 10 10' fill='none' aria-hidden='true'>
+    <path
+      d='M1.5 5h4.5M4 3l2 2-2 2'
+      stroke='white'
+      strokeWidth='1.3'
+      strokeLinecap='round'
+      strokeLinejoin='round'
+    />
+  </svg>
+);
+
+const ResponderIcon = () => (
+  <svg width='12' height='12' viewBox='0 0 12 12' fill='none' aria-hidden='true'>
+    <path
+      d='M2 4h8M2 7h5'
+      stroke='currentColor'
+      strokeWidth='1.2'
+      strokeLinecap='round'
+    />
+  </svg>
+);
 
 export const FlowtranslateAppShell = ({
   accountButton,
@@ -56,63 +66,55 @@ export const FlowtranslateAppShell = ({
   onReturnToResponderFromCheckout,
   onViewChange,
 }: FlowtranslateAppShellProps) => (
-  <div className='flex h-[100dvh] min-h-0 flex-col overflow-x-hidden bg-slate-50 text-slate-950'>
-    <header className='grid min-h-16 shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-b border-slate-200/70 bg-white/95 px-3 shadow-sm shadow-slate-200/50 backdrop-blur sm:gap-4 sm:px-4'>
-      <div className='flex min-w-0 items-center gap-3'>
-        <div className='flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-600 text-white shadow-sm ring-1 ring-emerald-500/30'>
-          <Languages size={19} />
-        </div>
-        <div className='min-w-0'>
-          <h1 className='hidden truncate text-lg font-black leading-none sm:block'>
+  <div className='flex h-[100dvh] min-h-0 flex-col overflow-x-hidden bg-[#f7f8f9] font-[Inter,system-ui,sans-serif] text-[#0f1117]'>
+    <header className='sticky top-0 z-50 shrink-0 border-b border-black/10 bg-[#f7f8f9]/95 backdrop-blur-sm'>
+      <div className='mx-auto flex h-11 max-w-2xl items-center justify-between gap-1.5 px-4'>
+        <div className='flex min-w-0 shrink-0 items-center gap-1.5'>
+          <div className='flex h-5 w-5 shrink-0 items-center justify-center rounded-[3px] bg-[#0e7f72] text-white'>
+            <FlowMarkIcon />
+          </div>
+          <span className='truncate text-[13px] font-semibold tracking-tight text-[#0f1117] max-[359px]:hidden'>
             FlowTranslate
-          </h1>
-          <p className='mt-1 hidden text-xs text-slate-500 sm:block'>
-            Respuestas en ingles listas para mandar.
-          </p>
+          </span>
         </div>
-      </div>
 
-      <nav
-        className='flex min-w-0 justify-center rounded-full bg-slate-100 p-1 ring-1 ring-slate-200/80'
-        aria-label='Navegacion principal de FlowTranslate'
-      >
-        <button
-          type='button'
-          onClick={() => onViewChange('translate')}
-          className={`inline-flex h-10 min-w-0 items-center justify-center gap-1.5 rounded-full px-2 text-xs font-black transition-colors min-[380px]:px-3 sm:min-w-28 sm:text-sm ${
-            view === 'translate'
-              ? 'bg-white text-slate-950 shadow-sm ring-1 ring-slate-200'
-              : 'text-slate-500 hover:text-slate-800'
-          }`}
+        <nav
+          className='flex shrink-0 items-center gap-0.5'
+          aria-label='Navegacion principal de FlowTranslate'
         >
-          <Languages size={16} />
-          <span className='truncate'>Responder</span>
-        </button>
-        <button
-          type='button'
-          onClick={() => onViewChange('learning')}
-          className={`inline-flex h-10 min-w-0 items-center justify-center gap-1.5 rounded-full px-2 text-xs font-black transition-colors min-[380px]:px-3 sm:min-w-28 sm:text-sm ${
-            view === 'learning'
-              ? 'bg-white text-slate-950 shadow-sm ring-1 ring-slate-200'
-              : 'text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          <BookOpen size={16} />
-          <span className='truncate'>Aprender</span>
-        </button>
-      </nav>
+          <button
+            type='button'
+            onClick={() => onViewChange('translate')}
+            className={`flex items-center gap-1.5 rounded px-2.5 py-1.5 text-[12px] font-medium transition-colors sm:px-3 ${
+              view === 'translate'
+                ? 'bg-[#eef0f3] text-[#0f1117]'
+                : 'text-[#6b7280] hover:text-[#0f1117]'
+            }`}
+          >
+            <ResponderIcon />
+            Responder
+          </button>
+          <button
+            type='button'
+            onClick={() => onViewChange('learning')}
+            className={`flex items-center gap-1.5 rounded px-2.5 py-1.5 text-[12px] font-medium transition-colors sm:px-3 ${
+              view === 'learning'
+                ? 'bg-[#eef0f3] text-[#0f1117]'
+                : 'text-[#6b7280] hover:text-[#0f1117]'
+            }`}
+          >
+            <BookOpen size={12} />
+            Historial
+          </button>
+        </nav>
 
-      <div className='flex min-w-0 items-center gap-2'>
         <button
           type='button'
           onClick={onOpenAccount}
-          className='inline-flex h-10 w-10 shrink-0 items-center justify-center gap-2 rounded-full border border-slate-200 bg-white text-sm font-bold text-slate-600 shadow-sm transition-colors hover:border-slate-300 hover:text-slate-950 sm:w-auto sm:max-w-44 sm:px-3'
+          className='shrink-0 px-1 text-[12px] font-medium text-[#6b7280] transition-colors hover:text-[#0f1117]'
           title={accountButton.title}
         >
-          {renderAccountIcon(accountButton.icon)}
-          <span className='hidden truncate sm:inline'>
-            {accountButton.label}
-          </span>
+          {accountButton.label}
         </button>
       </div>
     </header>

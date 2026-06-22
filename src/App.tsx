@@ -3,7 +3,6 @@ import type {
   TranslationPresetId,
   UsageSnapshot,
 } from '@eb-packages/flowtranslate-core';
-import { STARTER_LEARNING_SITUATIONS } from '@eb-packages/flowtranslate-core';
 import { useCallback, useEffect, useState } from 'react';
 import './App.css';
 import { FlowtranslateAppShell } from './app/FlowtranslateAppShell';
@@ -28,17 +27,11 @@ import {
   type LaunchLandingContext,
 } from './features/commercial/LaunchLandingRoute';
 import { useFlowtranslateCommercialExperiments } from './features/commercial/useFlowtranslateCommercialExperiments';
-import { useFlowtranslateLearning } from './features/learning/useFlowtranslateLearning';
-import { useLearningStudyTools } from './features/learning/useLearningStudyTools';
 import { useExpressionClipboard } from './features/responder/useExpressionClipboard';
 import { useResponderPromiseState } from './features/responder/useResponderPromiseState';
 import { useFlowtranslateVoice } from './features/voice/useFlowtranslateVoice';
 import { isOnline, subscribeToOnlineState } from './services/pwa';
-import {
-  clearTranslationHistory,
-  deleteTranslationRecord,
-  listTranslationHistory,
-} from './services/translation-history';
+import { listTranslationHistory } from './services/translation-history';
 
 const captureFlowtranslateError = (
   error: unknown,
@@ -160,30 +153,15 @@ function App() {
     openAccount,
     resultCopyCount: clipboard.resultCopyCount,
   });
-  const study = useLearningStudyTools({
-    account,
-    historyCount: history.length,
-    online,
-    onOpenAccount: openAccount,
-    onUsage: handleUsage,
-  });
-  const learning = useFlowtranslateLearning({
-    account,
-    historyCount: history.length,
-    isLearningView: view === 'learning',
-    online,
-    onOpenAccount: openAccount,
-    onUsage: handleUsage,
-  });
   const returnToResponder = useCallback(() => {
     setView('translate');
   }, [setView]);
   const billing = useFlowtranslateBilling({
     account,
-    hasSavedPhrases: learning.savedPhrases.some((phrase) => !phrase.archivedAt),
+    hasSavedPhrases: false,
     historyCount: history.length,
     isLearningView: view === 'learning',
-    learningSessionCount: learning.learningSessions.length,
+    learningSessionCount: 0,
     openAccount,
     resultCopyCount: clipboard.resultCopyCount,
     showAccount,
@@ -272,51 +250,6 @@ function App() {
     },
     [account.accountKind, translator],
   );
-
-  const useLearningPhraseInResponder = useCallback(
-    (text: string) => {
-      translator.editInput(text);
-      setView('translate');
-      analytics.track('learning_phrase_used_in_responder', {
-        text_length: text.trim().length,
-      });
-    },
-    [setView, translator],
-  );
-
-  const deleteHistoryItem = async (id: string) => {
-    try {
-      await deleteTranslationRecord(id);
-      setHistory((current) => current.filter((item) => item.id !== id));
-      learning.removeDeletedHistoryRecord(id);
-      study.closeStudyArticleForRecord(id);
-      analytics.track('translation_history_deleted', { count: 1 });
-    } catch (error) {
-      captureFlowtranslateError(error, {
-        screen: 'learning',
-        action: 'delete_translation_history_item',
-        account_kind: account.accountKind,
-      });
-      setHistoryError(error instanceof Error ? error.message : 'No pudimos borrar ese item.');
-    }
-  };
-
-  const clearHistory = async () => {
-    try {
-      await clearTranslationHistory();
-      setHistory([]);
-      learning.clearLearningState();
-      study.closeStudyArticle();
-      analytics.track('translation_history_cleared');
-    } catch (error) {
-      captureFlowtranslateError(error, {
-        screen: 'learning',
-        action: 'clear_translation_history',
-        account_kind: account.accountKind,
-      });
-      setHistoryError(error instanceof Error ? error.message : 'No pudimos limpiar tu historial.');
-    }
-  };
 
   const accountButtonLabel = account.billingState.hasProAccess
     ? 'Pro'
@@ -437,7 +370,7 @@ function App() {
           onOpenLearning={() => setView('learning')}
           onQuotaSupport={billing.openQuotaSupport}
           onQuotaUpgrade={billing.upgradeQuota}
-          onRequestStudy={(record) => void study.openStudyArticle(record)}
+          onRequestStudy={() => setView('learning')}
           onSelectPreset={selectPreset}
           onStartProCheckout={(surface) => void billing.startProCheckout(surface)}
           upgradePromptState={billing.upgradePromptState}
@@ -447,53 +380,6 @@ function App() {
           historyError={historyError}
           history={history}
           accountKind={account.accountKind}
-          starterSituations={STARTER_LEARNING_SITUATIONS}
-          learningSessions={learning.learningSessions}
-          savedPhrases={learning.savedPhrases}
-          activeSession={learning.activeLearningSession}
-          progressLoading={learning.learningProgressLoading}
-          progressError={learning.learningProgressError}
-          sessionLoading={learning.learningSessionLoading}
-          sessionError={learning.learningSessionError}
-          selectedBestOptionId={learning.selectedBestOptionId}
-          attemptLoading={learning.learningAttemptLoading}
-          attemptError={learning.learningAttemptError}
-          latestAttempt={learning.latestLearningAttempt}
-          studyArticle={study.studyArticle}
-          studyLoading={study.studyLoading}
-          studyError={study.studyError}
-          selectedStudyRecordId={study.selectedStudyRecordId}
-          onStartSession={(situationId) =>
-            void learning.startLearningSession(situationId)
-          }
-          onResumeSession={learning.resumeLearningSession}
-          onLeaveSession={learning.leaveLearningSession}
-          onSelectBestOption={learning.chooseLearningBestOption}
-          onSubmitAttempt={(attemptText) =>
-            void learning.submitLearningRewrite(attemptText)
-          }
-          onSavePhrase={(input) => void learning.savePhraseFromLearning(input)}
-          onArchivePhrase={(id) => void learning.archivePhraseFromLearning(id)}
-          onCompleteSession={() => void learning.completeActiveLearningSession()}
-          onUsePhraseInResponder={useLearningPhraseInResponder}
-          onOpenStudy={(record) => void study.openStudyArticle(record)}
-          onCloseStudy={study.closeStudyArticle}
-          onListenPhrase={(language, text) => voice.listenPanel(language, text)}
-          onAskBreakdownQuestion={study.askAboutBreakdown}
-          onDelete={(id) => void deleteHistoryItem(id)}
-          onClear={() => void clearHistory()}
-          upgradePrompt={
-            billing.shouldShowLearningUpgradePrompt ? (
-              <ProUpgradePrompt
-                surface='learning'
-                accountKind={account.accountKind}
-                compact
-                onStartCheckout={(surface) => void billing.startProCheckout(surface)}
-                onConnectAccount={billing.connectAccountForPro}
-                {...billing.upgradePromptState('learning')}
-              />
-            ) : null
-          }
         />
       )}
 

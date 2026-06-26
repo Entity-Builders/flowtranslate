@@ -112,12 +112,14 @@ account, not `TEST-*` credentials from a real account. Keep live provider
 tokens in the `production` object and local/test credentials in the `local`
 object.
 
-For real local subscription tests, `ENTITY_BUILDERS_BILLING_WEBHOOK_URL` must
-be a public HTTPS tunnel that forwards to the local Supabase functions server.
-`FLOWTRANSLATE_PRO_CHECKOUT_RETURN_URL` must also be public HTTPS because
-Mercado Pago validates the subscription `back_url` before creating the
-preapproval. Use production return URL for backend entitlement testing, or a
-second tunnel to the local Vite app for full local return-screen testing.
+For real local subscription or top-up tests,
+`ENTITY_BUILDERS_BILLING_WEBHOOK_URL` must be a public HTTPS tunnel that
+forwards to the local Supabase functions server.
+`FLOWTRANSLATE_PRO_CHECKOUT_RETURN_URL` and
+`FLOWTRANSLATE_TOPUP_CHECKOUT_RETURN_URL` must also be public HTTPS because
+Mercado Pago validates return URLs before creating checkout. Use production
+return URLs for backend entitlement/quota testing, or a second tunnel to the
+local Vite app for full local return-screen testing.
 If both URLs use a single Tailscale Funnel host, configure path routing so `/`
 proxies to the Vite dev server and `/functions/v1` proxies to Supabase
 Functions. A return page that shows `{"message":"no Route matched with those
@@ -143,6 +145,7 @@ FLOWTRANSLATE_PRO_MERCADO_PAGO_TEST_PAYER_EMAIL=<optional-test-buyer-email>
 FLOWTRANSLATE_PRO_PRICE_AMOUNT=4999
 FLOWTRANSLATE_PRO_PRICE_CURRENCY=ARS
 FLOWTRANSLATE_PRO_CHECKOUT_RETURN_URL=https://flowtranslate.app/pro/checkout/return
+FLOWTRANSLATE_TOPUP_CHECKOUT_RETURN_URL=https://flowtranslate.app/topup/checkout/return
 ```
 
 If Mercado Pago shows "Una de las partes con la que intentas hacer el pago es

@@ -127,16 +127,18 @@ FLOWTRANSLATE_PRO_MERCADO_PAGO_TEST_PAYER_EMAIL=<optional-test-buyer-email>
 FLOWTRANSLATE_PRO_PRICE_AMOUNT=4999
 FLOWTRANSLATE_PRO_PRICE_CURRENCY=ARS
 FLOWTRANSLATE_PRO_CHECKOUT_RETURN_URL=https://flowtranslate.app/pro/checkout/return
+FLOWTRANSLATE_TOPUP_CHECKOUT_RETURN_URL=https://flowtranslate.app/topup/checkout/return
 ```
 
 `MERCADO_PAGO_*` names are shared provider credentials for the Entity Builders
 Billing integration. `ENTITY_BUILDERS_BILLING_WEBHOOK_URL` is the shared
 server-side billing webhook; FlowTranslate routes through provider lookup and
 `external_reference`, not a product-specific webhook function name.
-`FLOWTRANSLATE_PRO_*` names are product-scoped config so a future Entity
-Builders app can add its own plan without reintegrating the provider from
-scratch. v1 does not expose `VITE_MERCADO_PAGO_*` because checkout will be
-created server-side and redirected through Mercado Pago's hosted `init_point`.
+`FLOWTRANSLATE_PRO_*` and `FLOWTRANSLATE_TOPUP_*` names are product-scoped
+config so a future Entity Builders app can add its own offer without
+reintegrating the provider from scratch. v1 does not expose
+`VITE_MERCADO_PAGO_*` because checkout is created server-side and redirected
+through Mercado Pago's hosted `init_point`.
 
 For end-to-end Mercado Pago testing against the local Supabase stack, expose
 the local functions server through a public HTTPS tunnel and put that tunnel in
@@ -144,14 +146,16 @@ the local functions server through a public HTTPS tunnel and put that tunnel in
 `?source_news=webhooks&provider=mercado_pago`. Mercado Pago cannot deliver
 provider webhooks to `127.0.0.1` or `localhost` from its servers.
 
-Mercado Pago also validates the checkout `back_url`. For local subscription
-tests, set `FLOWTRANSLATE_PRO_CHECKOUT_RETURN_URL` to a public HTTPS route such
-as `https://flowtranslate.app/pro/checkout/return`, or expose the local Vite app
-through a second HTTPS tunnel and use that tunnel's `/pro/checkout/return` URL.
-When using one Tailscale Funnel host for both services, route `/functions/v1`
-to `http://127.0.0.1:54321/functions/v1` and `/` to
-`http://127.0.0.1:5173`; otherwise `/pro/checkout/return` will hit the
-Supabase gateway and return `no Route matched with those values`.
+Mercado Pago also validates checkout return URLs. For local tests, set
+`FLOWTRANSLATE_PRO_CHECKOUT_RETURN_URL` and
+`FLOWTRANSLATE_TOPUP_CHECKOUT_RETURN_URL` to public HTTPS routes such as
+`https://flowtranslate.app/pro/checkout/return` and
+`https://flowtranslate.app/topup/checkout/return`, or expose the local Vite app
+through a second HTTPS tunnel and use that tunnel's matching return paths. When
+using one Tailscale Funnel host for both services, route `/functions/v1` to
+`http://127.0.0.1:54321/functions/v1` and `/` to `http://127.0.0.1:5173`;
+otherwise checkout return paths will hit the Supabase gateway and return
+`no Route matched with those values`.
 
 Configure Webhooks in the Mercado Pago app for the seller test account as well
 as passing the webhook URL from the server payload. In local tests Mercado Pago
@@ -181,6 +185,7 @@ Flowtranslate vNext stores durable app data in the dedicated
 - `flowtranslate.usage_events`
 - `flowtranslate.usage_recovery_state`
 - `flowtranslate.usage_topups`
+- `flowtranslate.usage_topup_purchases`
 
 The browser app is a thin PWA interface. Gemini calls, quota preflight,
 translation history writes, and practice generation all run through

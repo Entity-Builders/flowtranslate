@@ -3,6 +3,7 @@ export const STORAGE_KEYS = {
   commercialAttribution: 'flowtranslate_commercial_attribution',
   guestDeviceId: 'flowtranslate_guest_device_id',
   pendingGuestSyncUserId: 'flowtranslate_pending_guest_sync_user_id',
+  pendingTranslationResume: 'flowtranslate_pending_translation_resume',
   responderPromiseSeen: 'flowtranslate_responder_promise_seen',
 } as const;
 

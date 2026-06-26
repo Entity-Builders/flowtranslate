@@ -35,7 +35,7 @@ type CopyConfig = {
   Icon: typeof CheckCircle2;
 };
 
-const COPY: Record<CheckoutReturnState, CopyConfig> = {
+const PRO_COPY: Record<CheckoutReturnState, CopyConfig> = {
   success: {
     title: 'Volviste de Mercado Pago',
     body: 'Pro se activa cuando Mercado Pago confirma el pago de forma segura. Mientras tanto, podes seguir usando FlowTranslate.',
@@ -68,6 +68,39 @@ const COPY: Record<CheckoutReturnState, CopyConfig> = {
   },
 };
 
+const TOPUP_COPY: Record<CheckoutReturnState, CopyConfig> = {
+  success: {
+    title: 'Recarga en revision',
+    body: 'La recarga se activa cuando Mercado Pago confirma el pago de forma segura. Si ya fue aprobado, retomamos tu traduccion automaticamente.',
+    tone: 'success',
+    Icon: CheckCircle2,
+  },
+  pending: {
+    title: 'Recarga pendiente',
+    body: 'Estamos esperando la confirmacion de Mercado Pago. Tus tokens se suman cuando el pago queda aprobado.',
+    tone: 'warning',
+    Icon: Clock3,
+  },
+  failed: {
+    title: 'Recarga no confirmada',
+    body: 'No pudimos confirmar el pago. No sumamos tokens hasta que Mercado Pago lo apruebe; podes reintentar la recarga.',
+    tone: 'danger',
+    Icon: XCircle,
+  },
+  cancelled: {
+    title: 'Recarga cancelada',
+    body: 'El checkout se cerro sin activar tokens ni generar cargos nuevos. Podes reintentar cuando quieras.',
+    tone: 'neutral',
+    Icon: XCircle,
+  },
+  unknown: {
+    title: 'Estamos revisando la recarga',
+    body: 'Estamos esperando la confirmacion de Mercado Pago. Tus tokens se suman cuando el pago quede aprobado.',
+    tone: 'info',
+    Icon: AlertTriangle,
+  },
+};
+
 export const CheckoutReturnStatus = ({
   info,
   onDismiss,
@@ -77,7 +110,7 @@ export const CheckoutReturnStatus = ({
   retryCheckoutBusy = false,
   retryCheckoutLabel = 'Reintentar Pro',
 }: CheckoutReturnStatusProps) => {
-  const copy = COPY[info.state];
+  const copy = (info.flow === 'topup' ? TOPUP_COPY : PRO_COPY)[info.state];
   const Icon = copy.Icon;
   const showSupportHint =
     info.state === 'success' ||
@@ -147,8 +180,9 @@ export const CheckoutReturnStatus = ({
     >
       {showSupportHint && info.hasExternalReference ? (
         <p className='eb-status-banner__hint'>
-          Si Mercado Pago confirmo el cobro pero Pro todavia no aparece,
-          revisamos estos casos manualmente dentro de 24-48h.
+          {info.flow === 'topup'
+            ? 'Si Mercado Pago confirmo el cobro pero la recarga todavia no aparece, revisamos estos casos manualmente dentro de 24-48h.'
+            : 'Si Mercado Pago confirmo el cobro pero Pro todavia no aparece, revisamos estos casos manualmente dentro de 24-48h.'}
         </p>
       ) : null}
     </EbStatusBanner>

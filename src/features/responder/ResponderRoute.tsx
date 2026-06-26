@@ -42,6 +42,7 @@ type ResponderRouteProps = {
   voiceMessage: string;
   quotaUpgradeBusy: boolean;
   quotaUpgradeLabel: string;
+  quotaSupportBusy: boolean;
   onConnectAccountForPro: (surface: ProUpgradeSurface) => void;
   onCopyInput: () => void;
   onCopyResult: () => void;
@@ -81,6 +82,7 @@ export const ResponderRoute = ({
   voiceMessage,
   quotaUpgradeBusy,
   quotaUpgradeLabel,
+  quotaSupportBusy,
   onConnectAccountForPro,
   onCopyInput,
   onCopyResult,
@@ -136,6 +138,7 @@ export const ResponderRoute = ({
       quotaUsage={usage}
       quotaUpgradeLabel={quotaUpgradeLabel}
       quotaUpgradeBusy={quotaUpgradeBusy}
+      quotaSupportBusy={quotaSupportBusy}
       hasSeenResponderPromise={shouldSuppressResponderPromise}
       onInputChange={(value) => translator.editInput(value)}
       onCopyInput={onCopyInput}

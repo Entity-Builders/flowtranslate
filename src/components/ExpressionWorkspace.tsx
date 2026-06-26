@@ -77,6 +77,7 @@ type ExpressionWorkspaceProps = {
   quotaUsage?: UsageSnapshot | null;
   quotaUpgradeLabel?: string;
   quotaUpgradeBusy?: boolean;
+  quotaSupportBusy?: boolean;
   hasSeenResponderPromise: boolean;
   onInputChange: (value: string) => void;
   onCopyInput: () => void;
@@ -311,17 +312,29 @@ const PostCopyNudge = ({
   );
 };
 
-const QuotaPulseIcon = ({ isCooldown }: { isCooldown: boolean }) => {
-  const tone = isCooldown
+const QuotaPulseIcon = ({
+  isCooldown,
+  inverted = false,
+}: {
+  isCooldown: boolean;
+  inverted?: boolean;
+}) => {
+  const tone = inverted
     ? {
-        ring: 'border-amber-200',
-        halo: 'border-amber-200',
-        surface: 'bg-amber-50 text-amber-700 ring-amber-200',
+        ring: 'border-emerald-300/25',
+        halo: 'border-emerald-300/25',
+        surface: 'bg-emerald-300/15 text-emerald-300 ring-emerald-300/30',
       }
+    : isCooldown
+      ? {
+          ring: 'border-amber-200',
+          halo: 'border-amber-200',
+          surface: 'bg-amber-50 text-amber-700 ring-amber-200',
+        }
     : {
-        ring: 'border-indigo-200',
-        halo: 'border-indigo-200',
-        surface: 'bg-indigo-50 text-indigo-600 ring-indigo-200',
+        ring: 'border-emerald-200',
+        halo: 'border-emerald-200',
+        surface: 'bg-emerald-50 text-emerald-600 ring-emerald-200',
       };
 
   return (
@@ -337,9 +350,13 @@ const QuotaPulseIcon = ({ isCooldown }: { isCooldown: boolean }) => {
         style={{ animationDelay: '420ms' }}
       />
       <span
-        className={`relative z-10 flex h-11 w-11 items-center justify-center rounded-full ring-1 ${tone.surface}`}
+        className={`quota-icon-float relative z-10 flex h-11 w-11 items-center justify-center rounded-full ring-1 ${tone.surface}`}
       >
-        <Zap size={20} fill='currentColor' className='motion-safe:animate-pulse' />
+        <Zap
+          size={20}
+          fill='currentColor'
+          className='motion-safe:animate-pulse'
+        />
       </span>
     </div>
   );
@@ -350,6 +367,7 @@ const QuotaExhaustedState = ({
   compact = false,
   upgradeLabel = 'Activar Pro',
   upgradeBusy = false,
+  supportBusy = false,
   onUpgrade,
   onSupport,
 }: {
@@ -357,6 +375,7 @@ const QuotaExhaustedState = ({
   compact?: boolean;
   upgradeLabel?: string;
   upgradeBusy?: boolean;
+  supportBusy?: boolean;
   onUpgrade?: () => void;
   onSupport?: () => void;
 }) => {
@@ -373,108 +392,69 @@ const QuotaExhaustedState = ({
     ? `Te damos más respuestas ${cooldownResumeCopy}`
     : 'Elegí cómo seguir';
   const bodyCopy = isCooldown
-    ? `Tu texto sigue acá. Podés esperar ${cooldownResumeCopy}, apoyar con un cafecito y te recargamos uso amigo, o activar Pro para seguir sin esta pausa.`
-    : 'Tu texto sigue acá. Podés apoyar con un cafecito y te recargamos créditos de uso amigo, o activar Pro para más margen mensual y Learning Path.';
-  const waitCopy = isCooldown
-    ? `También podés esperar: volvés a tener uso amigo ${cooldownResumeCopy}.`
-    : `También podés esperar: ${resetCopy}`;
-  const supportDescription = isCooldown
-    ? 'Si necesitás seguir ahora, apoyá el proyecto y te recargamos uso amigo.'
-    : 'Apoyá el proyecto y te recargamos créditos de uso amigo para seguir respondiendo hoy.';
-  const proDescription = isCooldown
-    ? 'Evitá estas pausas con más margen mensual, aprendizaje guiado y menos fricción cuando necesitás responder.'
-    : 'Suscribite para tener más margen mensual, aprendizaje guiado y menos fricción cuando necesitás responder.';
+    ? 'Tu texto queda guardado. Podés esperar, apoyar con Cafecito o pasarte a Pro.'
+    : `${resetCopy} También podés apoyar con Cafecito o pasarte a Pro.`;
 
   return (
     <div
-      className={`relative overflow-hidden rounded-lg border border-slate-100 bg-white text-slate-700 shadow-[0_2px_16px_rgba(15,23,42,0.06)] ${
-        compact ? 'p-4' : 'p-5'
+      className={`quota-sheet-enter relative overflow-hidden bg-gradient-to-br from-emerald-950 to-emerald-900 text-white shadow-[0_18px_48px_rgba(6,78,59,0.34)] ${
+        compact
+          ? 'rounded-t-3xl px-6 pb-8 pt-3'
+          : 'rounded-2xl px-6 py-7'
       }`}
     >
-      <div className='flex flex-col gap-5'>
+      {compact ? (
+        <div className='flex justify-center pb-3'>
+          <div className='h-1 w-8 rounded-full bg-white/20' />
+        </div>
+      ) : null}
+      <div className='flex flex-col items-center gap-4 text-center'>
+        <QuotaPulseIcon isCooldown={isCooldown} inverted />
+
         <div className='min-w-0'>
-          <div className='mb-4 flex items-center gap-4'>
-            <QuotaPulseIcon isCooldown={isCooldown} />
-            <div className='min-w-0'>
-              <p
-                className={`text-xs font-black uppercase tracking-[0.18em] ${
-                  isCooldown ? 'text-amber-600' : 'text-slate-400'
-                }`}
-              >
-                {eyebrow}
-              </p>
-              <h3 className='mt-1 text-lg font-black leading-tight text-slate-950 sm:text-xl'>
-                {title}
-              </h3>
-              <p className='mt-1 text-xs font-semibold leading-5 text-slate-500'>
-                {waitCopy}
-              </p>
-            </div>
-          </div>
-          <p className='max-w-2xl text-sm font-semibold leading-6 text-slate-600'>
+          <p className='text-xs font-black uppercase tracking-normal text-emerald-300/75'>
+            {eyebrow}
+          </p>
+          <h3 className='mt-1 text-xl font-black leading-tight text-white sm:text-2xl'>
+            {title}
+          </h3>
+          <p className='mx-auto mt-2 max-w-sm text-sm font-semibold leading-6 text-emerald-50/75'>
             {bodyCopy}
           </p>
         </div>
 
-        <div className='grid gap-2.5 min-[440px]:grid-cols-2'>
-          <div className='flex min-w-0 flex-col justify-between gap-4 rounded-md border border-slate-200 bg-white p-4 text-left transition-colors hover:border-indigo-300 hover:bg-indigo-50/70'>
-            <div className='flex min-w-0 gap-3'>
-              <div className='flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-slate-50 text-slate-700 ring-1 ring-slate-200'>
-                <Coffee size={18} />
-              </div>
-              <div className='min-w-0'>
-                <p className='text-xs font-black uppercase tracking-normal text-slate-400'>
-                  Opción 1
-                </p>
-                <h4 className='mt-1 text-sm font-black leading-tight text-slate-950 sm:text-base'>
-                  Cafecito + recarga
-                </h4>
-                <p className='mt-2 text-xs font-semibold leading-5 text-slate-500 sm:text-sm'>
-                  {supportDescription}
-                </p>
-              </div>
-            </div>
-            <button
-              type='button'
-              onClick={onSupport}
-              disabled={!onSupport}
-              className='inline-flex h-10 w-full items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 transition-colors hover:border-indigo-300 hover:bg-white hover:text-indigo-700 disabled:text-slate-300'
-            >
-              <Coffee size={16} />
-              Apoyar con cafecito
-            </button>
-          </div>
-
-          <div className='flex min-w-0 flex-col justify-between gap-4 rounded-md bg-gradient-to-br from-indigo-600 to-violet-700 p-4 text-left text-white shadow-[0_4px_16px_rgba(79,70,229,0.22)]'>
-            <div className='flex min-w-0 gap-3'>
-              <div className='flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-white/15 text-white ring-1 ring-white/20'>
-                <BookOpen size={18} />
-              </div>
-              <div className='min-w-0'>
-                <p className='text-xs font-black uppercase tracking-normal text-indigo-100/80'>
-                  Opción 2
-                </p>
-                <h4 className='mt-1 text-sm font-black leading-tight text-white sm:text-base'>
-                  Pro + Learning Path
-                </h4>
-                <p className='mt-2 text-xs font-semibold leading-5 text-indigo-100 sm:text-sm'>
-                  {proDescription}
-                </p>
-              </div>
-            </div>
-            <button
-              type='button'
-              onClick={onUpgrade}
-              disabled={!onUpgrade || upgradeBusy}
-              className='inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-white px-4 text-sm font-black text-indigo-700 transition-colors hover:bg-indigo-50 disabled:bg-white/40 disabled:text-white/60'
-            >
-              {upgradeBusy ? (
-                <Loader2 size={16} className='animate-spin' />
-              ) : null}
-              {upgradeLabel}
-              {!upgradeBusy ? <ArrowRight size={16} /> : null}
-            </button>
-          </div>
+        <div
+          className={`flex w-full flex-col gap-2.5 ${
+            compact ? '' : 'mx-auto max-w-sm'
+          }`}
+        >
+          <button
+            type='button'
+            onClick={onSupport}
+            disabled={!onSupport || supportBusy}
+            aria-label='Apoyar con cafecito'
+            className='inline-flex h-12 w-full items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/10 px-4 text-sm font-black text-emerald-100 transition-all duration-200 hover:-translate-y-0.5 hover:bg-white/15 disabled:text-white/35 disabled:hover:translate-y-0'
+          >
+            {supportBusy ? (
+              <Loader2 size={16} className='animate-spin' />
+            ) : (
+              <Coffee size={17} />
+            )}
+            {supportBusy ? 'Abriendo recarga' : 'Cafecito + recarga'}
+          </button>
+          <button
+            type='button'
+            onClick={onUpgrade}
+            disabled={!onUpgrade || upgradeBusy}
+            aria-label={upgradeLabel}
+            className='quota-cta-glow inline-flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-500 to-emerald-600 px-4 text-sm font-black text-white shadow-[0_4px_20px_rgba(16,185,129,0.34)] transition-all duration-200 hover:-translate-y-0.5 hover:from-emerald-400 hover:to-emerald-500 hover:shadow-[0_8px_28px_rgba(16,185,129,0.4)] active:translate-y-0 disabled:from-white/30 disabled:to-white/20 disabled:text-white/60 disabled:hover:translate-y-0'
+          >
+            {upgradeBusy ? (
+              <Loader2 size={16} className='animate-spin' />
+            ) : null}
+            Ver Pro
+            {!upgradeBusy ? <ArrowRight size={16} /> : null}
+          </button>
         </div>
       </div>
     </div>
@@ -539,6 +519,7 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
     quotaUsage,
     quotaUpgradeLabel,
     quotaUpgradeBusy = false,
+    quotaSupportBusy = false,
     hasSeenResponderPromise,
     onInputChange,
     onCopyResult,
@@ -578,6 +559,7 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
     status === 'auth' ||
     status === 'quota' ||
     status === 'offline';
+  const isQuotaState = status === 'quota';
   const shouldShowMobileResultSheet =
     isTranslating || hasResult || hasAttentionState;
   const shouldEmphasizeResponse =
@@ -660,6 +642,10 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
   useEffect(() => {
     if (status === 'typing') setIsMobileResultOpen(false);
   }, [status]);
+
+  useEffect(() => {
+    if (isQuotaState) setIsMobileResultOpen(true);
+  }, [isQuotaState]);
 
   useEffect(() => {
     if (!isTranslating) {
@@ -1037,6 +1023,7 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
               usage={quotaUsage}
               upgradeLabel={quotaUpgradeLabel}
               upgradeBusy={quotaUpgradeBusy}
+              supportBusy={quotaSupportBusy}
               onUpgrade={onQuotaUpgrade}
               onSupport={onQuotaSupport}
             />
@@ -1135,7 +1122,56 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
         )}
       </div>
 
-      {shouldShowMobileResultSheet ? (
+      {isQuotaState && shouldShowMobileResultSheet ? (
+        <>
+          {isMobileResultOpen ? (
+            <div className='quota-overlay-enter pointer-events-none fixed inset-0 z-30 bg-gradient-to-b from-transparent via-slate-50/80 to-emerald-950/55 lg:hidden' />
+          ) : null}
+          <div
+            className='fixed inset-x-0 bottom-0 z-40 overflow-hidden rounded-t-3xl shadow-[0_-18px_55px_rgba(15,23,42,0.28)] lg:hidden'
+            aria-live='polite'
+            role='dialog'
+            aria-label='Opciones para seguir usando FlowTranslate'
+          >
+            <div className='mx-auto max-w-3xl'>
+              {isMobileResultOpen ? (
+                <QuotaExhaustedState
+                  usage={quotaUsage}
+                  compact
+                  upgradeLabel={quotaUpgradeLabel}
+                  upgradeBusy={quotaUpgradeBusy}
+                  supportBusy={quotaSupportBusy}
+                  onUpgrade={onQuotaUpgrade}
+                  onSupport={onQuotaSupport}
+                />
+              ) : (
+                <button
+                  type='button'
+                  onClick={() => setIsMobileResultOpen(true)}
+                  className='quota-sheet-enter flex w-full items-center justify-between gap-3 bg-gradient-to-r from-emerald-950 to-emerald-900 px-5 py-4 text-left text-white'
+                  aria-expanded={isMobileResultOpen}
+                >
+                  <span className='flex min-w-0 items-center gap-3'>
+                    <QuotaPulseIcon
+                      isCooldown={quotaUsage?.recovery?.state === 'cooldown'}
+                      inverted
+                    />
+                    <span className='min-w-0'>
+                      <span className='block text-xs font-black uppercase tracking-normal text-emerald-300/75'>
+                        {readyText}
+                      </span>
+                      <span className='mt-0.5 block truncate text-sm font-black text-white'>
+                        Tocá para ver opciones
+                      </span>
+                    </span>
+                  </span>
+                  <ChevronUp size={18} className='shrink-0 text-emerald-200' />
+                </button>
+              )}
+            </div>
+          </div>
+        </>
+      ) : shouldShowMobileResultSheet ? (
         <div
           className='fixed inset-x-0 bottom-0 z-40 border-t border-slate-200/80 bg-white shadow-[0_-18px_55px_rgba(15,23,42,0.12)] lg:hidden'
           aria-live='polite'
@@ -1200,15 +1236,6 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
                         <div className='h-5 w-7/12 animate-pulse rounded-md bg-slate-100' />
                       </div>
                     </div>
-                  ) : status === 'quota' ? (
-                    <QuotaExhaustedState
-                      usage={quotaUsage}
-                      compact
-                      upgradeLabel={quotaUpgradeLabel}
-                      upgradeBusy={quotaUpgradeBusy}
-                      onUpgrade={onQuotaUpgrade}
-                      onSupport={onQuotaSupport}
-                    />
                   ) : (
                     <div className='space-y-3'>
                       <p className='max-w-full break-words text-xl font-semibold leading-[1.28] text-slate-950 [overflow-wrap:anywhere]'>
@@ -1229,9 +1256,8 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
                     </div>
                   )}
 
-                  {status !== 'quota' ? (
-                    <>
-                      <div className='flex min-w-0 items-center gap-2 border-t border-slate-100 pt-3'>
+                  <>
+                    <div className='flex min-w-0 items-center gap-2 border-t border-slate-100 pt-3'>
                         <button
                           type='button'
                           onClick={onCopyResult}
@@ -1330,8 +1356,7 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
                       ) : null}
 
                       {mobileBreakdownSummary}
-                    </>
-                  ) : null}
+                  </>
                 </div>
               </div>
             ) : hasResult ? (

@@ -234,7 +234,7 @@ describe('translator UI', () => {
       }),
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /aprender/i }));
+    fireEvent.click(screen.getByRole('button', { name: /historial/i }));
 
     expect(analyticsScreen).toHaveBeenCalledWith(
       'learning',

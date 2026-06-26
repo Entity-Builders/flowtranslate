@@ -23,7 +23,8 @@ export type TranslationTrigger =
   | 'mode_selected'
   | 'preset_selected'
   | 'context_applied'
-  | 'input_to_spanish';
+  | 'input_to_spanish'
+  | 'checkout_resume';
 
 export type BreakdownTrigger = 'panel_opened';
 

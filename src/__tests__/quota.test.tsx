@@ -145,14 +145,18 @@ describe('quota and account UI', () => {
       />,
     );
 
-    expect(screen.getByText('Uso amigo completo')).toBeInTheDocument();
-    expect(screen.getByText('Elegí cómo seguir')).toBeInTheDocument();
-    expect(screen.getByText('Cafecito + recarga')).toBeInTheDocument();
-    expect(screen.getByText('Pro + Learning Path')).toBeInTheDocument();
-    expect(screen.getByText(/Tu uso amigo vuelve el 30 de junio/i)).toBeInTheDocument();
+    expect(screen.getAllByText('Uso amigo completo').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Elegí cómo seguir').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Cafecito + recarga').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Ver Pro').length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText(/Tu uso amigo vuelve el 30 de junio/i).length,
+    ).toBeGreaterThan(0);
 
-    fireEvent.click(screen.getByRole('button', { name: /activar pro/i }));
-    fireEvent.click(screen.getByRole('button', { name: /apoyar con cafecito/i }));
+    fireEvent.click(screen.getAllByRole('button', { name: /activar pro/i })[0]);
+    fireEvent.click(
+      screen.getAllByRole('button', { name: /apoyar con cafecito/i })[0],
+    );
 
     expect(onQuotaUpgrade).toHaveBeenCalledTimes(1);
     expect(onQuotaSupport).toHaveBeenCalledTimes(1);
@@ -219,13 +223,17 @@ describe('quota and account UI', () => {
     );
 
     expect(screen.getAllByText('Pausa de uso amigo').length).toBeGreaterThan(0);
-    expect(screen.getByText(/Te damos más respuestas/i)).toBeInTheDocument();
-    expect(screen.getByText(/seguir sin esta pausa/i)).toBeInTheDocument();
-    expect(screen.getByText('Cafecito + recarga')).toBeInTheDocument();
-    expect(screen.getByText('Pro + Learning Path')).toBeInTheDocument();
+    expect(screen.getAllByText(/Te damos más respuestas/i).length).toBeGreaterThan(
+      0,
+    );
+    expect(screen.getAllByText(/Podés esperar/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Cafecito + recarga').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Ver Pro').length).toBeGreaterThan(0);
 
-    fireEvent.click(screen.getByRole('button', { name: /activar pro/i }));
-    fireEvent.click(screen.getByRole('button', { name: /apoyar con cafecito/i }));
+    fireEvent.click(screen.getAllByRole('button', { name: /activar pro/i })[0]);
+    fireEvent.click(
+      screen.getAllByRole('button', { name: /apoyar con cafecito/i })[0],
+    );
 
     expect(onQuotaUpgrade).toHaveBeenCalledTimes(1);
     expect(onQuotaSupport).toHaveBeenCalledTimes(1);

@@ -9,6 +9,7 @@ import type { useFlowtranslateAccount } from '../../hooks/useFlowtranslateAccoun
 import {
   FlowtranslateApiError,
   startFlowtranslateProCheckout,
+  startFlowtranslateTopupCheckout,
 } from '../../services/flowtranslate-api';
 import {
   analytics,
@@ -40,6 +41,9 @@ type UseFlowtranslateBillingParams = {
   translatorStatus: string;
   usage: UsageSnapshot | null;
   onReturnToResponder: () => void;
+  onRememberPendingTranslation: (
+    reason: 'pro_checkout' | 'cafecito_topup',
+  ) => boolean;
 };
 
 const CHECKOUT_RETURN_PAYMENT_EVENTS: Record<CheckoutReturnState, string> = {
@@ -49,10 +53,6 @@ const CHECKOUT_RETURN_PAYMENT_EVENTS: Record<CheckoutReturnState, string> = {
   cancelled: 'payment_cancelled',
   unknown: 'payment_pending',
 };
-
-const FLOWTRANSLATE_COFFEE_URL =
-  import.meta.env.VITE_FLOWTRANSLATE_COFFEE_URL?.trim() ||
-  'https://cafecito.app/entitybuilders';
 
 const captureFlowtranslateError = (
   error: unknown,
@@ -74,6 +74,7 @@ export const useFlowtranslateBilling = ({
   translatorStatus,
   usage,
   onReturnToResponder,
+  onRememberPendingTranslation,
 }: UseFlowtranslateBillingParams) => {
   const [checkoutReturn, setCheckoutReturn] = useState(() =>
     readCheckoutReturnFromUrl(window.location),
@@ -83,6 +84,7 @@ export const useFlowtranslateBilling = ({
   >([]);
   const [checkoutStartingSurface, setCheckoutStartingSurface] =
     useState<ProUpgradeSurface | null>(null);
+  const [topupCheckoutStarting, setTopupCheckoutStarting] = useState(false);
   const [checkoutError, setCheckoutError] = useState<{
     surface: ProUpgradeSurface;
     message: string;
@@ -263,6 +265,7 @@ export const useFlowtranslateBilling = ({
     if (!checkoutReturn) return;
 
     const trackingKey = [
+      checkoutReturn.flow,
       checkoutReturn.state,
       checkoutReturn.rawStatus || 'missing',
       checkoutReturn.hasExternalReference ? 'external' : 'no_external',
@@ -273,6 +276,7 @@ export const useFlowtranslateBilling = ({
     trackedCheckoutReturnRef.current = trackingKey;
 
     const properties = billingAnalyticsProperties({
+      checkout_flow: checkoutReturn.flow,
       checkout_return_state: checkoutReturn.state,
       provider_status: checkoutReturn.rawStatus || 'missing',
       has_external_reference: checkoutReturn.hasExternalReference,
@@ -327,6 +331,7 @@ export const useFlowtranslateBilling = ({
   const connectAccountForPro = useCallback(
     (surface: ProUpgradeSurface) => {
       setCheckoutError(null);
+      onRememberPendingTranslation('pro_checkout');
       analytics.track('upgrade_intent_clicked', {
         ...proUpgradeAnalytics(surface),
         requires_account: true,
@@ -351,6 +356,7 @@ export const useFlowtranslateBilling = ({
       account.accountKind,
       billingAnalyticsProperties,
       openAccount,
+      onRememberPendingTranslation,
       proUpgradeAnalytics,
     ],
   );
@@ -358,6 +364,7 @@ export const useFlowtranslateBilling = ({
   const startProCheckout = useCallback(
     async (surface: ProUpgradeSurface) => {
       setCheckoutError(null);
+      onRememberPendingTranslation('pro_checkout');
       analytics.track('upgrade_intent_clicked', {
         ...proUpgradeAnalytics(surface),
         requires_account: !account.accessToken || account.isGuest,
@@ -432,6 +439,7 @@ export const useFlowtranslateBilling = ({
       account.isGuest,
       billingAnalyticsProperties,
       openAccount,
+      onRememberPendingTranslation,
       proUpgradeAnalytics,
     ],
   );
@@ -441,14 +449,85 @@ export const useFlowtranslateBilling = ({
     error: checkoutError?.surface === surface ? checkoutError.message : '',
   });
 
-  const openQuotaSupport = useCallback(() => {
+  const openQuotaSupport = useCallback(async () => {
+    onRememberPendingTranslation('cafecito_topup');
     analytics.track('quota_support_clicked', {
       surface: 'usage_limit',
-      provider: 'cafecito',
+      provider: 'mercado_pago',
+      topup_tier: 'doble',
       account_kind: account.accountKind,
     });
-    window.open(FLOWTRANSLATE_COFFEE_URL, '_blank', 'noopener,noreferrer');
-  }, [account.accountKind]);
+
+    if (!account.accessToken) {
+      analytics.track(
+        'account_connect_prompt_shown',
+        billingAnalyticsProperties({
+          surface: 'usage_limit',
+          reason: 'topup_checkout_requires_session',
+        }),
+      );
+      openAccount();
+      return;
+    }
+
+    setTopupCheckoutStarting(true);
+    try {
+      const checkout = await startFlowtranslateTopupCheckout(
+        account.accessToken,
+        'doble',
+      );
+      const properties = billingAnalyticsProperties({
+        surface: 'usage_limit',
+        provider: checkout.provider,
+        topup_tier: checkout.tier.id,
+        topup_amount: checkout.tier.amount,
+        topup_currency: checkout.tier.currency,
+        topup_tokens: checkout.tier.allowanceTokens,
+      });
+      analytics.track('topup_checkout_started', properties);
+      analytics.track('checkout_pending', properties);
+      window.location.assign(checkout.checkoutUrl);
+    } catch (error) {
+      captureFlowtranslateError(error, {
+        screen: 'translate',
+        action: 'start_topup_checkout',
+        account_kind: account.accountKind,
+        billing_state: account.billingState.id,
+        http_status:
+          error instanceof FlowtranslateApiError ? error.status : null,
+      });
+      analytics.track(
+        'topup_checkout_failed',
+        billingAnalyticsProperties({
+          surface: 'usage_limit',
+          error_type:
+            error instanceof FlowtranslateApiError
+              ? 'flowtranslate_api_error'
+              : error instanceof Error
+                ? error.name || 'checkout_error'
+                : 'checkout_error',
+          http_status:
+            error instanceof FlowtranslateApiError ? error.status : null,
+        }),
+      );
+      setCheckoutError({
+        surface: 'usage_limit',
+        message:
+          error instanceof Error
+            ? error.message
+            : 'No pudimos iniciar Mercado Pago. Proba de nuevo.',
+      });
+    } finally {
+      setTopupCheckoutStarting(false);
+    }
+  }, [
+    account.accessToken,
+    account.accountKind,
+    account.billingState.id,
+    billingAnalyticsProperties,
+    openAccount,
+    onRememberPendingTranslation,
+  ]);
 
   const dismissCheckoutReturn = useCallback(() => {
     setCheckoutReturn(null);
@@ -471,14 +550,25 @@ export const useFlowtranslateBilling = ({
 
   const retryCheckoutFromReturn = useCallback(() => {
     const checkoutReturnState = checkoutReturn?.state ?? 'unknown';
+    const checkoutReturnFlow = checkoutReturn?.flow ?? 'pro';
+    const retryRequiresAccount =
+      checkoutReturnFlow === 'topup'
+        ? !account.accessToken
+        : !account.accessToken || account.isGuest;
 
     analytics.track(
       'checkout_return_retry_clicked',
       billingAnalyticsProperties({
+        checkout_flow: checkoutReturnFlow,
         checkout_return_state: checkoutReturnState,
-        requires_account: !account.accessToken || account.isGuest,
+        requires_account: retryRequiresAccount,
       }),
     );
+
+    if (checkoutReturnFlow === 'topup') {
+      void openQuotaSupport();
+      return;
+    }
 
     if (!account.accessToken || account.isGuest) {
       analytics.track('account_connect_prompt_shown', {
@@ -494,16 +584,20 @@ export const useFlowtranslateBilling = ({
     void startProCheckout('profile_preferences');
   }, [
     account.accessToken,
-    account.accountKind,
     account.isGuest,
     billingAnalyticsProperties,
+    checkoutReturn?.flow,
     checkoutReturn?.state,
     openAccount,
+    openQuotaSupport,
     startProCheckout,
   ]);
 
+  const isTopupCheckoutReturn = checkoutReturn?.flow === 'topup';
   const checkoutReturnRetryLabel =
-    !account.accessToken || account.isGuest
+    isTopupCheckoutReturn
+      ? 'Reintentar recarga'
+      : !account.accessToken || account.isGuest
       ? 'Conectar cuenta y ver Pro'
       : 'Reintentar Pro';
 
@@ -547,7 +641,9 @@ export const useFlowtranslateBilling = ({
 
   return {
     checkoutReturn,
-    checkoutReturnRetryBusy: checkoutStartingSurface === 'profile_preferences',
+    checkoutReturnRetryBusy:
+      checkoutStartingSurface === 'profile_preferences' ||
+      topupCheckoutStarting,
     checkoutReturnRetryLabel,
     connectAccountForPro,
     dismissCheckoutReturn,
@@ -555,6 +651,7 @@ export const useFlowtranslateBilling = ({
     openAccountFromCheckoutReturn,
     openQuotaSupport,
     quotaUpgradeBusy: checkoutStartingSurface === 'usage_limit',
+    quotaSupportBusy: topupCheckoutStarting,
     quotaUpgradeLabel,
     profileUpgradeActionLabel,
     retryCheckoutFromReturn,

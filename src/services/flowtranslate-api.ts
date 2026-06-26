@@ -19,6 +19,7 @@ import type {
 import {
   getFlowtranslateFunctionUrl,
   getFlowtranslateProCheckoutFunctionUrl,
+  getFlowtranslateTopupCheckoutFunctionUrl,
 } from '../lib/supabase';
 import { FLOWTRANSLATE_GUEST_DEVICE_HEADER } from '../constants';
 import { getOrCreateGuestDeviceId } from './guest-identity';
@@ -124,6 +125,23 @@ export type FlowtranslateProCheckoutResponse = {
   status: 'pending';
   currency: string;
   displayAmount: number;
+};
+
+export type FlowtranslateTopupTierId = 'mate' | 'doble' | 'generoso';
+
+export type FlowtranslateTopupCheckoutResponse = {
+  checkoutUrl: string;
+  purchaseId: string;
+  externalReference: string;
+  provider: 'mercado_pago';
+  status: 'pending';
+  tier: {
+    id: FlowtranslateTopupTierId;
+    title: string;
+    amount: number;
+    currency: string;
+    allowanceTokens: number;
+  };
 };
 
 type FlowtranslateRequest =
@@ -411,6 +429,49 @@ export const startFlowtranslateProCheckout = async (accessToken: string) => {
   if (!data || 'error' in data) {
     throw new FlowtranslateApiError(
       'Flowtranslate checkout returned an empty response.',
+      response.status,
+    );
+  }
+
+  return data;
+};
+
+export const startFlowtranslateTopupCheckout = async (
+  accessToken: string,
+  tierId: FlowtranslateTopupTierId = 'doble',
+) => {
+  const endpoint = getFlowtranslateTopupCheckoutFunctionUrl();
+  if (!endpoint) {
+    throw new FlowtranslateApiError(
+      'Flowtranslate top-up checkout is not configured.',
+      0,
+    );
+  }
+
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+      [FLOWTRANSLATE_GUEST_DEVICE_HEADER]: getOrCreateGuestDeviceId(),
+    },
+    body: JSON.stringify({ tierId }),
+  });
+
+  const data = (await response.json().catch(() => null)) as
+    | FlowtranslateTopupCheckoutResponse
+    | { error: string }
+    | null;
+
+  if (!response.ok) {
+    const message =
+      data && 'error' in data ? data.error : 'Flowtranslate top-up failed.';
+    throw new FlowtranslateApiError(message, response.status);
+  }
+
+  if (!data || 'error' in data) {
+    throw new FlowtranslateApiError(
+      'Flowtranslate top-up returned an empty response.',
       response.status,
     );
   }

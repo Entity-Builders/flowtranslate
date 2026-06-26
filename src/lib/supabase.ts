@@ -41,4 +41,10 @@ export const getFlowtranslateProCheckoutFunctionUrl = () => {
   return getSupabaseFunctionUrl('flowtranslate-pro-checkout', explicitUrl);
 };
 
+export const getFlowtranslateTopupCheckoutFunctionUrl = () => {
+  const explicitUrl =
+    import.meta.env.VITE_FLOWTRANSLATE_TOPUP_CHECKOUT_API_URL?.trim();
+  return getSupabaseFunctionUrl('flowtranslate-topup-checkout', explicitUrl);
+};
+
 export type { Session };

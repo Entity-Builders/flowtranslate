@@ -31,3 +31,97 @@
     font: inherit;
   }
 }
+
+@layer utilities {
+  .quota-sheet-enter {
+    animation: quota-sheet-enter 420ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+
+  .quota-overlay-enter {
+    animation: quota-overlay-enter 260ms ease-out both;
+  }
+
+  .quota-icon-float {
+    animation: quota-icon-float 3s ease-in-out infinite;
+  }
+
+  .quota-cta-glow {
+    isolation: isolate;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .quota-cta-glow::after {
+    animation: quota-cta-sheen 3.2s ease-in-out infinite;
+    background: linear-gradient(
+      105deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.26) 48%,
+      transparent 76%
+    );
+    content: '';
+    inset: 0;
+    pointer-events: none;
+    position: absolute;
+    transform: translateX(-125%);
+  }
+
+  @keyframes quota-sheet-enter {
+    0% {
+      opacity: 0;
+      transform: translateY(48px) scale(0.985);
+    }
+
+    70% {
+      opacity: 1;
+      transform: translateY(-3px) scale(1);
+    }
+
+    100% {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  @keyframes quota-overlay-enter {
+    from {
+      opacity: 0;
+    }
+
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes quota-icon-float {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+
+    50% {
+      transform: translateY(-4px);
+    }
+  }
+
+  @keyframes quota-cta-sheen {
+    0%,
+    42% {
+      transform: translateX(-125%);
+    }
+
+    72%,
+    100% {
+      transform: translateX(125%);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .quota-sheet-enter,
+    .quota-overlay-enter,
+    .quota-icon-float,
+    .quota-cta-glow::after {
+      animation: none;
+    }
+  }
+}

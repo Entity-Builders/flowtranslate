@@ -4,6 +4,7 @@ import {
   FlowtranslateApiError,
   generateTranslation,
   startFlowtranslateProCheckout,
+  startFlowtranslateTopupCheckout,
 } from './flowtranslate-api';
 
 const usage = {
@@ -104,9 +105,14 @@ describe('flowtranslate api guest identity', () => {
 
 describe('Flowtranslate API checkout helper', () => {
   beforeEach(() => {
+    localStorage.clear();
     vi.stubEnv(
       'VITE_FLOWTRANSLATE_PRO_CHECKOUT_API_URL',
       'http://localhost/functions/v1/flowtranslate-pro-checkout',
+    );
+    vi.stubEnv(
+      'VITE_FLOWTRANSLATE_TOPUP_CHECKOUT_API_URL',
+      'http://localhost/functions/v1/flowtranslate-topup-checkout',
     );
   });
 
@@ -176,5 +182,45 @@ describe('Flowtranslate API checkout helper', () => {
       status: 502,
       message: 'No pudimos iniciar Mercado Pago. Proba de nuevo.',
     } satisfies Partial<FlowtranslateApiError>);
+  });
+
+  it('starts top-up checkout with a stable guest device id', async () => {
+    localStorage.setItem(STORAGE_KEYS.guestDeviceId, 'ft-existing-device-123');
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          checkoutUrl: 'https://www.mercadopago.com.ar/checkout/v1/redirect',
+          purchaseId: 'purchase_123',
+          externalReference: 'entitybuilders:flowtranslate:topup:checkout_123',
+          provider: 'mercado_pago',
+          status: 'pending',
+          tier: {
+            id: 'doble',
+            title: 'FlowTranslate recarga generosa',
+            amount: 2500,
+            currency: 'ARS',
+            allowanceTokens: 20000,
+          },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await startFlowtranslateTopupCheckout('guest-token');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost/functions/v1/flowtranslate-topup-checkout',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer guest-token',
+          'Content-Type': 'application/json',
+          [FLOWTRANSLATE_GUEST_DEVICE_HEADER]: 'ft-existing-device-123',
+        },
+        body: JSON.stringify({ tierId: 'doble' }),
+      },
+    );
+    expect(result.tier.allowanceTokens).toBe(20000);
   });
 });

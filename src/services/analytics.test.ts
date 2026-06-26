@@ -88,6 +88,8 @@ describe('Flowtranslate analytics', () => {
         'upgrade_prompt_dismissed',
         'quota_recovery_shown',
         'quota_support_clicked',
+        'topup_checkout_started',
+        'topup_checkout_failed',
         'pricing_viewed',
         'experiment_exposed',
         'checkout_started',

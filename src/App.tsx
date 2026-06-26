@@ -169,6 +169,7 @@ function App() {
     translatorStatus: translator.status,
     usage,
     onReturnToResponder: returnToResponder,
+    onRememberPendingTranslation: translator.rememberPendingTranslationResume,
   });
 
   useEffect(() => {
@@ -342,6 +343,7 @@ function App() {
           voiceMessage={voice.voiceMessage}
           quotaUpgradeBusy={billing.quotaUpgradeBusy}
           quotaUpgradeLabel={billing.quotaUpgradeLabel}
+          quotaSupportBusy={billing.quotaSupportBusy}
           onConnectAccountForPro={billing.connectAccountForPro}
           onCopyInput={() =>
             void clipboard.copyExpression(

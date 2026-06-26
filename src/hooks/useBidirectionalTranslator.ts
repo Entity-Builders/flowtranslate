@@ -3,6 +3,7 @@ import {
   DEFAULT_TRANSLATION_PRESET_ID,
   createExpressionDirection,
   detectExpressionMode,
+  isTranslationPresetId,
   type ExpressionBreakdown,
   type ExpressionMode,
   type IntentDetectionResult,
@@ -13,6 +14,7 @@ import {
 } from '@eb-packages/flowtranslate-core';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  STORAGE_KEYS,
   TRANSLATION_IDLE_DELAY_MS,
   TRANSLATION_INPUT_MAX_CHARS,
 } from '../constants';
@@ -54,6 +56,84 @@ type UseBidirectionalTranslatorParams = {
 const currentTimeMs = () =>
   typeof performance === 'undefined' ? Date.now() : performance.now();
 
+const PENDING_TRANSLATION_RESUME_TTL_MS = 24 * 60 * 60 * 1000;
+
+const EXPRESSION_MODES = new Set<ExpressionMode>([
+  'translate_to_english',
+  'improve_english',
+  'translate_to_spanish',
+]);
+
+type PendingTranslationResumeReason = 'pro_checkout' | 'cafecito_topup';
+
+type PendingTranslationResume = {
+  text: string;
+  mode: ExpressionMode;
+  presetId: TranslationPresetId;
+  contextText: string;
+  createdAt: number;
+  reason: PendingTranslationResumeReason;
+};
+
+const isExpressionMode = (value: unknown): value is ExpressionMode =>
+  typeof value === 'string' && EXPRESSION_MODES.has(value as ExpressionMode);
+
+const readPendingTranslationResume = (): PendingTranslationResume | null => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.pendingTranslationResume);
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw) as Partial<PendingTranslationResume>;
+    const createdAt =
+      typeof parsed.createdAt === 'number' ? parsed.createdAt : 0;
+    if (
+      !createdAt ||
+      Date.now() - createdAt > PENDING_TRANSLATION_RESUME_TTL_MS
+    ) {
+      localStorage.removeItem(STORAGE_KEYS.pendingTranslationResume);
+      return null;
+    }
+
+    const text = typeof parsed.text === 'string' ? parsed.text.trim() : '';
+    if (!text || !isExpressionMode(parsed.mode)) return null;
+
+    return {
+      text,
+      mode: parsed.mode,
+      presetId: isTranslationPresetId(parsed.presetId)
+        ? parsed.presetId
+        : DEFAULT_TRANSLATION_PRESET_ID,
+      contextText:
+        typeof parsed.contextText === 'string' ? parsed.contextText : '',
+      createdAt,
+      reason:
+        parsed.reason === 'cafecito_topup' ? 'cafecito_topup' : 'pro_checkout',
+    };
+  } catch {
+    return null;
+  }
+};
+
+const writePendingTranslationResume = (resume: PendingTranslationResume) => {
+  try {
+    localStorage.setItem(
+      STORAGE_KEYS.pendingTranslationResume,
+      JSON.stringify(resume),
+    );
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const clearPendingTranslationResume = () => {
+  try {
+    localStorage.removeItem(STORAGE_KEYS.pendingTranslationResume);
+  } catch {
+    // A blocked storage cleanup should not affect the completed translation.
+  }
+};
+
 export const useBidirectionalTranslator = ({
   accessToken,
   authPending = false,
@@ -62,39 +142,49 @@ export const useBidirectionalTranslator = ({
   onSavedTranslation,
   onRefreshSavedTranslations,
 }: UseBidirectionalTranslatorParams) => {
-  const [inputText, setInputText] = useState('');
+  const initialResumeRef = useRef<PendingTranslationResume | null>(
+    readPendingTranslationResume(),
+  );
+  const initialResume = initialResumeRef.current;
+  const initialText = initialResume?.text || '';
+  const initialMode = initialResume?.mode || DEFAULT_EXPRESSION_MODE;
+  const initialPresetId =
+    initialResume?.presetId || DEFAULT_TRANSLATION_PRESET_ID;
+  const initialContextText = initialResume?.contextText || '';
+
+  const [inputText, setInputText] = useState(initialText);
   const [resultText, setResultText] = useState('');
-  const [mode, setMode] = useState<ExpressionMode>(DEFAULT_EXPRESSION_MODE);
+  const [mode, setMode] = useState<ExpressionMode>(initialMode);
   const [modeDetection, setModeDetection] = useState<IntentDetectionResult>(
-    fallbackDetection(DEFAULT_EXPRESSION_MODE),
+    fallbackDetection(initialMode),
   );
   const [breakdown, setBreakdown] = useState<ExpressionBreakdown | null>(null);
   const [breakdownStatus, setBreakdownStatus] =
     useState<BreakdownStatus>('idle');
   const [grammarInsight, setGrammarInsight] = useState<GrammarInsight | null>(null);
   const [translationRecordId, setTranslationRecordId] = useState('');
-  const [presetId, setPresetId] = useState<TranslationPresetId>(
-    DEFAULT_TRANSLATION_PRESET_ID,
-  );
+  const [presetId, setPresetId] = useState<TranslationPresetId>(initialPresetId);
   const [status, setStatus] = useState<TranslatorStatus>('idle');
   const [message, setMessage] = useState('');
-  const [workContextText, setWorkContextText] = useState('');
-  const [hasPendingChanges, setHasPendingChanges] = useState(false);
+  const [workContextText, setWorkContextText] = useState(initialContextText);
+  const [hasPendingChanges, setHasPendingChanges] = useState(
+    Boolean(initialText),
+  );
+  const [resumeWakeUpCount, setResumeWakeUpCount] = useState(0);
   const sequenceRef = useRef(0);
   const lastCompletedKeyRef = useRef('');
   const inFlightKeyRef = useRef('');
-  const inputTextRef = useRef('');
-  const workContextTextRef = useRef('');
+  const inputTextRef = useRef(initialText);
+  const workContextTextRef = useRef(initialContextText);
   const previousAccessTokenRef = useRef(accessToken);
   const lastBlockedAnalyticsKeyRef = useRef('');
   const translationRecordIdRef = useRef('');
   const translationRecordCreatedAtRef = useRef('');
-  const modeRef = useRef<ExpressionMode>(DEFAULT_EXPRESSION_MODE);
-  const lastModeRef = useRef<ExpressionMode>(DEFAULT_EXPRESSION_MODE);
-  const presetIdRef = useRef<TranslationPresetId>(
-    DEFAULT_TRANSLATION_PRESET_ID,
-  );
-  const trackedComposerStartedRef = useRef(false);
+  const modeRef = useRef<ExpressionMode>(initialMode);
+  const lastModeRef = useRef<ExpressionMode>(initialMode);
+  const presetIdRef = useRef<TranslationPresetId>(initialPresetId);
+  const trackedComposerStartedRef = useRef(Boolean(initialText));
+  const resumeAttemptedKeyRef = useRef('');
   const timerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
 
   const clearScheduledTranslation = useCallback(() => {
@@ -116,6 +206,40 @@ export const useBidirectionalTranslator = ({
     translationRecordCreatedAtRef.current = createdAt;
     setTranslationRecordId(nextId);
   }, []);
+
+  const rememberPendingTranslationResume = useCallback(
+    (reason: PendingTranslationResumeReason = 'pro_checkout') => {
+      const text = inputTextRef.current.trim();
+      if (!text) return false;
+
+      const resume: PendingTranslationResume = {
+        text,
+        mode: modeRef.current,
+        presetId: presetIdRef.current,
+        contextText: workContextTextRef.current,
+        createdAt: Date.now(),
+        reason,
+      };
+      const saved = writePendingTranslationResume(resume);
+      if (saved) {
+        initialResumeRef.current = resume;
+        resumeAttemptedKeyRef.current = '';
+      }
+      analytics.track('translation_resume_saved', {
+        ...translationAnalyticsProperties(
+          resume.mode,
+          resume.text,
+          resume.presetId,
+          reason === 'cafecito_topup' ? 'manual_generate' : 'checkout_resume',
+          resume.contextText,
+        ),
+        reason,
+        saved,
+      });
+      return saved;
+    },
+    [],
+  );
 
   const getLatestTranslationSnapshot = useCallback(
     () => ({
@@ -670,6 +794,19 @@ export const useBidirectionalTranslator = ({
             : 'Reusamos una respuesta guardada.',
         );
         setHasPendingChanges(false);
+        const pendingResume = initialResumeRef.current;
+        if (
+          pendingResume &&
+          createTranslationRequestKey(
+            pendingResume.mode,
+            pendingResume.text,
+            pendingResume.presetId,
+            pendingResume.contextText,
+          ) === requestKey
+        ) {
+          clearPendingTranslationResume();
+          initialResumeRef.current = null;
+        }
         onUsage(result.usage);
         if (isSavedRecord) {
           onSavedTranslation({
@@ -738,6 +875,87 @@ export const useBidirectionalTranslator = ({
       updateTranslationRecordId,
     ],
   );
+
+  useEffect(() => {
+    const pendingResume = initialResumeRef.current;
+    if (!pendingResume || !online || authPending || !accessToken) return;
+
+    const currentText = inputTextRef.current.trim();
+    if (
+      currentText &&
+      normalizeTranslatorText(currentText) !==
+        normalizeTranslatorText(pendingResume.text)
+    ) {
+      return;
+    }
+
+    const resumeKey = [
+      pendingResume.createdAt,
+      pendingResume.mode,
+      pendingResume.presetId,
+      normalizeTranslatorText(pendingResume.text),
+      normalizeTranslatorText(pendingResume.contextText),
+      accessToken,
+      resumeWakeUpCount,
+    ].join(':');
+    if (resumeAttemptedKeyRef.current === resumeKey) return;
+
+    resumeAttemptedKeyRef.current = resumeKey;
+    inputTextRef.current = pendingResume.text;
+    workContextTextRef.current = pendingResume.contextText;
+    presetIdRef.current = pendingResume.presetId;
+    updateMode(pendingResume.mode);
+    setInputText(pendingResume.text);
+    setWorkContextText(pendingResume.contextText);
+    setPresetId(pendingResume.presetId);
+    setModeDetection(fallbackDetection(pendingResume.mode));
+    setHasPendingChanges(true);
+    setStatus('typing');
+    setMessage('Retomando la respuesta pendiente...');
+    analytics.track('translation_resume_started', {
+      ...translationAnalyticsProperties(
+        pendingResume.mode,
+        pendingResume.text,
+        pendingResume.presetId,
+        'checkout_resume',
+        pendingResume.contextText,
+      ),
+      reason: pendingResume.reason,
+    });
+    void runTranslation(
+      pendingResume.mode,
+      pendingResume.text,
+      pendingResume.presetId,
+      'checkout_resume',
+      pendingResume.contextText,
+    );
+  }, [
+    accessToken,
+    authPending,
+    online,
+    resumeWakeUpCount,
+    runTranslation,
+    updateMode,
+  ]);
+
+  useEffect(() => {
+    const wakePendingResume = () => {
+      if (!initialResumeRef.current) return;
+      resumeAttemptedKeyRef.current = '';
+      setResumeWakeUpCount((current) => current + 1);
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') wakePendingResume();
+    };
+
+    window.addEventListener('focus', wakePendingResume);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      window.removeEventListener('focus', wakePendingResume);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
 
   const scheduleTranslation = useCallback(
     (
@@ -931,7 +1149,8 @@ export const useBidirectionalTranslator = ({
       hadAccessToken ||
       !accessToken ||
       !hasPendingChanges ||
-      !inputTextRef.current.trim()
+      !inputTextRef.current.trim() ||
+      initialResumeRef.current
     ) {
       return;
     }
@@ -1280,6 +1499,7 @@ export const useBidirectionalTranslator = ({
     translate,
     translateInputToSpanish,
     applyWorkContext,
+    rememberPendingTranslationResume,
     requestBreakdown,
     selectPreset,
     selectMode,

@@ -6,6 +6,7 @@ import {
   waitFor,
 } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { STORAGE_KEYS } from '../constants';
 
 const analyticsScreen = vi.hoisted(() => vi.fn());
 const analyticsTrack = vi.hoisted(() => vi.fn());
@@ -21,6 +22,7 @@ const verifyOtp = vi.hoisted(() => vi.fn());
 const signOut = vi.hoisted(() => vi.fn());
 const generateTranslation = vi.hoisted(() => vi.fn());
 const startFlowtranslateProCheckout = vi.hoisted(() => vi.fn());
+const startFlowtranslateTopupCheckout = vi.hoisted(() => vi.fn());
 const syncGuestAccount = vi.hoisted(() => vi.fn());
 const profileMaybeSingle = vi.hoisted(() => vi.fn());
 const profileUpdate = vi.hoisted(() => vi.fn());
@@ -60,6 +62,7 @@ vi.mock('../services/flowtranslate-api', () => ({
   },
   generateTranslation,
   startFlowtranslateProCheckout,
+  startFlowtranslateTopupCheckout,
   syncGuestAccount,
   generateLearningInsight: vi.fn(),
   generateStudyArticle: vi.fn(),
@@ -102,6 +105,7 @@ vi.mock('../lib/supabase', () => ({
 }));
 
 import App from '../App';
+import { FlowtranslateApiError } from '../services/flowtranslate-api';
 
 const guestSession = {
   access_token: 'guest-token',
@@ -159,6 +163,18 @@ describe('account access UI', () => {
     entitlementMaybeSingle.mockResolvedValue({ data: null, error: null });
     startFlowtranslateProCheckout.mockResolvedValue({
       checkoutUrl: '#mercado-pago-checkout',
+    });
+    startFlowtranslateTopupCheckout.mockResolvedValue({
+      checkoutUrl: '#mercado-pago-topup',
+      provider: 'mercado_pago',
+      status: 'pending',
+      tier: {
+        id: 'doble',
+        title: 'FlowTranslate recarga generosa',
+        amount: 2500,
+        currency: 'ARS',
+        allowanceTokens: 20000,
+      },
     });
     syncGuestAccount.mockResolvedValue({
       kind: 'guest_account_sync',
@@ -960,6 +976,106 @@ describe('account access UI', () => {
     expect(serializedCalls).not.toContain('card_token');
   });
 
+  it('resumes a pending translation after returning from checkout', async () => {
+    window.history.pushState(
+      {},
+      '',
+      '/pro/checkout/return?status=approved&external_reference=entitybuilders:flowtranslate:pro:checkout_secret',
+    );
+    getSession.mockResolvedValue({ data: { session: permanentSession } });
+    localStorage.setItem(
+      STORAGE_KEYS.pendingTranslationResume,
+      JSON.stringify({
+        text: 'Necesito pedirle al cliente el update.',
+        mode: 'translate_to_english',
+        presetId: 'professional',
+        contextText: 'Es un cliente de soporte.',
+        createdAt: Date.now(),
+        reason: 'pro_checkout',
+      }),
+    );
+
+    render(<App />);
+
+    await waitFor(() =>
+      expect(generateTranslation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          text: 'Necesito pedirle al cliente el update.',
+          mode: 'translate_to_english',
+          presetId: 'professional',
+          context: 'Es un cliente de soporte.',
+        }),
+        'permanent-token',
+      ),
+    );
+    expect(
+      (await screen.findAllByText('Hi, can you send me the update?')).length,
+    ).toBeGreaterThan(0);
+    await waitFor(() =>
+      expect(
+        localStorage.getItem(STORAGE_KEYS.pendingTranslationResume),
+      ).toBeNull(),
+    );
+    expect(analyticsTrack).toHaveBeenCalledWith(
+      'translation_resume_started',
+      expect.objectContaining({
+        trigger: 'checkout_resume',
+        reason: 'pro_checkout',
+      }),
+    );
+  });
+
+  it('keeps a pending checkout translation when quota is still blocked and retries on focus', async () => {
+    getSession.mockResolvedValue({ data: { session: permanentSession } });
+    localStorage.setItem(
+      STORAGE_KEYS.pendingTranslationResume,
+      JSON.stringify({
+        text: 'Necesito pedirle al cliente el update.',
+        mode: 'translate_to_english',
+        presetId: 'professional',
+        contextText: '',
+        createdAt: Date.now(),
+        reason: 'cafecito_topup',
+      }),
+    );
+    generateTranslation.mockRejectedValueOnce(
+      new FlowtranslateApiError('Llegaste al limite mensual.', 402, {
+        estimatedTokens: 0,
+        monthlyQuota: 100,
+        usedThisMonth: 100,
+        remainingThisMonth: 0,
+        charged: false,
+        resetAt: '2026-07-01T00:00:00.000Z',
+        recovery: {
+          state: 'monthly_cap',
+          monthlyCapReachedAt: '2026-06-21T12:00:00.000Z',
+          topUpAvailable: true,
+        },
+      }),
+    );
+
+    render(<App />);
+
+    await waitFor(() => expect(generateTranslation).toHaveBeenCalledTimes(1));
+    expect(
+      localStorage.getItem(STORAGE_KEYS.pendingTranslationResume),
+    ).toContain('Necesito pedirle al cliente');
+
+    act(() => {
+      window.dispatchEvent(new Event('focus'));
+    });
+
+    await waitFor(() => expect(generateTranslation).toHaveBeenCalledTimes(2));
+    expect(
+      (await screen.findAllByText('Hi, can you send me the update?')).length,
+    ).toBeGreaterThan(0);
+    await waitFor(() =>
+      expect(
+        localStorage.getItem(STORAGE_KEYS.pendingTranslationResume),
+      ).toBeNull(),
+    );
+  });
+
   it('shows pending, failed, and cancelled checkout return copy in Spanish', async () => {
     const cases = [
       [
@@ -1045,6 +1161,40 @@ describe('account access UI', () => {
     expect(analyticsTrack).toHaveBeenCalledWith(
       'checkout_return_retry_clicked',
       expect.objectContaining({
+        checkout_return_state: 'failed',
+        requires_account: false,
+      }),
+    );
+  });
+
+  it('lets guest accounts retry a failed top-up checkout return', async () => {
+    window.history.pushState({}, '', '/topup/checkout/return?status=rejected');
+    getSession.mockResolvedValue({ data: { session: guestSession } });
+
+    render(<App />);
+
+    expect(
+      await screen.findByText(/no sumamos tokens hasta que mercado pago/i),
+    ).toBeInTheDocument();
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: /reintentar recarga/i }),
+    );
+
+    await waitFor(() =>
+      expect(startFlowtranslateTopupCheckout).toHaveBeenCalledWith(
+        'guest-token',
+        'doble',
+      ),
+    );
+    expect(startFlowtranslateProCheckout).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(window.location.hash).toBe('#mercado-pago-topup'),
+    );
+    expect(analyticsTrack).toHaveBeenCalledWith(
+      'checkout_return_retry_clicked',
+      expect.objectContaining({
+        checkout_flow: 'topup',
         checkout_return_state: 'failed',
         requires_account: false,
       }),

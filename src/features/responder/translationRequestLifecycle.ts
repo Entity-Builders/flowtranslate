@@ -10,10 +10,7 @@ import {
   generateTranslation,
   type TranslateResponse,
 } from '../../services/flowtranslate-api';
-import {
-  isEnrichedBreakdown,
-  type TranslatorStatus,
-} from './translatorState';
+import { type TranslatorStatus } from './translatorState';
 
 type LatestTranslationSnapshot = {
   latestSequence: number;
@@ -40,7 +37,6 @@ type TranslationRequestSuccess = {
   responseMode: ExpressionMode;
   responseDirection: ReturnType<typeof createExpressionDirection>;
   savedBreakdown: ExpressionBreakdown | null;
-  displayBreakdown: ExpressionBreakdown | null;
   isSavedRecord: boolean;
   nextRecordId: string;
   latencyMs: number;
@@ -136,9 +132,6 @@ export const runTranslationRequestLifecycle = async ({
 
     const savedBreakdown =
       result.breakdown || result.translationRecord.breakdown || null;
-    const displayBreakdown = isEnrichedBreakdown(savedBreakdown)
-      ? savedBreakdown
-      : null;
     const responseMode = result.mode || result.translationRecord.mode || mode;
     const responseDirection = createExpressionDirection(responseMode);
     const isSavedRecord =
@@ -152,7 +145,6 @@ export const runTranslationRequestLifecycle = async ({
       responseMode,
       responseDirection,
       savedBreakdown,
-      displayBreakdown,
       isSavedRecord,
       nextRecordId,
       latencyMs: elapsedMs(startedAt),

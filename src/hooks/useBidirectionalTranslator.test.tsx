@@ -7,9 +7,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TRANSLATION_IDLE_DELAY_MS } from '../constants';
 import {
   FlowtranslateApiError,
-  enrichBreakdown,
+  generateLearningCourse,
   generateTranslation,
-  type BreakdownEnrichmentResponse,
+  type LearningCourseResponse,
   type TranslateResponse,
 } from '../services/flowtranslate-api';
 import { useBidirectionalTranslator } from './useBidirectionalTranslator';
@@ -28,7 +28,7 @@ vi.mock('../services/analytics', () => ({
 
 vi.mock('../services/flowtranslate-api', () => ({
   generateTranslation: vi.fn(),
-  enrichBreakdown: vi.fn(),
+  generateLearningCourse: vi.fn(),
   FlowtranslateApiError: class FlowtranslateApiError extends Error {
     status: number;
     usage: typeof usage | undefined;
@@ -49,48 +49,6 @@ const usage = {
   remainingThisMonth: 96,
   charged: true,
   resetAt: '2026-07-01T00:00:00.000Z',
-};
-
-const breakdown: ExpressionBreakdown = {
-  changed: true,
-  confidence: 'high',
-  feedback: ['Suena natural en este contexto.'],
-  tense: 'Simple present',
-  tenses: [
-    {
-      label: 'Simple present',
-      text: 'need',
-      note: 'Describe una necesidad actual.',
-    },
-  ],
-  structure: [
-    {
-      text: 'I',
-      role: 'subject',
-      note: 'Subject',
-    },
-  ],
-  commonMistake: 'Do not omit the subject in English.',
-};
-
-const partialRichBreakdown: ExpressionBreakdown = {
-  changed: true,
-  confidence: 'high',
-  feedback: ['Suena natural en este contexto.'],
-  tenses: [
-    {
-      label: 'Simple present',
-      text: 'need',
-      note: 'Describe una necesidad actual.',
-    },
-  ],
-  structure: [
-    {
-      text: 'I need help',
-      role: 'other',
-      note: 'Frase completa con sujeto y verbo.',
-    },
-  ],
 };
 
 const minimalBreakdown: ExpressionBreakdown = {
@@ -145,32 +103,20 @@ const responseFor = ({
   usage,
 });
 
-const enrichmentFor = ({
-  id = 'record-1',
-  mode,
-  sourceLanguage,
-  targetLanguage,
-  createdAt = '2026-06-01T00:00:00.000Z',
-  nextBreakdown = breakdown,
+const learningCourseResponseFor = ({
+  translationRecordId = 'record-1',
+  markdown = '# Tabla comparativa\n\nDetailed lesson content.',
+  cached = false,
 }: {
-  id?: string;
-  mode: ExpressionMode;
-  sourceLanguage: 'es' | 'en';
-  targetLanguage: 'es' | 'en';
-  createdAt?: string;
-  nextBreakdown?: ExpressionBreakdown;
-}): BreakdownEnrichmentResponse => ({
-  kind: 'breakdown_enrichment',
-  breakdown: nextBreakdown,
-  translationRecord: {
-    id,
-    sourceLanguage,
-    targetLanguage,
-    mode,
-    breakdown: nextBreakdown,
-    createdAt,
-  },
-  cached: false,
+  translationRecordId?: string;
+  markdown?: string;
+  cached?: boolean;
+} = {}): LearningCourseResponse => ({
+  kind: 'learning_course',
+  translationRecordId,
+  markdown,
+  cached,
+  generatedAt: '2026-06-01T00:00:05.000Z',
   usage,
 });
 
@@ -179,20 +125,33 @@ describe('useBidirectionalTranslator', () => {
     vi.useFakeTimers();
     vi.clearAllMocks();
     vi.clearAllTimers();
-    vi.mocked(enrichBreakdown).mockResolvedValue(
-      enrichmentFor({
-        mode: 'translate_to_english',
-        sourceLanguage: 'es',
-        targetLanguage: 'en',
-      }),
-    );
   });
 
   afterEach(() => {
     vi.useRealTimers();
   });
 
-  it('auto-translates Spanish into English after the idle delay', async () => {
+  it('does not translate automatically while the user is typing', async () => {
+    const { result } = renderHook(() =>
+      useBidirectionalTranslator({
+        accessToken: 'token',
+        online: true,
+        onUsage: vi.fn(),
+        onSavedTranslation: vi.fn(),
+      }),
+    );
+
+    act(() => result.current.editInput('hola como estas'));
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(TRANSLATION_IDLE_DELAY_MS * 10);
+    });
+
+    expect(generateTranslation).not.toHaveBeenCalled();
+    expect(result.current.status).toBe('typing');
+  });
+
+  it('translates Spanish into English once the user confirms', async () => {
     vi.mocked(generateTranslation).mockResolvedValueOnce(
       responseFor({
         text: 'hello, how are you?',
@@ -220,14 +179,14 @@ describe('useBidirectionalTranslator', () => {
     expect(result.current.canTranslate).toBe(true);
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(TRANSLATION_IDLE_DELAY_MS);
+      await result.current.translate();
     });
 
     expect(result.current.resultText).toBe('hello, how are you?');
-    expect(result.current.breakdown).toBeNull();
-    expect(result.current.breakdownStatus).toBe('idle');
+    expect(result.current.learningCourseMarkdown).toBe('');
+    expect(result.current.learningCourseStatus).toBe('idle');
     expect(result.current.translationRecordId).toBe('record-1');
-    expect(enrichBreakdown).not.toHaveBeenCalled();
+    expect(generateLearningCourse).not.toHaveBeenCalled();
     expect(generateTranslation).toHaveBeenCalledWith(
       expect.objectContaining({
         mode: 'translate_to_english',
@@ -248,7 +207,7 @@ describe('useBidirectionalTranslator', () => {
       expect.objectContaining({
         mode: 'translate_to_english',
         preset_id: 'natural',
-        trigger: 'auto_idle',
+        trigger: 'manual_generate',
         source_language: 'es',
         target_language: 'en',
         input_chars: 15,
@@ -259,7 +218,7 @@ describe('useBidirectionalTranslator', () => {
       expect.objectContaining({
         mode: 'translate_to_english',
         preset_id: 'natural',
-        trigger: 'auto_idle',
+        trigger: 'manual_generate',
         source_language: 'es',
         target_language: 'en',
         input_chars: 15,
@@ -338,7 +297,7 @@ describe('useBidirectionalTranslator', () => {
     act(() => result.current.editInput('hola como estas'));
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(TRANSLATION_IDLE_DELAY_MS);
+      await result.current.translate();
     });
 
     expect(result.current.resultText).toBe('hello, how are you?');
@@ -354,10 +313,7 @@ describe('useBidirectionalTranslator', () => {
     expect(onSavedTranslation).toHaveBeenCalledWith(savedRecord);
   });
 
-  it('requests the breakdown only after the user opens Desglose', async () => {
-    const deferredEnrichment =
-      createDeferred<BreakdownEnrichmentResponse>();
-
+  it('generates a learning course on demand and caches it for the same record', async () => {
     vi.mocked(generateTranslation).mockResolvedValueOnce(
       responseFor({
         id: 'record-fast',
@@ -365,123 +321,65 @@ describe('useBidirectionalTranslator', () => {
         mode: 'translate_to_english',
         sourceLanguage: 'es',
         targetLanguage: 'en',
-        nextBreakdown: minimalBreakdown,
       }),
     );
-    vi.mocked(enrichBreakdown).mockReturnValueOnce(deferredEnrichment.promise);
+    const deferredCourse = createDeferred<LearningCourseResponse>();
+    vi.mocked(generateLearningCourse).mockReturnValueOnce(
+      deferredCourse.promise,
+    );
 
     const onUsage = vi.fn();
-    const onSavedTranslation = vi.fn();
     const { result } = renderHook(() =>
       useBidirectionalTranslator({
         accessToken: 'token',
         online: true,
         onUsage,
-        onSavedTranslation,
+        onSavedTranslation: vi.fn(),
       }),
     );
 
     act(() => result.current.editInput('Creo que tambien, quedo detenida.'));
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(TRANSLATION_IDLE_DELAY_MS);
+      await result.current.translate();
     });
 
-    expect(result.current.resultText).toBe('I think she got arrested too.');
-    expect(result.current.breakdown).toBeNull();
-    expect(result.current.breakdownStatus).toBe('idle');
-    expect(enrichBreakdown).not.toHaveBeenCalled();
+    expect(result.current.learningCourseMarkdown).toBe('');
+    expect(result.current.learningCourseStatus).toBe('idle');
+    expect(generateLearningCourse).not.toHaveBeenCalled();
 
-    act(() => result.current.requestBreakdown());
+    act(() => {
+      void result.current.requestLearningCourse();
+    });
 
-    expect(result.current.breakdownStatus).toBe('enriching');
-    expect(enrichBreakdown).toHaveBeenCalledWith(
+    expect(result.current.learningCourseStatus).toBe('generating');
+    expect(generateLearningCourse).toHaveBeenCalledWith(
       { translationRecordId: 'record-fast' },
       'token',
     );
 
     await act(async () => {
-      deferredEnrichment.resolve(
-        enrichmentFor({
-          id: 'record-fast',
-          mode: 'translate_to_english',
-          sourceLanguage: 'es',
-          targetLanguage: 'en',
-          nextBreakdown: breakdown,
-        }),
+      deferredCourse.resolve(
+        learningCourseResponseFor({ translationRecordId: 'record-fast' }),
       );
       await Promise.resolve();
     });
 
-    expect(result.current.breakdown).toBe(breakdown);
-    expect(result.current.breakdownStatus).toBe('ready');
-    expect(onSavedTranslation).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        id: 'record-fast',
-        breakdown,
-      }),
+    expect(result.current.learningCourseStatus).toBe('ready');
+    expect(result.current.learningCourseMarkdown).toContain(
+      'Tabla comparativa',
     );
-    expect(analyticsTrack).toHaveBeenCalledWith(
-      'breakdown_enrichment_requested',
-      expect.objectContaining({
-        mode: 'translate_to_english',
-        trigger: 'panel_opened',
-      }),
-    );
-    expect(analyticsTrack).toHaveBeenCalledWith(
-      'breakdown_enrichment_charged',
-      expect.objectContaining({
-        mode: 'translate_to_english',
-        trigger: 'panel_opened',
-      }),
-    );
-  });
+    expect(onUsage).toHaveBeenCalledWith(usage);
 
-  it('uses cached enriched breakdowns without calling the API again', async () => {
-    vi.mocked(generateTranslation).mockResolvedValueOnce(
-      responseFor({
-        id: 'record-cached',
-        text: 'I need help with this.',
-        mode: 'translate_to_english',
-        sourceLanguage: 'es',
-        targetLanguage: 'en',
-        nextBreakdown: partialRichBreakdown,
-      }),
-    );
-
-    const { result } = renderHook(() =>
-      useBidirectionalTranslator({
-        accessToken: 'token',
-        online: true,
-        onUsage: vi.fn(),
-        onSavedTranslation: vi.fn(),
-      }),
-    );
-
-    act(() => result.current.editInput('necesito ayuda con esto'));
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(TRANSLATION_IDLE_DELAY_MS);
+    act(() => {
+      void result.current.requestLearningCourse();
     });
 
-    expect(result.current.breakdown).toBe(partialRichBreakdown);
-    expect(result.current.breakdownStatus).toBe('ready');
-
-    act(() => result.current.requestBreakdown());
-
-    expect(enrichBreakdown).not.toHaveBeenCalled();
-    expect(result.current.breakdownStatus).toBe('ready');
-    expect(analyticsTrack).toHaveBeenCalledWith(
-      'breakdown_enrichment_cached',
-      expect.objectContaining({
-        mode: 'translate_to_english',
-        trigger: 'panel_opened',
-        cache_source: 'client_state',
-      }),
-    );
+    expect(generateLearningCourse).toHaveBeenCalledTimes(1);
   });
 
-  it('ignores stale breakdown enrichment responses', async () => {
-    const firstEnrichment = createDeferred<BreakdownEnrichmentResponse>();
+  it('ignores a stale learning course response after a newer translation replaces the record', async () => {
+    const deferredCourse = createDeferred<LearningCourseResponse>();
     vi.mocked(generateTranslation)
       .mockResolvedValueOnce(
         responseFor({
@@ -502,7 +400,9 @@ describe('useBidirectionalTranslator', () => {
           createdAt: '2026-06-01T00:00:01.000Z',
         }),
       );
-    vi.mocked(enrichBreakdown).mockReturnValueOnce(firstEnrichment.promise);
+    vi.mocked(generateLearningCourse).mockReturnValueOnce(
+      deferredCourse.promise,
+    );
 
     const { result } = renderHook(() =>
       useBidirectionalTranslator({
@@ -515,9 +415,11 @@ describe('useBidirectionalTranslator', () => {
 
     act(() => result.current.editInput('necesito ayuda con esto'));
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(TRANSLATION_IDLE_DELAY_MS);
+      await result.current.translate();
     });
-    act(() => result.current.requestBreakdown());
+    act(() => {
+      void result.current.requestLearningCourse();
+    });
 
     let secondSubmit: Promise<void> = Promise.resolve();
     act(() => {
@@ -530,25 +432,19 @@ describe('useBidirectionalTranslator', () => {
     });
 
     await act(async () => {
-      firstEnrichment.resolve(
-        enrichmentFor({
-          id: 'record-old',
-          mode: 'translate_to_english',
-          sourceLanguage: 'es',
-          targetLanguage: 'en',
-          nextBreakdown: breakdown,
-        }),
+      deferredCourse.resolve(
+        learningCourseResponseFor({ translationRecordId: 'record-old' }),
       );
       await Promise.resolve();
     });
 
     expect(result.current.translationRecordId).toBe('record-new');
     expect(result.current.resultText).toBe('Necesito ayuda.');
-    expect(result.current.breakdown).toBeNull();
-    expect(result.current.breakdownStatus).toBe('idle');
+    expect(result.current.learningCourseMarkdown).toBe('');
+    expect(result.current.learningCourseStatus).toBe('idle');
   });
 
-  it('marks on-demand breakdown failures without losing the translation', async () => {
+  it('marks learning course generation failures without losing the translation', async () => {
     const exhaustedUsage = {
       ...usage,
       usedThisMonth: 100,
@@ -564,7 +460,7 @@ describe('useBidirectionalTranslator', () => {
         targetLanguage: 'en',
       }),
     );
-    vi.mocked(enrichBreakdown).mockRejectedValueOnce(
+    vi.mocked(generateLearningCourse).mockRejectedValueOnce(
       new FlowtranslateApiError('Monthly quota reached.', 402, exhaustedUsage),
     );
 
@@ -580,27 +476,17 @@ describe('useBidirectionalTranslator', () => {
 
     act(() => result.current.editInput('necesito ayuda con esto'));
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(TRANSLATION_IDLE_DELAY_MS);
+      await result.current.translate();
     });
 
-    act(() => result.current.requestBreakdown());
     await act(async () => {
-      await Promise.resolve();
+      await result.current.requestLearningCourse();
     });
 
     expect(result.current.resultText).toBe('I need help with this.');
-    expect(result.current.breakdown).toBeNull();
-    expect(result.current.breakdownStatus).toBe('error');
+    expect(result.current.learningCourseMarkdown).toBe('');
+    expect(result.current.learningCourseStatus).toBe('error');
     expect(onUsage).toHaveBeenCalledWith(exhaustedUsage);
-    expect(analyticsTrack).toHaveBeenCalledWith(
-      'breakdown_enrichment_failed',
-      expect.objectContaining({
-        mode: 'translate_to_english',
-        trigger: 'panel_opened',
-        error_status: 402,
-        remaining_quota: 0,
-      }),
-    );
   });
 
   it('regenerates the current answer immediately when the response tone changes', async () => {
@@ -635,7 +521,7 @@ describe('useBidirectionalTranslator', () => {
 
     act(() => result.current.editInput('necesito ayuda con esto'));
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(TRANSLATION_IDLE_DELAY_MS);
+      await result.current.translate();
     });
 
     expect(result.current.resultText).toBe('I need help with this.');
@@ -704,7 +590,7 @@ describe('useBidirectionalTranslator', () => {
 
     act(() => result.current.editInput('que tal hoy no puedo ir'));
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(TRANSLATION_IDLE_DELAY_MS);
+      await result.current.translate();
     });
 
     act(() =>
@@ -736,7 +622,7 @@ describe('useBidirectionalTranslator', () => {
     );
   });
 
-  it('auto-improves English after the idle delay', async () => {
+  it('improves English once the user confirms', async () => {
     vi.mocked(generateTranslation).mockResolvedValueOnce(
       responseFor({
         text: 'I need help with this task.',
@@ -758,7 +644,7 @@ describe('useBidirectionalTranslator', () => {
     act(() => result.current.editInput('I need help with this task'));
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(TRANSLATION_IDLE_DELAY_MS);
+      await result.current.translate();
     });
 
     expect(result.current.mode).toBe('improve_english');
@@ -774,7 +660,7 @@ describe('useBidirectionalTranslator', () => {
     );
   });
 
-  it('waits for automatic guest auth before translating pending input', async () => {
+  it('waits for automatic guest auth, then still requires manual confirm to translate', async () => {
     vi.mocked(generateTranslation).mockResolvedValueOnce(
       responseFor({
         text: 'hello, how are you?',
@@ -830,6 +716,12 @@ describe('useBidirectionalTranslator', () => {
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(TRANSLATION_IDLE_DELAY_MS);
+    });
+
+    expect(generateTranslation).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await result.current.translate();
     });
 
     expect(generateTranslation).toHaveBeenCalledWith(
@@ -914,7 +806,7 @@ describe('useBidirectionalTranslator', () => {
 
     act(() => result.current.editInput('ok'));
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(TRANSLATION_IDLE_DELAY_MS);
+      await result.current.translate();
     });
 
     expect(generateTranslation).toHaveBeenCalledWith(

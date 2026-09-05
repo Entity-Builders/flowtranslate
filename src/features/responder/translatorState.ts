@@ -1,6 +1,5 @@
 import {
   createExpressionDirection,
-  type ExpressionBreakdown,
   type ExpressionMode,
   type IntentDetectionResult,
   type TranslationPresetId,
@@ -26,8 +25,6 @@ export type TranslationTrigger =
   | 'input_to_spanish'
   | 'checkout_resume';
 
-export type BreakdownTrigger = 'panel_opened';
-
 export type TranslationBlockedReason =
   | 'offline'
   | 'auth'
@@ -35,8 +32,6 @@ export type TranslationBlockedReason =
   | 'input_too_long'
   | 'ambiguous'
   | 'mixed_input';
-
-export type BreakdownStatus = 'idle' | 'enriching' | 'ready' | 'error';
 
 export const normalizeTranslatorText = (value: string) =>
   value.trim().replace(/\s+/g, ' ').toLocaleLowerCase();
@@ -67,7 +62,7 @@ export const translationAnalyticsProperties = (
   mode: ExpressionMode,
   sourceText: string,
   presetId: TranslationPresetId,
-  trigger: TranslationTrigger | BreakdownTrigger,
+  trigger: TranslationTrigger,
   contextText = '',
 ) => {
   const direction = createExpressionDirection(mode);
@@ -86,16 +81,6 @@ export const translationAnalyticsProperties = (
 
 export const isConversationReplyMode = (mode: ExpressionMode) =>
   mode !== 'translate_to_spanish';
-
-export const isEnrichedBreakdown = (value: ExpressionBreakdown | null) => {
-  if (!value) return false;
-  const hasTenses = Boolean(value.tenses?.length);
-  const hasStructure = Boolean(value.structure?.length);
-  const hasAlternatives = Boolean(value.alternatives?.length);
-  const hasMistake = Boolean(value.commonMistake?.trim());
-
-  return hasTenses || hasStructure || hasAlternatives || hasMistake;
-};
 
 export const fallbackDetection = (
   mode: ExpressionMode,

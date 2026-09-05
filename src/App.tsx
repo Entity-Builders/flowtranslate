@@ -1,4 +1,5 @@
 import type {
+  BreakdownChatMessage,
   TranslationRecord,
   TranslationPresetId,
   UsageSnapshot,
@@ -32,6 +33,14 @@ import { useResponderPromiseState } from './features/responder/useResponderPromi
 import { useFlowtranslateVoice } from './features/voice/useFlowtranslateVoice';
 import { isOnline, subscribeToOnlineState } from './services/pwa';
 import { listTranslationHistory } from './services/translation-history';
+import {
+  listLearningCourses,
+  type LearningCourseHistoryEntry,
+} from './services/learning-courses';
+import {
+  askLearningCourseQuestion,
+  FlowtranslateApiError,
+} from './services/flowtranslate-api';
 
 const captureFlowtranslateError = (
   error: unknown,
@@ -81,6 +90,9 @@ function App() {
   const [usage, setUsage] = useState<UsageSnapshot | null>(null);
   const [history, setHistory] = useState<TranslationRecord[]>([]);
   const [historyError, setHistoryError] = useState('');
+  const [learningCourses, setLearningCourses] = useState<
+    LearningCourseHistoryEntry[]
+  >([]);
 
   useEffect(() => subscribeToOnlineState(setOnline), []);
 
@@ -112,6 +124,28 @@ function App() {
     void loadHistory();
   }, [loadHistory]);
 
+  const loadLearningCourses = useCallback(async () => {
+    if (!account.accessToken) {
+      setLearningCourses([]);
+      return;
+    }
+
+    try {
+      const nextCourses = await listLearningCourses();
+      setLearningCourses(nextCourses);
+    } catch (error) {
+      captureFlowtranslateError(error, {
+        screen: 'learning',
+        action: 'load_learning_courses',
+        account_kind: account.accountKind,
+      });
+    }
+  }, [account.accessToken, account.accountKind]);
+
+  useEffect(() => {
+    void loadLearningCourses();
+  }, [loadLearningCourses]);
+
   const handleUsage = useCallback((nextUsage: UsageSnapshot) => {
     setUsage(nextUsage);
   }, []);
@@ -123,6 +157,45 @@ function App() {
     });
   }, []);
 
+  const handleLearningCourseSaved = useCallback(
+    (course: LearningCourseHistoryEntry) => {
+      setLearningCourses((current) => [course, ...current].slice(0, 80));
+    },
+    [],
+  );
+
+  const handleAskLearningCourseQuestion = useCallback(
+    async (
+      translationRecordId: string,
+      question: string,
+      questionHistory: BreakdownChatMessage[],
+    ) => {
+      if (!account.accessToken) {
+        throw new Error('Conecta una cuenta para preguntar sobre esta clase.');
+      }
+
+      try {
+        const result = await askLearningCourseQuestion(
+          { translationRecordId, question, history: questionHistory },
+          account.accessToken,
+        );
+        handleUsage(result.usage);
+        return result.answer;
+      } catch (error) {
+        if (error instanceof FlowtranslateApiError && error.usage) {
+          handleUsage(error.usage);
+        }
+        captureFlowtranslateError(error, {
+          screen: 'learning',
+          action: 'ask_learning_course_question',
+          account_kind: account.accountKind,
+        });
+        throw error;
+      }
+    },
+    [account.accessToken, account.accountKind, handleUsage],
+  );
+
   const translator = useBidirectionalTranslator({
     accessToken: account.accessToken,
     authPending: account.authLoading || (account.busy && !account.session),
@@ -130,6 +203,7 @@ function App() {
     onUsage: handleUsage,
     onSavedTranslation: handleSavedTranslation,
     onRefreshSavedTranslations: loadHistory,
+    onLearningCourseSaved: handleLearningCourseSaved,
   });
   const clipboard = useExpressionClipboard({
     accountKind: account.accountKind,
@@ -381,7 +455,9 @@ function App() {
         <LearningRoute
           historyError={historyError}
           history={history}
+          learningCourses={learningCourses}
           accountKind={account.accountKind}
+          onAskCourseQuestion={handleAskLearningCourseQuestion}
         />
       )}
 

@@ -168,6 +168,90 @@ describe('learning UI', () => {
     expect(screen.queryByText('Empezar practica')).not.toBeInTheDocument();
   });
 
+  it('opens a saved class in a full-screen view and closes it again', () => {
+    renderLearningView({
+      history: historyWithBreakdown,
+      learningCourses: [
+        {
+          translationRecordId: 'record-1',
+          markdown:
+            '# Restaurant plans\n\nPractice ordering food in English.',
+          createdAt: '2026-06-05T12:05:00.000Z',
+        },
+      ],
+    });
+
+    expect(screen.queryByText('Restaurant plans')).not.toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Ver clase de esta traducción' }),
+    );
+
+    expect(
+      screen.getByRole('heading', { name: 'Restaurant plans' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('Practice ordering food in English.'),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cerrar' }));
+
+    expect(screen.queryByText('Restaurant plans')).not.toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Ver clase de esta traducción' }),
+    );
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Volver al historial' }),
+    );
+
+    expect(screen.queryByText('Restaurant plans')).not.toBeInTheDocument();
+  });
+
+  it('lets the learner ask a question about an open class and shows the answer', async () => {
+    const onAskCourseQuestion = vi
+      .fn()
+      .mockResolvedValue('Podes usar "I would like" para sonar mas formal.');
+
+    renderLearningView({
+      history: historyWithBreakdown,
+      learningCourses: [
+        {
+          translationRecordId: 'record-1',
+          markdown:
+            '# Restaurant plans\n\nPractice ordering food in English.',
+          createdAt: '2026-06-05T12:05:00.000Z',
+        },
+      ],
+      onAskCourseQuestion,
+    });
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Ver clase de esta traducción' }),
+    );
+
+    fireEvent.change(
+      screen.getByLabelText('Preguntar sobre esta clase'),
+      { target: { value: 'Como pido la cuenta?' } },
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar pregunta' }));
+
+    expect(onAskCourseQuestion).toHaveBeenCalledWith(
+      'record-1',
+      'Como pido la cuenta?',
+      [],
+    );
+    expect(screen.getByText('Como pido la cuenta?')).toBeInTheDocument();
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(
+          'Podes usar "I would like" para sonar mas formal.',
+        ),
+      ).toBeInTheDocument(),
+    );
+  });
+
   it('toggles grammar labels and shows tense information for saved breakdowns', () => {
     renderLearningView({ history: historyWithBreakdown });
 
@@ -480,76 +564,6 @@ describe('learning UI', () => {
     expect(screen.getByText('Simple present')).toBeInTheDocument();
   });
 
-  it('requests Desglose after the translation record arrives if it was already open', async () => {
-    const requestBreakdown = vi.fn();
-    const noop = () => undefined;
-    const baseProps = {
-      inputText: 'Creo que necesito ayuda',
-      resultText: '',
-      mode: 'translate_to_english' as const,
-      modeDetection: {
-        mode: 'translate_to_english' as const,
-        confidence: 'high' as const,
-        reason: 'spanish' as const,
-        automatic: true,
-      },
-      sourceLanguage: 'es' as const,
-      targetLanguage: 'en' as const,
-      presetId: 'natural' as const,
-      breakdown: null,
-      breakdownStatus: 'idle' as const,
-      translationRecordId: '',
-      status: 'translating' as const,
-      canTranslate: false,
-      translateDisabledReason: 'Generando',
-      copiedInput: false,
-      copiedResult: false,
-      canListen: false,
-      speakingLanguage: null,
-      canDictate: false,
-      dictatingLanguage: null,
-      dictationUnavailableReason: 'No disponible',
-      onInputChange: noop,
-      onCopyInput: noop,
-      onCopyResult: noop,
-      onListenInput: noop,
-      onListenResult: noop,
-      onDictateInput: noop,
-      onTranslate: noop,
-      onSelectPreset: noop,
-      onRequestBreakdown: requestBreakdown,
-      onTranslateToSpanish: noop,
-      hasSeenResponderPromise: false,
-    };
-
-    const { rerender } = render(<ExpressionWorkspace {...baseProps} />);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Desglose' }));
-
-    expect(requestBreakdown).not.toHaveBeenCalled();
-    expect(screen.getByRole('button', { name: 'Desglose' })).toHaveAttribute(
-      'aria-expanded',
-      'true',
-    );
-
-    rerender(
-      <ExpressionWorkspace
-        {...baseProps}
-        resultText='I think I need help.'
-        translationRecordId='record-1'
-        status='idle'
-        canTranslate
-        translateDisabledReason=''
-      />,
-    );
-
-    await waitFor(() => expect(requestBreakdown).toHaveBeenCalledTimes(1));
-    expect(screen.getByRole('button', { name: 'Desglose' })).toHaveAttribute(
-      'aria-expanded',
-      'true',
-    );
-  });
-
   it('does not repeat the mobile result text when the result sheet is open or collapsed', async () => {
     const noop = () => undefined;
     const resultText =
@@ -569,8 +583,8 @@ describe('learning UI', () => {
         sourceLanguage='es'
         targetLanguage='en'
         presetId='natural'
-        breakdown={null}
-        breakdownStatus='idle'
+        learningCourseMarkdown=''
+        learningCourseStatus='idle'
         translationRecordId='record-1'
         status='idle'
         canTranslate
@@ -590,7 +604,7 @@ describe('learning UI', () => {
         onDictateInput={noop}
         onTranslate={noop}
         onSelectPreset={noop}
-        onRequestBreakdown={noop}
+        onRequestLearningCourse={noop}
         onTranslateToSpanish={noop}
         hasSeenResponderPromise={false}
       />,
@@ -620,10 +634,9 @@ describe('learning UI', () => {
         name: 'Copiar',
       }),
     ).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Desglose' })).toHaveAttribute(
-      'aria-expanded',
-      'false',
-    );
+    expect(
+      screen.getByRole('button', { name: 'Generar clase de ingles' }),
+    ).toBeInTheDocument();
 
     fireEvent.click(
       within(mobileSheet as HTMLElement).getByRole('button', {
@@ -636,9 +649,9 @@ describe('learning UI', () => {
     ).toHaveLength(1);
     expect(
       within(mobileSheet as HTMLElement).getByRole('button', {
-        name: /abrir desglose movil/i,
+        name: 'Clase',
       }),
-    ).toBeInTheDocument();
+    ).toHaveAttribute('aria-expanded', 'false');
     expect(
       within(mobileSheet as HTMLElement).getByRole('button', {
         name: /estudiar/i,
@@ -668,8 +681,7 @@ describe('learning UI', () => {
         sourceLanguage='es'
         targetLanguage='en'
         presetId='natural'
-        breakdown={null}
-        breakdownStatus='idle'
+        learningCourseMarkdown=''
         translationRecordId=''
         status='translating'
         canTranslate={false}
@@ -689,7 +701,7 @@ describe('learning UI', () => {
         onDictateInput={noop}
         onTranslate={noop}
         onSelectPreset={noop}
-        onRequestBreakdown={noop}
+        onRequestLearningCourse={noop}
         onTranslateToSpanish={noop}
         hasSeenResponderPromise={false}
       />,
@@ -720,8 +732,7 @@ describe('learning UI', () => {
         sourceLanguage='en'
         targetLanguage='es'
         presetId='natural'
-        breakdown={null}
-        breakdownStatus='idle'
+        learningCourseMarkdown=''
         translationRecordId='record-1'
         status='idle'
         canTranslate
@@ -741,7 +752,7 @@ describe('learning UI', () => {
         onDictateInput={noop}
         onTranslate={noop}
         onSelectPreset={noop}
-        onRequestBreakdown={noop}
+        onRequestLearningCourse={noop}
         onTranslateToSpanish={noop}
         hasSeenResponderPromise={false}
       />,
@@ -785,8 +796,7 @@ describe('learning UI', () => {
         sourceLanguage='es'
         targetLanguage='en'
         presetId='natural'
-        breakdown={null}
-        breakdownStatus='idle'
+        learningCourseMarkdown=''
         translationRecordId='record-1'
         status='idle'
         canTranslate
@@ -814,7 +824,7 @@ describe('learning UI', () => {
         onDictateInput={noop}
         onTranslate={noop}
         onSelectPreset={noop}
-        onRequestBreakdown={noop}
+        onRequestLearningCourse={noop}
         onTranslateToSpanish={noop}
         onOpenAccount={onOpenAccount}
         onOpenLearning={onOpenLearning}
@@ -852,27 +862,8 @@ describe('learning UI', () => {
     expect(screen.queryByText('Respuesta copiada.')).not.toBeInTheDocument();
   });
 
-  it('keeps the workspace Desglose open when enriched content arrives', () => {
-    const richBreakdown = {
-      changed: true,
-      confidence: 'high' as const,
-      feedback: ['Listo.'],
-      tenses: [
-        {
-          label: 'Simple present',
-          text: 'need',
-          note: 'Describe una necesidad actual.',
-        },
-      ],
-      structure: [
-        {
-          text: 'I need help',
-          role: 'other' as const,
-          note: 'Frase completa.',
-        },
-      ],
-    };
-    const requestBreakdown = vi.fn();
+  it('keeps the workspace learning course panel open while it generates and arrives', () => {
+    const requestLearningCourse = vi.fn();
     const noop = () => undefined;
     const baseProps = {
       inputText: 'Creo que necesito ayuda',
@@ -887,8 +878,8 @@ describe('learning UI', () => {
       sourceLanguage: 'es' as const,
       targetLanguage: 'en' as const,
       presetId: 'natural' as const,
-      breakdown: null,
-      breakdownStatus: 'idle' as const,
+      learningCourseMarkdown: '',
+      learningCourseStatus: 'idle' as const,
       translationRecordId: 'record-1',
       status: 'idle' as const,
       canTranslate: true,
@@ -908,30 +899,37 @@ describe('learning UI', () => {
       onDictateInput: noop,
       onTranslate: noop,
       onSelectPreset: noop,
-      onRequestBreakdown: requestBreakdown,
+      onRequestLearningCourse: requestLearningCourse,
       onTranslateToSpanish: noop,
       hasSeenResponderPromise: false,
     };
 
     const { rerender } = render(<ExpressionWorkspace {...baseProps} />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Desglose' }));
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Generar clase de ingles' }),
+    );
 
-    expect(requestBreakdown).toHaveBeenCalledTimes(1);
+    expect(requestLearningCourse).toHaveBeenCalledTimes(1);
 
     rerender(
       <ExpressionWorkspace
         {...baseProps}
-        breakdown={richBreakdown}
-        breakdownStatus='ready'
+        learningCourseStatus='generating'
       />,
     );
 
-    expect(screen.getByRole('button', { name: /desglose/i })).toHaveAttribute(
-      'aria-expanded',
-      'true',
+    expect(screen.getByText('Generando tu clase...')).toBeInTheDocument();
+
+    rerender(
+      <ExpressionWorkspace
+        {...baseProps}
+        learningCourseMarkdown={'# Tabla comparativa\n\nDetailed lesson content.'}
+        learningCourseStatus='ready'
+      />,
     );
-    expect(screen.getByText('Simple present')).toBeInTheDocument();
+
+    expect(screen.getByText('Tabla comparativa')).toBeInTheDocument();
   });
 
   it('renders a markdown study article with syntax and exercises', () => {

@@ -88,21 +88,18 @@ export type BreakdownChatResponse = {
   usage: FlowtranslateUsage;
 };
 
-export type BreakdownEnrichmentResponse = {
-  kind: 'breakdown_enrichment';
-  breakdown: ExpressionBreakdown;
-  translationRecord: Pick<
-    TranslationRecord,
-    | 'id'
-    | 'sourceLanguage'
-    | 'targetLanguage'
-    | 'mode'
-    | 'breakdown'
-    | 'grammarInsight'
-    | 'createdAt'
-  >;
+export type LearningCourseResponse = {
+  kind: 'learning_course';
+  translationRecordId: string;
+  markdown: string;
   cached?: boolean;
-  generatedFrom?: 'gemini' | 'fallback';
+  generatedAt?: string;
+  usage: FlowtranslateUsage;
+};
+
+export type LearningCourseChatResponse = {
+  kind: 'learning_course_chat';
+  answer: string;
   usage: FlowtranslateUsage;
 };
 
@@ -183,8 +180,14 @@ type FlowtranslateRequest =
       history?: BreakdownChatMessage[];
     }
   | {
-      kind: 'breakdown_enrichment';
+      kind: 'learning_course';
       translationRecordId: string;
+    }
+  | {
+      kind: 'learning_course_chat';
+      translationRecordId: string;
+      question: string;
+      history?: BreakdownChatMessage[];
     }
   | {
       kind: 'sync_guest_account';
@@ -199,7 +202,8 @@ type FlowtranslateResponse =
   | LearningSessionResponse
   | LearningAttemptFeedbackResponse
   | BreakdownChatResponse
-  | BreakdownEnrichmentResponse
+  | LearningCourseResponse
+  | LearningCourseChatResponse
   | GuestAccountSyncResponse;
 
 type FlowtranslateErrorResponse = {
@@ -371,16 +375,34 @@ export const askBreakdownQuestion = (
     accessToken,
   );
 
-export const enrichBreakdown = (
+export const generateLearningCourse = (
   params: {
     translationRecordId: string;
   },
   accessToken: string,
 ) =>
-  requestFlowtranslate<BreakdownEnrichmentResponse>(
+  requestFlowtranslate<LearningCourseResponse>(
     {
-      kind: 'breakdown_enrichment',
+      kind: 'learning_course',
       translationRecordId: params.translationRecordId,
+    },
+    accessToken,
+  );
+
+export const askLearningCourseQuestion = (
+  params: {
+    translationRecordId: string;
+    question: string;
+    history?: BreakdownChatMessage[];
+  },
+  accessToken: string,
+) =>
+  requestFlowtranslate<LearningCourseChatResponse>(
+    {
+      kind: 'learning_course_chat',
+      translationRecordId: params.translationRecordId,
+      question: params.question,
+      history: params.history,
     },
     accessToken,
   );

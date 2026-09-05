@@ -4,7 +4,6 @@ import {
   createExpressionDirection,
   detectExpressionMode,
   isTranslationPresetId,
-  type ExpressionBreakdown,
   type ExpressionMode,
   type IntentDetectionResult,
   type TranslationPresetId,
@@ -15,10 +14,8 @@ import {
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   STORAGE_KEYS,
-  TRANSLATION_IDLE_DELAY_MS,
   TRANSLATION_INPUT_MAX_CHARS,
 } from '../constants';
-import { runBreakdownEnrichmentLifecycle } from '../features/responder/breakdownEnrichmentLifecycle';
 import {
   buildTranslationInputLimitMessage,
   countTranslationInputCharacters,
@@ -26,11 +23,8 @@ import {
   fallbackDetection,
   getTranslatorReadiness,
   isConversationReplyMode,
-  isEnrichedBreakdown,
   normalizeTranslatorText,
   translationAnalyticsProperties,
-  type BreakdownStatus,
-  type BreakdownTrigger,
   type TranslationBlockedReason,
   type TranslationTrigger,
   type TranslatorStatus,
@@ -42,7 +36,13 @@ import {
   analytics,
   commercialAnalyticsProperties,
 } from '../services/analytics';
-import { FlowtranslateApiError } from '../services/flowtranslate-api';
+import {
+  FlowtranslateApiError,
+  generateLearningCourse,
+} from '../services/flowtranslate-api';
+import type { LearningCourseHistoryEntry } from '../services/learning-courses';
+
+export type LearningCourseStatus = 'idle' | 'generating' | 'ready' | 'error';
 
 type UseBidirectionalTranslatorParams = {
   accessToken: string;
@@ -51,6 +51,7 @@ type UseBidirectionalTranslatorParams = {
   onUsage: (usage: UsageSnapshot) => void;
   onSavedTranslation: (record: TranslationRecord) => void;
   onRefreshSavedTranslations?: () => Promise<TranslationRecord[]>;
+  onLearningCourseSaved?: (course: LearningCourseHistoryEntry) => void;
 };
 
 const currentTimeMs = () =>
@@ -141,6 +142,7 @@ export const useBidirectionalTranslator = ({
   onUsage,
   onSavedTranslation,
   onRefreshSavedTranslations,
+  onLearningCourseSaved,
 }: UseBidirectionalTranslatorParams) => {
   const initialResumeRef = useRef<PendingTranslationResume | null>(
     readPendingTranslationResume(),
@@ -158,9 +160,9 @@ export const useBidirectionalTranslator = ({
   const [modeDetection, setModeDetection] = useState<IntentDetectionResult>(
     fallbackDetection(initialMode),
   );
-  const [breakdown, setBreakdown] = useState<ExpressionBreakdown | null>(null);
-  const [breakdownStatus, setBreakdownStatus] =
-    useState<BreakdownStatus>('idle');
+  const [learningCourseMarkdown, setLearningCourseMarkdown] = useState('');
+  const [learningCourseStatus, setLearningCourseStatus] =
+    useState<LearningCourseStatus>('idle');
   const [grammarInsight, setGrammarInsight] = useState<GrammarInsight | null>(null);
   const [translationRecordId, setTranslationRecordId] = useState('');
   const [presetId, setPresetId] = useState<TranslationPresetId>(initialPresetId);
@@ -186,11 +188,18 @@ export const useBidirectionalTranslator = ({
   const trackedComposerStartedRef = useRef(Boolean(initialText));
   const resumeAttemptedKeyRef = useRef('');
   const timerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const learningCourseRecordIdRef = useRef('');
 
   const clearScheduledTranslation = useCallback(() => {
     if (!timerRef.current) return;
     window.clearTimeout(timerRef.current);
     timerRef.current = null;
+  }, []);
+
+  const resetLearningCourse = useCallback(() => {
+    learningCourseRecordIdRef.current = '';
+    setLearningCourseMarkdown('');
+    setLearningCourseStatus('idle');
   }, []);
 
   useEffect(() => clearScheduledTranslation, [clearScheduledTranslation]);
@@ -330,8 +339,7 @@ export const useBidirectionalTranslator = ({
         },
       );
       setResultText('');
-      setBreakdown(null);
-      setBreakdownStatus('idle');
+      resetLearningCourse();
       setGrammarInsight(null);
       updateTranslationRecordId('');
       setStatus('error');
@@ -341,226 +349,11 @@ export const useBidirectionalTranslator = ({
     },
     [
       clearPendingHistoryRefresh,
+      resetLearningCourse,
       trackTranslationBlocked,
       updateTranslationRecordId,
     ],
   );
-
-  const enrichSavedBreakdown = useCallback(
-    async (params: {
-      recordId: string;
-      requestSequence: number;
-      mode: ExpressionMode;
-      sourceText: string;
-      translatedText: string;
-      presetId: TranslationPresetId;
-      trigger: BreakdownTrigger;
-      createdAt: string;
-    }) => {
-      if (!params.recordId || !accessToken) return;
-
-      const startedAt = currentTimeMs();
-      setBreakdownStatus('enriching');
-
-      const lifecycle = await runBreakdownEnrichmentLifecycle({
-        accessToken,
-        recordId: params.recordId,
-        requestSequence: params.requestSequence,
-        mode: params.mode,
-        sourceText: params.sourceText,
-        translatedText: params.translatedText,
-        presetId: params.presetId,
-        createdAt: params.createdAt,
-        startedAt,
-        getLatestSnapshot: () => ({
-          latestSequence: sequenceRef.current,
-          latestMode: modeRef.current,
-          latestSourceText: inputTextRef.current.trim(),
-          latestPresetId: presetIdRef.current,
-          latestRecordId: translationRecordIdRef.current,
-        }),
-      });
-
-      if (lifecycle.kind === 'stale') return;
-
-      if (lifecycle.kind === 'missing_breakdown') {
-        setBreakdownStatus('error');
-        analytics.track('breakdown_enrichment_failed', {
-          ...translationAnalyticsProperties(
-            params.mode,
-            params.sourceText,
-            params.presetId,
-            params.trigger,
-          ),
-          latency_ms: lifecycle.latencyMs,
-          error_status: null,
-          remaining_quota: lifecycle.response.usage.remainingThisMonth,
-          reason: 'missing_enriched_breakdown',
-        });
-        return;
-      }
-
-      if (lifecycle.kind === 'api_error' || lifecycle.kind === 'exception') {
-        const error = lifecycle.error;
-        if (error instanceof FlowtranslateApiError && error.usage) {
-          onUsage(error.usage);
-        }
-
-        setBreakdownStatus('error');
-        analytics.captureError(error, {
-          screen: 'translate',
-          action: 'enrich_breakdown',
-          mode: params.mode,
-          trigger: params.trigger,
-          http_status:
-            error instanceof FlowtranslateApiError ? error.status : null,
-        });
-        analytics.track('breakdown_enrichment_failed', {
-          ...translationAnalyticsProperties(
-            params.mode,
-            params.sourceText,
-            params.presetId,
-            params.trigger,
-          ),
-          latency_ms: lifecycle.latencyMs,
-          error_status:
-            error instanceof FlowtranslateApiError ? error.status : null,
-          remaining_quota:
-            error instanceof FlowtranslateApiError
-              ? error.usage?.remainingThisMonth ?? null
-              : null,
-        });
-        return;
-      }
-
-      const { response } = lifecycle;
-      setBreakdown(lifecycle.breakdown);
-      setBreakdownStatus('ready');
-      onUsage(response.usage);
-      onSavedTranslation(lifecycle.savedRecord);
-      analytics.track('breakdown_enrichment_succeeded', {
-        ...translationAnalyticsProperties(
-          params.mode,
-          params.sourceText,
-          params.presetId,
-          params.trigger,
-        ),
-        latency_ms: lifecycle.latencyMs,
-        charged: response.usage.charged,
-        cached: Boolean(response.cached),
-        generated_from: response.generatedFrom || 'gemini',
-        remaining_quota: response.usage.remainingThisMonth,
-      });
-      if (response.cached) {
-        analytics.track('breakdown_enrichment_cached', {
-          ...translationAnalyticsProperties(
-            params.mode,
-            params.sourceText,
-            params.presetId,
-            params.trigger,
-          ),
-        });
-      }
-      if (response.usage.charged) {
-        analytics.track('breakdown_enrichment_charged', {
-          ...translationAnalyticsProperties(
-            params.mode,
-            params.sourceText,
-            params.presetId,
-            params.trigger,
-          ),
-          estimated_tokens: response.usage.estimatedTokens,
-          remaining_quota: response.usage.remainingThisMonth,
-        });
-      }
-    },
-    [accessToken, onSavedTranslation, onUsage],
-  );
-
-  const requestBreakdown = useCallback(() => {
-    const recordId = translationRecordIdRef.current;
-    const sourceText = inputTextRef.current.trim();
-    const translatedText = resultText.trim();
-    const currentMode = modeRef.current;
-    const currentPresetId = presetIdRef.current;
-    const trigger: BreakdownTrigger = 'panel_opened';
-
-    if (!recordId || !sourceText || !translatedText) return;
-    if (breakdownStatus === 'enriching') return;
-
-    analytics.track('breakdown_enrichment_requested', {
-      ...translationAnalyticsProperties(
-        currentMode,
-        sourceText,
-        currentPresetId,
-        trigger,
-      ),
-    });
-
-    if (isEnrichedBreakdown(breakdown)) {
-      setBreakdownStatus('ready');
-      analytics.track('breakdown_enrichment_cached', {
-        ...translationAnalyticsProperties(
-          currentMode,
-          sourceText,
-          currentPresetId,
-          trigger,
-        ),
-        cache_source: 'client_state',
-      });
-      return;
-    }
-
-    if (!online) {
-      setBreakdownStatus('error');
-      analytics.track('breakdown_enrichment_failed', {
-        ...translationAnalyticsProperties(
-          currentMode,
-          sourceText,
-          currentPresetId,
-          trigger,
-        ),
-        error_status: null,
-        remaining_quota: null,
-        reason: 'offline',
-      });
-      return;
-    }
-
-    if (!accessToken) {
-      setBreakdownStatus('error');
-      analytics.track('breakdown_enrichment_failed', {
-        ...translationAnalyticsProperties(
-          currentMode,
-          sourceText,
-          currentPresetId,
-          trigger,
-        ),
-        error_status: 401,
-        remaining_quota: null,
-        reason: 'auth',
-      });
-      return;
-    }
-
-    void enrichSavedBreakdown({
-      recordId,
-      requestSequence: sequenceRef.current,
-      mode: currentMode,
-      sourceText,
-      translatedText,
-      presetId: currentPresetId,
-      trigger,
-      createdAt: translationRecordCreatedAtRef.current,
-    });
-  }, [
-    accessToken,
-    breakdown,
-    breakdownStatus,
-    enrichSavedBreakdown,
-    online,
-    resultText,
-  ]);
 
   const runTranslation = useCallback(
     async (
@@ -658,8 +451,7 @@ export const useBidirectionalTranslator = ({
       lastBlockedAnalyticsKeyRef.current = '';
       clearPendingHistoryRefresh();
       setResultText('');
-      setBreakdown(null);
-      setBreakdownStatus('idle');
+      resetLearningCourse();
       setGrammarInsight(null);
       setTranslationRecordId('');
       setStatus('translating');
@@ -765,7 +557,6 @@ export const useBidirectionalTranslator = ({
           responseMode,
           responseDirection,
           savedBreakdown,
-          displayBreakdown,
           isSavedRecord,
           nextRecordId,
           latencyMs,
@@ -777,8 +568,6 @@ export const useBidirectionalTranslator = ({
           isSavedRecord ? result.translationRecord.createdAt : '',
         );
         setResultText(result.text);
-        setBreakdown(displayBreakdown);
-        setBreakdownStatus(displayBreakdown ? 'ready' : 'idle');
         if (result.grammarInsight) {
           setGrammarInsight(result.grammarInsight);
         } else {
@@ -869,6 +658,7 @@ export const useBidirectionalTranslator = ({
       onUsage,
       clearPendingHistoryRefresh,
       getLatestTranslationSnapshot,
+      resetLearningCourse,
       schedulePendingHistoryRefresh,
       trackTranslationBlocked,
       updateMode,
@@ -972,10 +762,9 @@ export const useBidirectionalTranslator = ({
         setStatus('idle');
         setMessage('');
         setHasPendingChanges(false);
-        setBreakdown(null);
-        setBreakdownStatus('idle');
         setGrammarInsight(null);
         setResultText('');
+        resetLearningCourse();
         updateTranslationRecordId('');
         lastBlockedAnalyticsKeyRef.current = '';
         return;
@@ -1042,18 +831,21 @@ export const useBidirectionalTranslator = ({
         return;
       }
 
+      if (trigger === 'auto_idle') {
+        setStatus('typing');
+        setMessage('Presiona Generar para traducir.');
+        return;
+      }
+
       setStatus('typing');
-      setMessage('Genero despues de una pausa corta...');
-      timerRef.current = window.setTimeout(() => {
-        timerRef.current = null;
-        void runTranslation(
-          nextMode,
-          trimmedSource,
-          nextPresetId,
-          trigger,
-          nextContextText,
-        );
-      }, TRANSLATION_IDLE_DELAY_MS);
+      setMessage('Generando...');
+      void runTranslation(
+        nextMode,
+        trimmedSource,
+        nextPresetId,
+        trigger,
+        nextContextText,
+      );
     },
     [
       accessToken,
@@ -1061,6 +853,7 @@ export const useBidirectionalTranslator = ({
       blockTranslationInputLimit,
       clearScheduledTranslation,
       online,
+      resetLearningCourse,
       runTranslation,
       trackTranslationBlocked,
       updateTranslationRecordId,
@@ -1286,8 +1079,7 @@ export const useBidirectionalTranslator = ({
     lastBlockedAnalyticsKeyRef.current = '';
     clearPendingHistoryRefresh();
     setResultText('');
-    setBreakdown(null);
-    setBreakdownStatus('idle');
+    resetLearningCourse();
     setGrammarInsight(null);
     updateTranslationRecordId('');
     setStatus('translating');
@@ -1411,8 +1203,7 @@ export const useBidirectionalTranslator = ({
       automatic: false,
     });
     setResultText('');
-    setBreakdown(null);
-    setBreakdownStatus('idle');
+    resetLearningCourse();
     setGrammarInsight(null);
     updateTranslationRecordId('');
     setStatus('typing');
@@ -1463,10 +1254,56 @@ export const useBidirectionalTranslator = ({
     online,
     onSavedTranslation,
     onUsage,
+    resetLearningCourse,
     trackTranslationBlocked,
     updateMode,
     updateTranslationRecordId,
   ]);
+
+  const requestLearningCourse = useCallback(async () => {
+    const recordId = translationRecordIdRef.current;
+    if (!recordId || !accessToken) return;
+    if (learningCourseStatus === 'generating') return;
+    if (
+      learningCourseRecordIdRef.current === recordId &&
+      learningCourseStatus === 'ready'
+    ) {
+      return;
+    }
+
+    setLearningCourseStatus('generating');
+
+    try {
+      const response = await generateLearningCourse(
+        { translationRecordId: recordId },
+        accessToken,
+      );
+      if (translationRecordIdRef.current !== recordId) return;
+
+      learningCourseRecordIdRef.current = recordId;
+      setLearningCourseMarkdown(response.markdown);
+      setLearningCourseStatus('ready');
+      onUsage(response.usage);
+      onLearningCourseSaved?.({
+        translationRecordId: recordId,
+        markdown: response.markdown,
+        createdAt: response.generatedAt || new Date().toISOString(),
+      });
+    } catch (error) {
+      if (translationRecordIdRef.current !== recordId) return;
+
+      if (error instanceof FlowtranslateApiError && error.usage) {
+        onUsage(error.usage);
+      }
+      setLearningCourseStatus('error');
+      analytics.captureError(error, {
+        screen: 'translate',
+        action: 'generate_learning_course',
+        http_status:
+          error instanceof FlowtranslateApiError ? error.status : null,
+      });
+    }
+  }, [accessToken, learningCourseStatus, onLearningCourseSaved, onUsage]);
 
   const { canTranslate, translateDisabledReason } = getTranslatorReadiness({
     sourceText: inputText,
@@ -1487,8 +1324,8 @@ export const useBidirectionalTranslator = ({
     targetLanguage: direction.targetLanguage,
     presetId,
     workContextText,
-    breakdown,
-    breakdownStatus,
+    learningCourseMarkdown,
+    learningCourseStatus,
     grammarInsight,
     translationRecordId,
     status,
@@ -1500,7 +1337,7 @@ export const useBidirectionalTranslator = ({
     translateInputToSpanish,
     applyWorkContext,
     rememberPendingTranslationResume,
-    requestBreakdown,
+    requestLearningCourse,
     selectPreset,
     selectMode,
     editInput,

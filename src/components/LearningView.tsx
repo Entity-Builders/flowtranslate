@@ -1,4 +1,5 @@
 import type {
+  BreakdownChatMessage,
   ExpressionBreakdown,
   ExpressionMode,
   GrammarAnnotation,
@@ -8,16 +9,33 @@ import {
   getGrammarAnnotations,
   hasMixedSpanishEnglishInput,
 } from '@entity-builders/flowtranslate-core';
-import { BookOpen, Check, Copy, Languages } from 'lucide-react';
+import {
+  ArrowLeft,
+  BookOpen,
+  Check,
+  Copy,
+  GraduationCap,
+  Languages,
+  X,
+} from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useMemo, useState } from 'react';
 import { MAX_LEARNING_HISTORY } from '../constants';
+import type { LearningCourseHistoryEntry } from '../services/learning-courses';
+import { LearningCourseChat } from './LearningCourseChat';
+import { LearningCourseView } from './LearningCourseView';
 
 type AccountKind = 'none' | 'guest' | 'permanent';
 
 type LearningViewProps = {
   history: TranslationRecord[];
+  learningCourses?: LearningCourseHistoryEntry[];
   accountKind: AccountKind;
+  onAskCourseQuestion?: (
+    translationRecordId: string,
+    question: string,
+    history: BreakdownChatMessage[],
+  ) => Promise<string>;
 };
 
 type GrammarRoleConfig = {
@@ -437,14 +455,33 @@ const isEnglishAttemptRecord = (record: TranslationRecord) =>
   record.mode === 'improve_english' ||
   (record.sourceLanguage === 'en' && record.targetLanguage === 'en');
 
-export const LearningView = ({ history, accountKind }: LearningViewProps) => {
+export const LearningView = ({
+  history,
+  learningCourses = [],
+  accountKind,
+  onAskCourseQuestion,
+}: LearningViewProps) => {
   const [expandedRecordId, setExpandedRecordId] = useState('');
   const [copiedRecordId, setCopiedRecordId] = useState('');
   const [openAttemptFeedbackId, setOpenAttemptFeedbackId] = useState('');
+  const [openCourseRecordId, setOpenCourseRecordId] = useState('');
   const recentHistory = useMemo(
     () => history.slice(0, MAX_LEARNING_HISTORY),
     [history],
   );
+  const learningCourseByRecordId = useMemo(() => {
+    const map = new Map<string, LearningCourseHistoryEntry>();
+    for (const course of learningCourses) {
+      const existing = map.get(course.translationRecordId);
+      if (
+        !existing ||
+        Date.parse(course.createdAt) > Date.parse(existing.createdAt)
+      ) {
+        map.set(course.translationRecordId, course);
+      }
+    }
+    return map;
+  }, [learningCourses]);
   const historyWithAnalysis = useMemo(
     () =>
       recentHistory.filter((record) => getGrammarAnnotations(record).hasAnalysis)
@@ -459,6 +496,14 @@ export const LearningView = ({ history, accountKind }: LearningViewProps) => {
   const toggleExpandedRecord = (recordId: string) => {
     setExpandedRecordId((current) => (current === recordId ? '' : recordId));
   };
+
+  const openCourseRecord = useMemo(
+    () => recentHistory.find((record) => record.id === openCourseRecordId),
+    [openCourseRecordId, recentHistory],
+  );
+  const openCourse = openCourseRecord
+    ? learningCourseByRecordId.get(openCourseRecord.id)
+    : undefined;
 
   const copyRecord = (record: TranslationRecord) => {
     void navigator.clipboard?.writeText(record.translatedText);
@@ -552,6 +597,7 @@ export const LearningView = ({ history, accountKind }: LearningViewProps) => {
                   annotation.startIndex !== null &&
                   annotation.endIndex !== null,
               );
+              const course = learningCourseByRecordId.get(record.id);
 
               return (
                 <article
@@ -603,6 +649,19 @@ export const LearningView = ({ history, accountKind }: LearningViewProps) => {
                           }`}
                         >
                           <GrammarLensIcon />
+                        </button>
+                      ) : null}
+
+                      {course ? (
+                        <button
+                          type='button'
+                          aria-label='Ver clase de esta traducción'
+                          title='Ver clase'
+                          onClick={() => setOpenCourseRecordId(record.id)}
+                          className='flex h-7 items-center gap-1.5 rounded border border-transparent px-2.5 text-[11px] font-medium text-[#6b7280] transition-all hover:border-black/10 hover:text-[#0f1117]'
+                        >
+                          <GraduationCap size={13} />
+                          Clase
                         </button>
                       ) : null}
                     </div>
@@ -748,6 +807,62 @@ export const LearningView = ({ history, accountKind }: LearningViewProps) => {
           </section>
         )}
       </div>
+
+      {openCourseRecord && openCourse ? (
+        <div className='fixed inset-0 z-50 flex flex-col bg-[#f7f8f9]'>
+          <header className='flex items-center gap-3 border-b border-black/10 bg-white px-4 py-3'>
+            <button
+              type='button'
+              onClick={() => setOpenCourseRecordId('')}
+              aria-label='Volver al historial'
+              title='Volver al historial'
+              className='inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-[#6b7280] transition-colors hover:bg-[#eef0f3] hover:text-[#0f1117]'
+            >
+              <ArrowLeft size={18} />
+            </button>
+            <div className='min-w-0 flex-1'>
+              <div className='flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#0e7f72]'>
+                <GraduationCap size={12} />
+                Clase de inglés
+              </div>
+              <p className='truncate text-[13px] font-semibold text-[#6b7280]'>
+                {openCourseRecord.translatedText}
+              </p>
+            </div>
+            <button
+              type='button'
+              onClick={() => setOpenCourseRecordId('')}
+              aria-label='Cerrar'
+              title='Cerrar'
+              className='inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-[#6b7280] transition-colors hover:bg-[#eef0f3] hover:text-[#0f1117]'
+            >
+              <X size={18} />
+            </button>
+          </header>
+          <div className='min-h-0 flex-1 overflow-y-auto px-4 py-6'>
+            <div className='mx-auto max-w-2xl rounded-md border border-black/10 bg-white p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)]'>
+              <LearningCourseView markdown={openCourse.markdown} />
+            </div>
+          </div>
+
+          {onAskCourseQuestion ? (
+            <footer className='shrink-0 border-t border-black/10 bg-white px-4 py-3'>
+              <div className='mx-auto max-w-2xl'>
+                <LearningCourseChat
+                  key={openCourseRecord.id}
+                  onAskQuestion={(question, questionHistory) =>
+                    onAskCourseQuestion(
+                      openCourseRecord.id,
+                      question,
+                      questionHistory,
+                    )
+                  }
+                />
+              </div>
+            </footer>
+          ) : null}
+        </div>
+      ) : null}
     </main>
   );
 };

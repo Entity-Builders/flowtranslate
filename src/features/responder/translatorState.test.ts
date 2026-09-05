@@ -1,11 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import type { ExpressionBreakdown } from '@entity-builders/flowtranslate-core';
 import { TRANSLATION_INPUT_MAX_CHARS } from '../../constants';
 import {
   createTranslationRequestKey,
   fallbackDetection,
   getTranslatorReadiness,
-  isEnrichedBreakdown,
   normalizeTranslatorText,
   translationAnalyticsProperties,
 } from './translatorState';
@@ -30,29 +28,6 @@ describe('translatorState', () => {
       reason: 'manual',
       automatic: false,
     });
-  });
-
-  it('recognizes only enriched breakdown details as ready content', () => {
-    const baseBreakdown: ExpressionBreakdown = {
-      changed: false,
-      confidence: 'medium',
-      feedback: [],
-    };
-
-    expect(isEnrichedBreakdown(null)).toBe(false);
-    expect(isEnrichedBreakdown(baseBreakdown)).toBe(false);
-    expect(
-      isEnrichedBreakdown({
-        ...baseBreakdown,
-        structure: [
-          {
-            text: 'Thanks',
-            role: 'other',
-            note: 'Reusable opener.',
-          },
-        ],
-      }),
-    ).toBe(true);
   });
 
   it('resolves translate readiness without React state', () => {

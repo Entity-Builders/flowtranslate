@@ -119,8 +119,8 @@ export const ResponderRoute = ({
       sourceLanguage={translator.sourceLanguage}
       targetLanguage={translator.targetLanguage}
       presetId={translator.presetId}
-      breakdown={translator.breakdown}
-      breakdownStatus={translator.breakdownStatus}
+      learningCourseMarkdown={translator.learningCourseMarkdown}
+      learningCourseStatus={translator.learningCourseStatus}
       grammarInsight={translator.grammarInsight}
       translationRecordId={translator.translationRecordId}
       status={translator.status}
@@ -148,7 +148,7 @@ export const ResponderRoute = ({
       onDictateInput={onDictateInput}
       onTranslate={() => void translator.translate()}
       onSelectPreset={onSelectPreset}
-      onRequestBreakdown={() => translator.requestBreakdown()}
+      onRequestLearningCourse={() => void translator.requestLearningCourse()}
       onRequestStudy={() => {
         if (!translator.translationRecordId) return;
         const record = history.find((item) => item.id === translator.translationRecordId);

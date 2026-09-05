@@ -1,5 +1,4 @@
 import {
-  type ExpressionBreakdown,
   type ExpressionMode,
   type IntentDetectionResult,
   type LanguageCode,
@@ -15,6 +14,7 @@ import {
   ChevronUp,
   Copy,
   Coffee,
+  GraduationCap,
   Languages,
   Loader2,
   Mic,
@@ -30,7 +30,10 @@ import {
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { TRANSLATION_INPUT_MAX_CHARS } from '../constants';
 import { countTranslationInputCharacters } from '../features/responder/translatorState';
-import { ExpressionBreakdownDetails } from './ExpressionBreakdownDetails';
+import type { LearningCourseStatus } from '../hooks/useBidirectionalTranslator';
+import { buildLearningCourseClipboardText } from '../features/learning/learningCoursePrompt';
+import { copyText } from '../services/clipboard';
+import { LearningCourseView } from './LearningCourseView';
 import { TranslationPresetControl } from './TranslationPresetControl';
 import { SuggestionChips, type SuggestionChip } from './SuggestionChips';
 import { GrammarInsightCard } from './GrammarInsightCard';
@@ -53,8 +56,8 @@ type ExpressionWorkspaceProps = {
   sourceLanguage: LanguageCode;
   targetLanguage: LanguageCode;
   presetId: TranslationPresetId;
-  breakdown: ExpressionBreakdown | null;
-  breakdownStatus?: 'idle' | 'enriching' | 'ready' | 'error';
+  learningCourseMarkdown: string;
+  learningCourseStatus?: LearningCourseStatus;
   grammarInsight?: GrammarInsight | null;
   translationRecordId?: string;
   status: ExpressionWorkspaceStatus;
@@ -87,7 +90,7 @@ type ExpressionWorkspaceProps = {
   onDictateInput: () => void;
   onTranslate: () => void;
   onSelectPreset: (presetId: TranslationPresetId) => void;
-  onRequestBreakdown: () => void;
+  onRequestLearningCourse: () => void;
   onRequestStudy?: () => void;
   onOpenAccount?: () => void;
   onOpenLearning?: () => void;
@@ -501,8 +504,8 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
     sourceLanguage,
     targetLanguage,
     presetId,
-    breakdown,
-    breakdownStatus = 'idle',
+    learningCourseMarkdown,
+    learningCourseStatus = 'idle',
     grammarInsight,
     translationRecordId = '',
     status,
@@ -528,7 +531,7 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
     onDictateInput,
     onTranslate,
     onSelectPreset,
-    onRequestBreakdown,
+    onRequestLearningCourse,
     onRequestStudy,
     onOpenAccount,
     onOpenLearning,
@@ -538,15 +541,15 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
     onQuotaSupport,
   } = props;
   const isTranslating = status === 'translating';
-  const [isBreakdownOpen, setIsBreakdownOpen] = useState(false);
+  const [isLearningCourseOpen, setIsLearningCourseOpen] = useState(false);
   const [isMobileResultOpen, setIsMobileResultOpen] = useState(false);
   const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
   const [showPostCopyNudge, setShowPostCopyNudge] = useState(false);
+  const [courseCopied, setCourseCopied] = useState(false);
   const inputTextareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const previousBreakdownKeyRef = useRef('');
+  const previousLearningCourseKeyRef = useRef('');
   const previousResultTextRef = useRef('');
-  const requestedBreakdownKeyRef = useRef('');
-  const breakdownKey = translationRecordId || resultText.trim();
+  const learningCourseKey = translationRecordId || resultText.trim();
   const trimmedInputText = inputText.trim();
   const trimmedResultText = resultText.trim();
   const inputCharacterCount = countTranslationInputCharacters(inputText);
@@ -554,6 +557,12 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
   const isInputNearLimit =
     inputCharacterCount > Math.floor(TRANSLATION_INPUT_MAX_CHARS * 0.9);
   const hasResult = Boolean(trimmedResultText);
+  const learningCourseSourceText =
+    mode === 'translate_to_spanish' ? trimmedInputText : trimmedResultText;
+  const canCopyLearningCoursePrompt =
+    hasResult && !isTranslating && Boolean(learningCourseSourceText);
+  const canRequestLearningCourse =
+    hasResult && !isTranslating && Boolean(translationRecordId);
   const hasAttentionState =
     status === 'error' ||
     status === 'auth' ||
@@ -620,6 +629,16 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
     inputTextareaRef.current?.focus();
   }, [onInputChange]);
 
+  const handleCopyLearningCoursePrompt = useCallback(async () => {
+    if (!learningCourseSourceText) return;
+    const copied = await copyText(
+      buildLearningCourseClipboardText(learningCourseSourceText),
+    );
+    if (!copied) return;
+    setCourseCopied(true);
+    window.setTimeout(() => setCourseCopied(false), 2000);
+  }, [learningCourseSourceText]);
+
   useEffect(() => {
     if (!trimmedResultText) {
       previousResultTextRef.current = '';
@@ -671,89 +690,45 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
   }, [inputText]);
 
   useEffect(() => {
-    if (!breakdownKey) return;
+    if (!learningCourseKey) return;
 
-    const previousKey = previousBreakdownKeyRef.current;
-    if (previousKey && previousKey !== breakdownKey) {
-      setIsBreakdownOpen(false);
-      requestedBreakdownKeyRef.current = '';
+    const previousKey = previousLearningCourseKeyRef.current;
+    if (previousKey && previousKey !== learningCourseKey) {
+      setIsLearningCourseOpen(false);
     }
 
-    previousBreakdownKeyRef.current = breakdownKey;
-  }, [breakdownKey]);
+    previousLearningCourseKeyRef.current = learningCourseKey;
+  }, [learningCourseKey]);
 
-  const requestCurrentBreakdown = useCallback(() => {
-    if (!translationRecordId || !resultText.trim() || isTranslating) return;
-    if (breakdownStatus === 'enriching') return;
-    if (requestedBreakdownKeyRef.current === translationRecordId) return;
+  const handleGenerateLearningCourseClick = useCallback(() => {
+    setIsLearningCourseOpen(true);
+    onRequestLearningCourse();
+  }, [onRequestLearningCourse]);
 
-    requestedBreakdownKeyRef.current = translationRecordId;
-    onRequestBreakdown();
-  }, [
-    breakdownStatus,
-    isTranslating,
-    onRequestBreakdown,
-    resultText,
-    translationRecordId,
-  ]);
+  const handleToggleLearningCourse = useCallback(() => {
+    if (isLearningCourseOpen) {
+      setIsLearningCourseOpen(false);
+      return;
+    }
+    handleGenerateLearningCourseClick();
+  }, [isLearningCourseOpen, handleGenerateLearningCourseClick]);
 
-  useEffect(() => {
-    if (!isBreakdownOpen) return;
-    requestCurrentBreakdown();
-  }, [isBreakdownOpen, requestCurrentBreakdown]);
-
-  const handleBreakdownOpenChange = useCallback(
-    (nextOpen: boolean) => {
-      setIsBreakdownOpen(nextOpen);
-
-      if (!nextOpen) {
-        requestedBreakdownKeyRef.current = '';
-        return;
-      }
-
-      requestCurrentBreakdown();
-    },
-    [requestCurrentBreakdown],
-  );
-
-  const mobileBreakdownSummary = isBreakdownOpen ? (
+  const mobileLearningCourseSummary = isLearningCourseOpen ? (
     <div className='rounded-md border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700'>
-      {breakdownStatus === 'enriching' ? (
+      {learningCourseStatus === 'generating' ? (
         <div className='flex items-center gap-2 font-bold text-slate-500'>
           <Loader2 size={16} className='animate-spin text-emerald-600' />
-          Preparando desglose...
+          Generando tu clase...
         </div>
-      ) : breakdownStatus === 'error' ? (
+      ) : learningCourseStatus === 'error' ? (
         <p className='font-semibold text-rose-700'>
-          No pudimos preparar el desglose ahora. Proba abrirlo de nuevo en un
-          momento.
+          No pudimos generar la clase ahora. Proba de nuevo en un momento.
         </p>
-      ) : breakdown ? (
-        <div className='space-y-3'>
-          {breakdown.tense ? (
-            <div>
-              <div className='text-xs font-black uppercase text-slate-400'>
-                Tiempo
-              </div>
-              <p className='mt-1 font-semibold text-slate-900'>
-                {breakdown.tense}
-              </p>
-            </div>
-          ) : null}
-          {breakdown.whyThisWorks ? (
-            <p className='leading-6 text-slate-700'>{breakdown.whyThisWorks}</p>
-          ) : null}
-          {breakdown.feedback.length ? (
-            <ul className='space-y-2 leading-6'>
-              {breakdown.feedback.slice(0, 2).map((item) => (
-                <li key={item}>{item}</li>
-              ))}
-            </ul>
-          ) : null}
-        </div>
+      ) : learningCourseMarkdown ? (
+        <LearningCourseView markdown={learningCourseMarkdown} />
       ) : (
         <p className='font-semibold text-slate-500'>
-          Abrilo para preparar un desglose completo.
+          Toca Generar clase para crear tu leccion completa.
         </p>
       )}
     </div>
@@ -1066,19 +1041,45 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
                 ))}
               </div>
             ) : null}
-            <button
-              type='button'
-              onClick={onCopyResult}
-              disabled={!hasResult}
-              className='inline-flex h-11 w-full items-center justify-center gap-2 rounded-md bg-emerald-600 px-4 text-sm font-black text-white transition-colors hover:bg-emerald-500 disabled:bg-slate-100 disabled:text-slate-400 sm:w-auto'
-              aria-label={
-                copiedResult ? 'Respuesta copiada' : 'Copiar respuesta'
-              }
-              title='Copiar respuesta'
-            >
-              <Copy size={17} />
-              {copiedResult ? 'Copiado' : 'Copiar'}
-            </button>
+            <div className='flex w-full flex-col gap-2 sm:w-auto sm:flex-row'>
+              <button
+                type='button'
+                onClick={handleGenerateLearningCourseClick}
+                disabled={!canRequestLearningCourse}
+                className='inline-flex h-11 w-full items-center justify-center gap-2 rounded-md border border-slate-200 px-4 text-sm font-black text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-950 disabled:text-slate-300 sm:w-auto'
+                aria-label='Generar clase de ingles'
+                title='Genera una clase completa a partir de tu texto usando flowtranslate'
+              >
+                <GraduationCap size={17} />
+                Generar clase
+              </button>
+              <button
+                type='button'
+                onClick={handleCopyLearningCoursePrompt}
+                disabled={!canCopyLearningCoursePrompt}
+                className='inline-flex h-11 w-full items-center justify-center gap-2 rounded-md border border-slate-200 px-4 text-sm font-black text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-950 disabled:text-slate-300 sm:w-auto'
+                aria-label={
+                  courseCopied ? 'Prompt de clase copiado' : 'Copiar prompt de clase'
+                }
+                title='Copia tu texto junto con el prompt de la clase, para pegarlo en NotebookLM u otra IA sin gastar cuota de flowtranslate'
+              >
+                <Copy size={17} />
+                {courseCopied ? 'Copiado' : 'Copiar prompt'}
+              </button>
+              <button
+                type='button'
+                onClick={onCopyResult}
+                disabled={!hasResult}
+                className='inline-flex h-11 w-full items-center justify-center gap-2 rounded-md bg-emerald-600 px-4 text-sm font-black text-white transition-colors hover:bg-emerald-500 disabled:bg-slate-100 disabled:text-slate-400 sm:w-auto'
+                aria-label={
+                  copiedResult ? 'Respuesta copiada' : 'Copiar respuesta'
+                }
+                title='Copiar respuesta'
+              >
+                <Copy size={17} />
+                {copiedResult ? 'Copiado' : 'Copiar'}
+              </button>
+            </div>
           </div>
         ) : null}
 
@@ -1093,22 +1094,39 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
           </div>
         ) : null}
 
-        {shouldEmphasizeResponse && status !== 'quota' ? (
-          <div className='mt-5 border-t border-slate-100 pt-1'>
-            <ExpressionBreakdownDetails
-              key={breakdownKey || 'empty-breakdown'}
-              breakdown={breakdown}
-              emptyDescription={
-                hasResult
-                  ? 'Abrilo para preparar un desglose completo.'
-                  : undefined
-              }
-              withTopBorder={false}
-              isEnriching={breakdownStatus === 'enriching'}
-              hasEnrichmentError={breakdownStatus === 'error'}
-              open={isBreakdownOpen}
-              onOpenChange={handleBreakdownOpenChange}
-            />
+        {shouldEmphasizeResponse && status !== 'quota' && isLearningCourseOpen ? (
+          <div className='mt-5 border-t border-slate-100 pt-4'>
+            <button
+              type='button'
+              onClick={() => setIsLearningCourseOpen(false)}
+              className='flex w-full items-center justify-between gap-2 text-left'
+              aria-expanded={isLearningCourseOpen}
+              aria-label='Ocultar clase de ingles'
+            >
+              <span className='inline-flex items-center gap-2 text-sm font-black text-slate-900'>
+                <GraduationCap size={17} />
+                Clase de ingles
+              </span>
+              <ChevronUp size={18} className='text-slate-400' />
+            </button>
+            <div className='mt-4'>
+              {learningCourseStatus === 'generating' ? (
+                <div className='flex items-center gap-2 text-sm font-bold text-slate-500'>
+                  <Loader2 size={16} className='animate-spin text-emerald-600' />
+                  Generando tu clase...
+                </div>
+              ) : learningCourseStatus === 'error' ? (
+                <p className='text-sm font-semibold text-rose-700'>
+                  No pudimos generar la clase ahora. Proba de nuevo en un momento.
+                </p>
+              ) : learningCourseMarkdown ? (
+                <LearningCourseView markdown={learningCourseMarkdown} />
+              ) : (
+                <p className='text-sm font-semibold text-slate-500'>
+                  Toca Generar clase para crear tu leccion completa.
+                </p>
+              )}
+            </div>
           </div>
         ) : null}
 
@@ -1297,7 +1315,7 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
                         ) : null}
                       </div>
 
-                      <div className='grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3'>
+                      <div className='grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-4'>
                         {canOfferTranslateToSpanish ? (
                           <button
                             type='button'
@@ -1311,24 +1329,18 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
                         ) : null}
                         <button
                           type='button'
-                          onClick={() =>
-                            handleBreakdownOpenChange(!isBreakdownOpen)
-                          }
-                          disabled={!hasResult || isTranslating}
+                          onClick={handleToggleLearningCourse}
+                          disabled={!canRequestLearningCourse}
                           className='inline-flex h-10 items-center justify-center gap-2 rounded-md border border-slate-200 px-3 text-sm font-bold text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-950 disabled:text-slate-300'
-                          aria-label={
-                            isBreakdownOpen
-                              ? 'Ocultar desglose movil'
-                              : 'Abrir desglose movil'
-                          }
+                          aria-expanded={isLearningCourseOpen}
                         >
                           <ChevronDown
                             size={16}
                             className={`transition-transform ${
-                              isBreakdownOpen ? 'rotate-180' : ''
+                              isLearningCourseOpen ? 'rotate-180' : ''
                             }`}
                           />
-                          Desglose
+                          Clase
                         </button>
                         <button
                           type='button'
@@ -1343,6 +1355,15 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
                           <BookOpen size={16} />
                           Estudiar
                         </button>
+                        <button
+                          type='button'
+                          onClick={handleCopyLearningCoursePrompt}
+                          disabled={!canCopyLearningCoursePrompt}
+                          className='inline-flex h-10 items-center justify-center gap-2 rounded-md border border-slate-200 px-3 text-sm font-bold text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-950 disabled:text-slate-300'
+                        >
+                          <Copy size={16} />
+                          {courseCopied ? 'Copiado' : 'Prompt'}
+                        </button>
                       </div>
 
                       {shouldShowPostCopyNudge ? (
@@ -1355,7 +1376,7 @@ export const ExpressionWorkspace = (props: ExpressionWorkspaceProps) => {
                         />
                       ) : null}
 
-                      {mobileBreakdownSummary}
+                      {mobileLearningCourseSummary}
                   </>
                 </div>
               </div>

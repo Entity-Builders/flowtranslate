@@ -206,7 +206,7 @@ generation.
 ## Validation
 
 ```bash
-yarn workspace @eb-packages/flowtranslate-core test
+yarn workspace @entity-builders/flowtranslate-core test
 yarn workspace flowtranslate test
 yarn workspace flowtranslate build
 deno test --no-config eb-infra/supabase/functions/flowtranslate-generate/*.test.ts

@@ -15,7 +15,7 @@ import type {
   TranslationRecord,
   TranslationPresetId,
   UsageSnapshot,
-} from '@eb-packages/flowtranslate-core';
+} from '@entity-builders/flowtranslate-core';
 import {
   getFlowtranslateFunctionUrl,
   getFlowtranslateProCheckoutFunctionUrl,

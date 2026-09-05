@@ -2,7 +2,7 @@ import {
   selectRecentUniqueActiveTranslations,
   type LanguageCode,
   type TranslationRecord,
-} from '@eb-packages/flowtranslate-core';
+} from '@entity-builders/flowtranslate-core';
 import { MAX_LEARNING_HISTORY } from '../constants';
 
 type CountedValue = {

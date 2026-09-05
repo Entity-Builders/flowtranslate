@@ -1,4 +1,4 @@
-import type { LanguageCode } from '@eb-packages/flowtranslate-core';
+import type { LanguageCode } from '@entity-builders/flowtranslate-core';
 
 type SpeechRecognitionResultEventLike = Event & {
   results: ArrayLike<ArrayLike<{ transcript?: string }>>;

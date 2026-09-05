@@ -3,7 +3,7 @@ import type {
   LanguageCode,
   StudyArticle,
   TranslationRecord,
-} from '@eb-packages/flowtranslate-core';
+} from '@entity-builders/flowtranslate-core';
 import {
   AlertTriangle,
   ArrowLeft,

@@ -1,8 +1,8 @@
 import {
   buildEntityBuildersAuthRedirectUrl,
   getEntityBuildersAppOrFallback,
-} from '@eb-packages/app-registry';
-import { createEntityAuthConfig } from '@eb-packages/auth';
+} from '@entity-builders/app-registry';
+import { createEntityAuthConfig } from '@entity-builders/auth';
 
 const flowtranslateApp = getEntityBuildersAppOrFallback('flowtranslate');
 

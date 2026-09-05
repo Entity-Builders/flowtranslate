@@ -5,7 +5,7 @@ import {
   waitFor,
   within,
 } from '@testing-library/react';
-import type { StudyArticle, TranslationRecord } from '@eb-packages/flowtranslate-core';
+import type { StudyArticle, TranslationRecord } from '@entity-builders/flowtranslate-core';
 import type { ComponentProps } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../App';

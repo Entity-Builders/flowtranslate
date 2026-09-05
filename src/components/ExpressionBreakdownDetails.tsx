@@ -1,7 +1,7 @@
 import type {
   BreakdownChatMessage,
   ExpressionBreakdown,
-} from '@eb-packages/flowtranslate-core';
+} from '@entity-builders/flowtranslate-core';
 import {
   AlertCircle,
   CheckCircle2,

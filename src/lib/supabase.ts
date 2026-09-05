@@ -1,4 +1,4 @@
-import { createSupabaseAuthStorageKey } from '@eb-packages/auth';
+import { createSupabaseAuthStorageKey } from '@entity-builders/auth';
 import { createClient, type Session } from '@supabase/supabase-js';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL?.trim() || '';

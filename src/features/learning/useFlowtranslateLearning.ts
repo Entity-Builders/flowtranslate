@@ -5,7 +5,7 @@ import {
   type LearningSession,
   type SavedPhrase,
   type UsageSnapshot,
-} from '@eb-packages/flowtranslate-core';
+} from '@entity-builders/flowtranslate-core';
 import { useCallback, useEffect, useState } from 'react';
 import type { useFlowtranslateAccount } from '../../hooks/useFlowtranslateAccount';
 import {

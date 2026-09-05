@@ -4,7 +4,7 @@ import {
   type ExpressionMode,
   type IntentDetectionResult,
   type TranslationPresetId,
-} from '@eb-packages/flowtranslate-core';
+} from '@entity-builders/flowtranslate-core';
 import { TRANSLATION_INPUT_MAX_CHARS } from '../../constants';
 
 export type TranslatorStatus =

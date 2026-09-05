@@ -1,4 +1,4 @@
-import type { LanguageCode } from '@eb-packages/flowtranslate-core';
+import type { LanguageCode } from '@entity-builders/flowtranslate-core';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { analytics } from '../../services/analytics';
 import {

@@ -1,4 +1,4 @@
-import type { TranslationRecord } from '@eb-packages/flowtranslate-core';
+import type { TranslationRecord } from '@entity-builders/flowtranslate-core';
 import { describe, expect, it } from 'vitest';
 import { buildLearningDashboard } from './learning-metrics';
 

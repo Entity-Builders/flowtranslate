@@ -1,4 +1,4 @@
-import type { VibeCheck } from '@eb-packages/flowtranslate-core';
+import type { VibeCheck } from '@entity-builders/flowtranslate-core';
 import { AlertTriangle, Gauge } from 'lucide-react';
 
 type VibeCheckCardProps = {

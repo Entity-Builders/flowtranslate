@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ExpressionBreakdown } from '@eb-packages/flowtranslate-core';
+import type { ExpressionBreakdown } from '@entity-builders/flowtranslate-core';
 import { TRANSLATION_INPUT_MAX_CHARS } from '../../constants';
 import {
   createTranslationRequestKey,

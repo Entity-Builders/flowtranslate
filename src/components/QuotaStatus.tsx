@@ -2,7 +2,7 @@ import {
   mapAccountKindToBillingState,
   type FlowtranslateBillingState,
   type UsageSnapshot,
-} from '@eb-packages/flowtranslate-core';
+} from '@entity-builders/flowtranslate-core';
 import { Sparkles } from 'lucide-react';
 import type { FlowtranslateAccountKind } from '../hooks/useFlowtranslateAccount';
 

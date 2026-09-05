@@ -2,7 +2,7 @@ import type {
   ExpressionBreakdown,
   ExpressionMode,
   TranslationRecord,
-} from '@eb-packages/flowtranslate-core';
+} from '@entity-builders/flowtranslate-core';
 import { supabase } from '../lib/supabase';
 
 type TranslationRow = {

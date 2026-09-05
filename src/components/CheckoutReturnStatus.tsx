@@ -12,7 +12,7 @@ import {
   EbButton,
   EbStatusBanner,
   type EbNoticeTone,
-} from '@eb-packages/ui-web';
+} from '@entity-builders/ui-web';
 import type {
   CheckoutReturnInfo,
   CheckoutReturnState,

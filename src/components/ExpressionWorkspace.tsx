@@ -6,7 +6,7 @@ import {
   type TranslationPresetId,
   type GrammarInsight,
   type UsageSnapshot,
-} from '@eb-packages/flowtranslate-core';
+} from '@entity-builders/flowtranslate-core';
 import {
   ArrowRight,
   BookOpen,

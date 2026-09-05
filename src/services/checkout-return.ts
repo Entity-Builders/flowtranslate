@@ -2,7 +2,7 @@ import {
   readEntityCheckoutReturnFromUrl,
   type EntityCheckoutReturnInfo,
   type EntityCheckoutReturnState,
-} from '@eb-packages/billing-core';
+} from '@entity-builders/billing-core';
 
 export const CHECKOUT_RETURN_PATH = '/pro/checkout/return';
 export const TOPUP_CHECKOUT_RETURN_PATH = '/topup/checkout/return';

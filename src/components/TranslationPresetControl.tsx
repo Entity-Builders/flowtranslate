@@ -1,7 +1,7 @@
 import {
   TRANSLATION_PRESETS,
   type TranslationPresetId,
-} from '@eb-packages/flowtranslate-core';
+} from '@entity-builders/flowtranslate-core';
 import { SlidersHorizontal } from 'lucide-react';
 
 type TranslationPresetControlProps = {

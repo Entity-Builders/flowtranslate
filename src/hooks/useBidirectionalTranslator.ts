@@ -11,7 +11,7 @@ import {
   type TranslationRecord,
   type UsageSnapshot,
   type GrammarInsight,
-} from '@eb-packages/flowtranslate-core';
+} from '@entity-builders/flowtranslate-core';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   STORAGE_KEYS,

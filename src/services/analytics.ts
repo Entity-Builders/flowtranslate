@@ -1,9 +1,9 @@
 /**
  * App-specific analytics instance.
- * Uses the shared @eb-packages/analytics package.
+ * Uses the shared @entity-builders/analytics package.
  * This file only handles initialization with app-specific config (env vars).
  */
-import { Analytics, PostHogProvider } from '@eb-packages/analytics';
+import { Analytics, PostHogProvider } from '@entity-builders/analytics';
 import { STORAGE_KEYS } from '../constants';
 
 // Read PostHog config from Vite env vars

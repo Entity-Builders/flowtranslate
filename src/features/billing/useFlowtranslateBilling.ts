@@ -3,7 +3,7 @@ import {
   getUsageRecoveryCooldownBucket,
   LEARNING_HISTORY_PERSONALIZATION_THRESHOLD,
   type UsageSnapshot,
-} from '@eb-packages/flowtranslate-core';
+} from '@entity-builders/flowtranslate-core';
 import type { ProUpgradeSurface } from '../../components/ProUpgradePrompt';
 import type { useFlowtranslateAccount } from '../../hooks/useFlowtranslateAccount';
 import {

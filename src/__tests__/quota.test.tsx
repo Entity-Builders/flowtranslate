@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { resolveFlowtranslateBillingState } from '@eb-packages/flowtranslate-core';
+import { resolveFlowtranslateBillingState } from '@entity-builders/flowtranslate-core';
 import App from '../App';
 import { ExpressionWorkspace } from '../components/ExpressionWorkspace';
 import { QuotaStatus } from '../components/QuotaStatus';

@@ -2,7 +2,7 @@ import {
   createExpressionDirection,
   type ExpressionBreakdown,
   type TranslationPresetId,
-} from '@eb-packages/flowtranslate-core';
+} from '@entity-builders/flowtranslate-core';
 import {
   FlowtranslateApiError,
   generateTranslation,

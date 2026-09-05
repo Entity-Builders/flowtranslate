@@ -1,6 +1,6 @@
 import {
   type LanguageCode,
-} from '@eb-packages/flowtranslate-core';
+} from '@entity-builders/flowtranslate-core';
 import { ArrowLeft, ArrowRight, Loader2 } from 'lucide-react';
 
 type TranslateCommandProps = {

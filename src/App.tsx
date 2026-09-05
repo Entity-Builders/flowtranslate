@@ -2,7 +2,7 @@ import type {
   TranslationRecord,
   TranslationPresetId,
   UsageSnapshot,
-} from '@eb-packages/flowtranslate-core';
+} from '@entity-builders/flowtranslate-core';
 import { useCallback, useEffect, useState } from 'react';
 import './App.css';
 import { FlowtranslateAppShell } from './app/FlowtranslateAppShell';

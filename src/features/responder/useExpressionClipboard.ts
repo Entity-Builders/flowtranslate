@@ -2,7 +2,7 @@ import type {
   ExpressionMode,
   LanguageCode,
   TranslationPresetId,
-} from '@eb-packages/flowtranslate-core';
+} from '@entity-builders/flowtranslate-core';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FlowtranslateAccountKind } from '../../hooks/useFlowtranslateAccount';
 import {

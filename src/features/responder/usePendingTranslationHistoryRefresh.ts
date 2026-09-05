@@ -3,7 +3,7 @@ import {
   type ExpressionMode,
   type TranslationPresetId,
   type TranslationRecord,
-} from '@eb-packages/flowtranslate-core';
+} from '@entity-builders/flowtranslate-core';
 import { useCallback, useEffect, useRef } from 'react';
 import { analytics } from '../../services/analytics';
 import {

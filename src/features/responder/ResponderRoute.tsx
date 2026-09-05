@@ -3,7 +3,7 @@ import type {
   TranslationRecord,
   TranslationPresetId,
   UsageSnapshot,
-} from '@eb-packages/flowtranslate-core';
+} from '@entity-builders/flowtranslate-core';
 import { X } from 'lucide-react';
 import { ExpressionWorkspace } from '../../components/ExpressionWorkspace';
 import {

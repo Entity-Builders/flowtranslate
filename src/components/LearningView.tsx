@@ -3,11 +3,11 @@ import type {
   ExpressionMode,
   GrammarAnnotation,
   TranslationRecord,
-} from '@eb-packages/flowtranslate-core';
+} from '@entity-builders/flowtranslate-core';
 import {
   getGrammarAnnotations,
   hasMixedSpanishEnglishInput,
-} from '@eb-packages/flowtranslate-core';
+} from '@entity-builders/flowtranslate-core';
 import { BookOpen, Check, Copy, Languages } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useMemo, useState } from 'react';

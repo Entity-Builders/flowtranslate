@@ -2,7 +2,7 @@ import {
   useSupabaseAccountAccess,
   type EntityBuildersAccountKind,
   type SupabaseAuthAccessClient,
-} from '@eb-packages/auth';
+} from '@entity-builders/auth';
 import { useEffect, useState } from 'react';
 import {
   mapAccountKindToBillingState,
@@ -10,7 +10,7 @@ import {
   type FlowtranslateBillingState,
   type FlowtranslateEntitlementRow,
   type Profile,
-} from '@eb-packages/flowtranslate-core';
+} from '@entity-builders/flowtranslate-core';
 import {
   isSupabaseConfigured,
   supabase,

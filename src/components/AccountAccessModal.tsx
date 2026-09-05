@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
-import { AccountAccessModal as SharedAccountAccessModal } from '@eb-packages/auth-ui-web';
-import type { UsageSnapshot } from '@eb-packages/flowtranslate-core';
-import { EbButton } from '@eb-packages/ui-web';
+import { AccountAccessModal as SharedAccountAccessModal } from '@entity-builders/auth-ui-web';
+import type { UsageSnapshot } from '@entity-builders/flowtranslate-core';
+import { EbButton } from '@entity-builders/ui-web';
 import {
   CheckCircle2,
   Clock3,

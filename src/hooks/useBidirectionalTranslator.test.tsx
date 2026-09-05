@@ -2,7 +2,7 @@ import { act, renderHook } from '@testing-library/react';
 import type {
   ExpressionBreakdown,
   ExpressionMode,
-} from '@eb-packages/flowtranslate-core';
+} from '@entity-builders/flowtranslate-core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TRANSLATION_IDLE_DELAY_MS } from '../constants';
 import {

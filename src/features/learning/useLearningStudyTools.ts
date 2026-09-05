@@ -3,7 +3,7 @@ import type {
   StudyArticle,
   TranslationRecord,
   UsageSnapshot,
-} from '@eb-packages/flowtranslate-core';
+} from '@entity-builders/flowtranslate-core';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { useFlowtranslateAccount } from '../../hooks/useFlowtranslateAccount';
 import {

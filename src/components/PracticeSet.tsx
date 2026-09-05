@@ -1,4 +1,4 @@
-import type { PracticeItem } from '@eb-packages/flowtranslate-core';
+import type { PracticeItem } from '@entity-builders/flowtranslate-core';
 
 const labels: Record<PracticeItem['type'], string> = {
   vocabulary_recall: 'Vocabulary',

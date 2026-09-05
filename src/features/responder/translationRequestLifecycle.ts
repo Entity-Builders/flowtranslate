@@ -4,7 +4,7 @@ import {
   type ExpressionBreakdown,
   type ExpressionMode,
   type TranslationPresetId,
-} from '@eb-packages/flowtranslate-core';
+} from '@entity-builders/flowtranslate-core';
 import {
   FlowtranslateApiError,
   generateTranslation,

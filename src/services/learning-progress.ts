@@ -2,7 +2,7 @@ import type {
   LearningSession,
   LearningSessionContent,
   SavedPhrase,
-} from '@eb-packages/flowtranslate-core';
+} from '@entity-builders/flowtranslate-core';
 import { supabase } from '../lib/supabase';
 
 type LearningSessionRow = {

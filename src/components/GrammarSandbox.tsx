@@ -1,4 +1,4 @@
-import type { SandboxVariation } from '@eb-packages/flowtranslate-core';
+import type { SandboxVariation } from '@entity-builders/flowtranslate-core';
 import { ArrowRight, FlaskConical } from 'lucide-react';
 
 type GrammarSandboxProps = {
